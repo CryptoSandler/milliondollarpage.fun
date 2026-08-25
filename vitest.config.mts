@@ -14,5 +14,11 @@ export default defineConfig({
     // it forces a single worker instead of running files in parallel.
     pool: "forks",
     fileParallelism: false,
+    // The HTTP route tests each drive several sequential POSTs, and every
+    // one opens its own round trip (or several) to the remote Neon test
+    // branch. The 5s default is tuned for a single query, not a loop of
+    // reservation calls over real network latency, so it clips otherwise
+    // passing tests. 20s is generous headroom, not a correctness change.
+    testTimeout: 20_000,
   },
 });
