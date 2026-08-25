@@ -10,9 +10,13 @@ async function insertBlock(
   h: number,
   status = "minted",
 ): Promise<void> {
+  // Migration 002 requires a reserved block to carry an expiry (and forbids
+  // one on every other status), so a reserved fixture needs one here to reach
+  // the overlap constraint this suite is actually exercising.
+  const expiresAt = status === "reserved" ? "now() + interval '30 minutes'" : "NULL";
   await execute(
-    `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc)
-     VALUES ($1, $2, $3, $4, $5, 1000000, $6)`,
+    `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, expires_at)
+     VALUES ($1, $2, $3, $4, $5, 1000000, $6, ${expiresAt})`,
     [x, y, w, h, status, w * h * 1000000],
   );
 }
