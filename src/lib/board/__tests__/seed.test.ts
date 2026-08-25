@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SEED_BLOCKS } from "../../../../scripts/seed-board.mts";
+import { SEED_BLOCKS } from "../seed-data";
 import { rectIsValid, rectsIntersect } from "../geometry";
 
 describe("the seed blocks", () => {
