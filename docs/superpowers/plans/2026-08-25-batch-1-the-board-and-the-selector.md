@@ -18,7 +18,7 @@
 - **No code, copy, assets, or CSS is taken from `1millionpixels.xyz`, `thewallsolana.com`, or `milliondollarsolanapage.com`.** They are competitors and one of them is the same product. Ideas only. See [`docs/references.md`](../../references.md).
 - **The board is 1000×1000. The block grid is 10 pixels. The minimum purchase is 10×10.** These are `BOARD_PIXELS`, `BLOCK_PIXELS`, and the `blocks_min_size` constraint, and they are never re-derived by hand anywhere else.
 - **No ORM.** Parameterised `pg` queries only; never string-interpolate a value into SQL.
-- **The database is Neon, and there is no local Postgres.** Create two branches: `production` is the app database (`DATABASE_URL`), `tests` is a disposable copy the suite truncates (`TEST_DATABASE_URL`). Both use `sslmode=verify-full`. Both live in `.env.local` and nowhere else — not in `.env.example`, not in a commit, not in a comment.
+- **The database is Neon, and there is no local Postgres.** The project `milliondollarpage` and its two branches already exist: `production` is the app database (`DATABASE_URL`), `tests` is a disposable copy the suite truncates (`TEST_DATABASE_URL`). Both use `sslmode=verify-full`. Both live in `.env.local` and nowhere else — not in `.env.example`, not in a commit, not in a comment, not in a shell command whose output you paste anywhere. **Never print a connection string.** If you need to identify a database, name its branch.
 - **Required env vars have no defaults.** A missing `DATABASE_URL` is a startup failure, not a fallback.
 - **Prices are not environment variables.** They live in the `settings` table. The only default in this batch is `price_per_pixel_usdc = 1000000` (one dollar, in USDC base units), seeded by migration.
 - **This is Next 16, not the Next in your training data.** Before writing any route handler or page, read the relevant guide under `node_modules/next/dist/docs/`. The `AGENTS.md` block Next writes into the repo stays committed.
@@ -159,16 +159,23 @@ npm test -- src/lib/__tests__/db.test.ts
 
 Expected: FAIL. Either `TEST_DATABASE_URL is not set` (before you create `.env.local`), or `relation "bootstrap_check" does not exist` (before you migrate).
 
-- [ ] **Step 7: Create the two Neon branches and `.env.local`**
+- [ ] **Step 7: Migrate — Neon is already provisioned**
 
-Create branches `production` and `tests` in the Neon console. Put both pooled connection strings in `.env.local`:
+**This is already done; do not redo it.** The Neon project `milliondollarpage` exists in the `CryptoSandler` org with two branches — `production` (the app database) and `tests`, branched from it. `.env.local` already holds both pooled connection strings with `sslmode=verify-full`, and `.gitignore` already ignores `.env*` while un-ignoring `.env.example`.
 
+Three things you must NOT do:
+
+1. **Do not print, echo, `cat`, or log either connection string**, and do not paste one into a commit, a comment, a test, or a report. Refer to them as `production` and `tests`.
+2. **Do not let `create-next-app` overwrite `.gitignore`.** It writes its own. After scaffolding, confirm the env rules survived: `grep -n '^\.env\*$' .gitignore && grep -n '^!\.env\.example$' .gitignore`. If they are gone, restore them before running anything else, and check `git status` shows `.env.local` as ignored rather than untracked.
+3. **Do not run `neon` CLI commands that write files** into the repo.
+
+Write `.env.example` with the same two variable names, no values, and a comment on each saying what breaks without it.
+
+Verify the guard is real before you migrate — this must print nothing:
+
+```bash
+git status --porcelain --ignored=no | grep -F '.env.local'
 ```
-DATABASE_URL=postgresql://...pooler...neon.tech/neondb?sslmode=verify-full&channel_binding=require
-TEST_DATABASE_URL=postgresql://...pooler...neon.tech/neondb?sslmode=verify-full&channel_binding=require
-```
-
-Write `.env.example` with the same two variable names, no values, and a comment on each saying what breaks without it. Confirm `.env.local` is gitignored before you continue.
 
 Then: `npm run db:up`
 
