@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import type { LiveBlock } from "../lib/board/blocks";
-import { BLOCK_PIXELS, BOARD_PIXELS, type Point } from "../lib/board/geometry";
+import { BLOCK_PIXELS, BOARD_PIXELS, rectContains, type Point } from "../lib/board/geometry";
 import { type Selection, selectionFromDrag, selectionFromPreset } from "../lib/board/selection";
 import {
   type Viewport,
@@ -29,6 +29,7 @@ const COLOURS = {
 
 type Props = {
   blocks: LiveBlock[];
+  selection: Selection | null;
   activePreset: number | null;
   perPixel: number;
   onSelectionChange: (selection: Selection | null) => void;
@@ -42,6 +43,7 @@ type Drag =
 
 export default function BoardCanvas({
   blocks,
+  selection,
   activePreset,
   perPixel,
   onSelectionChange,
@@ -53,16 +55,28 @@ export default function BoardCanvas({
     centreY: BOARD_PIXELS / 2,
     scale: 0.6,
   });
-  const [selection, setSelection] = useState<Selection | null>(null);
+  const [resizeTick, setResizeTick] = useState(0);
   const drag = useRef<Drag>({ kind: "none" });
 
   const publish = useCallback(
     (next: Selection | null) => {
-      setSelection(next);
       onSelectionChange(next);
     },
     [onSelectionChange],
   );
+
+  // The canvas has no intrinsic size; its box is set entirely by CSS (see
+  // .board-canvas, which caps height at 80vh). On mobile that cap moves
+  // whenever the address bar collapses, so the backing store must be
+  // re-measured independently of any prop change or it goes stale while
+  // hit-testing (which reads a live getBoundingClientRect) does not.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const observer = new ResizeObserver(() => setResizeTick((t) => t + 1));
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, []);
 
   // Draw. Everything here is a rectangle; nothing here decides anything.
   useEffect(() => {
@@ -124,7 +138,7 @@ export default function BoardCanvas({
       context.fillStyle = selection.buyable ? "rgba(74,222,128,0.18)" : "rgba(239,68,68,0.18)";
       context.fillRect(x, y, rect.w * scale, rect.h * scale);
     }
-  }, [blocks, selection, viewport]);
+  }, [blocks, selection, viewport, resizeTick]);
 
   function pointerBoard(event: ReactPointerEvent<HTMLCanvasElement>): Point {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -160,9 +174,7 @@ export default function BoardCanvas({
     const current = drag.current;
 
     if (current.kind === "none") {
-      const hovered = blocks.find(
-        (b) => at.x >= b.x && at.x < b.x + b.w && at.y >= b.y && at.y < b.y + b.h,
-      );
+      const hovered = blocks.find((b) => rectContains(b, at));
       onHoverChange(hovered ?? null);
       if (activePreset !== null) {
         publish(selectionFromPreset(at, activePreset, blocks, perPixel));
@@ -206,14 +218,37 @@ export default function BoardCanvas({
     event.currentTarget.releasePointerCapture(event.pointerId);
   }
 
-  function onWheel(event: ReactWheelEvent<HTMLCanvasElement>) {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-    const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15;
-    setViewport((v) =>
-      zoomAt(v, { width: rect.width, height: rect.height }, point, factor, ZOOM_LIMITS),
-    );
+  function onPointerCancel(event: ReactPointerEvent<HTMLCanvasElement>) {
+    // A cancelled pointer (a touch interrupted by a system gesture) must not
+    // leave drag.current pointing at a stale anchor, or the next hover will
+    // rubber-band a selection with nothing held down.
+    drag.current = { kind: "none" };
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
   }
+
+  // React 19 registers onWheel as a passive listener, so it can never call
+  // preventDefault(). Without that, scrolling over the board zooms it AND
+  // scrolls the page, carrying the board out of view. A native listener
+  // registered as non-passive is the only way to stop that.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    function handler(event: WheelEvent) {
+      event.preventDefault();
+      const rect = canvas!.getBoundingClientRect();
+      const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15;
+      setViewport((v) =>
+        zoomAt(v, { width: rect.width, height: rect.height }, point, factor, ZOOM_LIMITS),
+      );
+    }
+
+    canvas.addEventListener("wheel", handler, { passive: false });
+    return () => canvas.removeEventListener("wheel", handler);
+  }, []);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -230,8 +265,8 @@ export default function BoardCanvas({
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
       onPointerLeave={() => onHoverChange(null)}
-      onWheel={onWheel}
     />
   );
 }

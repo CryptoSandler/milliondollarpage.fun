@@ -71,6 +71,16 @@ export function rectsIntersect(a: Rect, b: Rect): boolean {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 }
 
+/** Half-open containment: a point on the right or bottom edge is OUTSIDE. */
+export function rectContains(rect: Rect, point: Point): boolean {
+  return (
+    point.x >= rect.x &&
+    point.x < rect.x + rect.w &&
+    point.y >= rect.y &&
+    point.y < rect.y + rect.h
+  );
+}
+
 export function rectIsValid(rect: Rect): boolean {
   const { x, y, w, h } = rect;
   if (w < BLOCK_PIXELS || h < BLOCK_PIXELS) return false;

@@ -4,6 +4,7 @@ import {
   BOARD_PIXELS,
   TOTAL_PIXELS,
   presetRect,
+  rectContains,
   rectIsValid,
   rectPixels,
   rectsIntersect,
@@ -85,6 +86,28 @@ describe("rectsIntersect", () => {
   it("is symmetric", () => {
     const other = { x: 150, y: 150, w: 100, h: 100 };
     expect(rectsIntersect(base, other)).toBe(rectsIntersect(other, base));
+  });
+});
+
+describe("rectContains", () => {
+  const rect = { x: 100, y: 100, w: 100, h: 100 };
+
+  it("is true for a point inside", () => {
+    expect(rectContains(rect, { x: 150, y: 150 })).toBe(true);
+  });
+
+  it("is true on the left/top edge", () => {
+    expect(rectContains(rect, { x: 100, y: 150 })).toBe(true);
+    expect(rectContains(rect, { x: 150, y: 100 })).toBe(true);
+  });
+
+  it("is false on the right/bottom edge", () => {
+    expect(rectContains(rect, { x: 200, y: 150 })).toBe(false);
+    expect(rectContains(rect, { x: 150, y: 200 })).toBe(false);
+  });
+
+  it("is false for a point entirely outside", () => {
+    expect(rectContains(rect, { x: 0, y: 0 })).toBe(false);
   });
 });
 

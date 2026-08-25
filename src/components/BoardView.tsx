@@ -40,6 +40,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
       <div className="relative">
         <BoardCanvas
           blocks={board.blocks}
+          selection={selection}
           activePreset={activePreset}
           perPixel={board.pricePerPixelBaseUnits}
           onSelectionChange={setSelection}
