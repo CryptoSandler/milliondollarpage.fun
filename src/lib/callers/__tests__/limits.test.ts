@@ -53,6 +53,21 @@ describe("checkReservationLimits", () => {
     expect(left, "the expired holds should be gone, not merely ignored").toEqual([]);
   });
 
+  it("does not count an expired hold against the live-hold ceiling, independent of the sweep's DELETE", async () => {
+    // liveHoldsPerCaller reserved rows exist in total, but only
+    // liveHoldsPerCaller - 1 of them are actually live; the last is expired.
+    // The count query itself must exclude the expired one — this assertion
+    // must hold even if sweepExpiredReservations's DELETE were removed
+    // entirely, because unlike the "sweeps expired holds first" test above,
+    // this one never checks that the row was deleted, only that it was
+    // never counted.
+    for (let i = 0; i < RESERVATION_LIMITS.liveHoldsPerCaller - 1; i++) {
+      await hold(CALLER, i * 20, 30);
+    }
+    await hold(CALLER, (RESERVATION_LIMITS.liveHoldsPerCaller - 1) * 20, -5);
+    expect(await checkReservationLimits(CALLER)).toEqual({ ok: true });
+  });
+
   it("counts a paid order against nothing, because it is no longer a hold", async () => {
     await execute(
       `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, expires_at, ip_hash)

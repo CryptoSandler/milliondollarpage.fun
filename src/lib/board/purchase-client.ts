@@ -1,6 +1,6 @@
 import type { ContentRejection } from "./content";
 import type { Rect } from "./geometry";
-import type { Order } from "./orders";
+import type { PublicOrder } from "./orders";
 
 /**
  * The browser side of the four order endpoints.
@@ -11,14 +11,19 @@ import type { Order } from "./orders";
  * `src/lib/http.ts`) already guarantees `message` is safe to render as-is, so
  * nothing here re-derives or rewrites it.
  *
- * `Order` and `Rect` are imported with `import type` only: both are erased at
- * compile time, so this module never pulls `../db` (which `orders.ts`
- * imports) into a client bundle. That is deliberate — this file is consumed
- * by "use client" components, and `../db` opens a real `pg` connection at
- * module scope.
+ * `PublicOrder` and `Rect` are imported with `import type` only: both are
+ * erased at compile time, so this module never pulls `../db` (which
+ * `orders.ts` imports) into a client bundle. That is deliberate — this file
+ * is consumed by "use client" components, and `../db` opens a real `pg`
+ * connection at module scope.
+ *
+ * `ClientOrder` is `PublicOrder`, not `Order`: the server never sends a
+ * buyer's pubkey back over the wire (see `toPublicOrder` in `orders.ts`), and
+ * this type says so at compile time rather than a caller finding out by
+ * reading `undefined` off a field that used to be there.
  */
 
-export type ClientOrder = Order;
+export type ClientOrder = PublicOrder;
 
 export type ClientFailure = {
   ok: false;
@@ -49,12 +54,11 @@ type Reservation = {
   expiresAt: string;
 };
 
-function reservationToOrder(reservation: Reservation, buyerPubkey: string): ClientOrder {
+function reservationToOrder(reservation: Reservation): ClientOrder {
   return {
     id: reservation.id,
     rect: reservation.rect,
     status: "reserved",
-    buyerPubkey,
     pricePerPixelBaseUnits: reservation.pricePerPixelBaseUnits,
     totalBaseUnits: reservation.totalBaseUnits,
     paymentBaseUnits: reservation.paymentBaseUnits,
@@ -111,7 +115,7 @@ export function createHold(rect: Rect, buyerPubkey: string): Promise<ClientResul
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ rect, buyerPubkey }),
       }),
-    (body) => reservationToOrder(body as Reservation, buyerPubkey),
+    (body) => reservationToOrder(body as Reservation),
   );
 }
 

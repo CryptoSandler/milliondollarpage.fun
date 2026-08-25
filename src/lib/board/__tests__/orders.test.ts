@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
+import * as db from "../../db";
 import { execute, query } from "../../db";
 import type { ValidatedContent } from "../content";
 import {
@@ -128,6 +129,30 @@ describe("attachContent", () => {
       OrderNotReady,
     );
   });
+
+  it("throws OrderExpired, not a TypeError, when a concurrent sweep deletes the row after it loads", async () => {
+    // A real race: a hold's expiry lands between loadOwnedLiveRow's read and
+    // this function's UPDATE, and a concurrent sweep deletes the row in that
+    // window. That's not reliably reproducible by timing two real requests
+    // against each other, so it's reproduced deterministically here instead:
+    // the first `queryOne` call (the load) runs for real, and only the
+    // second (the UPDATE) is made to see what a vanished row looks like —
+    // exactly what `queryOne` returns for a real concurrent delete.
+    const held = await hold();
+    const real = db.queryOne;
+    let calls = 0;
+    const spy = vi.spyOn(db, "queryOne").mockImplementation(async (...args) => {
+      calls += 1;
+      if (calls === 2) return null;
+      return real(...(args as Parameters<typeof real>));
+    });
+    try {
+      await expect(attachContent(held.id, BUYER, content())).rejects.toBeInstanceOf(OrderExpired);
+      expect(calls).toBe(2);
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
 
 describe("markPaid", () => {
@@ -215,5 +240,27 @@ describe("markPaid", () => {
     await attachContent(held.id, BUYER, content());
     await markPaid(held.id, BUYER, "sig-first");
     await expect(markPaid(held.id, BUYER, "sig-second")).rejects.toBeInstanceOf(OrderNotReady);
+  });
+
+  it("throws OrderExpired, not a TypeError, when a concurrent sweep deletes the row after it loads", async () => {
+    // Same race as attachContent's equivalent test above, reproduced the same
+    // deterministic way: only the UPDATE's queryOne call is short-circuited
+    // to null, simulating the row vanishing between the load and the write.
+    const held = await hold();
+    await attachContent(held.id, BUYER, content());
+
+    const real = db.queryOne;
+    let calls = 0;
+    const spy = vi.spyOn(db, "queryOne").mockImplementation(async (...args) => {
+      calls += 1;
+      if (calls === 2) return null;
+      return real(...(args as Parameters<typeof real>));
+    });
+    try {
+      await expect(markPaid(held.id, BUYER, "sig-vanished")).rejects.toBeInstanceOf(OrderExpired);
+      expect(calls).toBe(2);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

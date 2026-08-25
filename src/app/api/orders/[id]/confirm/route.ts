@@ -6,9 +6,10 @@ import {
   OrderNotReady,
   OrderNotYours,
   SignatureAlreadyUsed,
+  toPublicOrder,
 } from "../../../../../lib/board/orders";
 import { stubPaymentsAllowed, stubVerifyPayment } from "../../../../../lib/board/payment-stub";
-import { NO_STORE, isUuid, json, problem } from "../../../../../lib/http";
+import { NO_STORE, identify, isUuid, json, problem } from "../../../../../lib/http";
 
 /**
  * Confirm payment for a described order, via the batch-3 payment stub.
@@ -22,6 +23,10 @@ import { NO_STORE, isUuid, json, problem } from "../../../../../lib/http";
  * `stubVerifyPayment` ever runs: a stranger who does not own this order must
  * see the exact same 403 whether the order has content or not, never a 409
  * that discloses what state somebody else's order is in.
+ *
+ * `identify()` runs before the body is parsed, matching `/reserve`: this is
+ * the point where the site starts knowing who is confirming a payment, not
+ * only who is holding a rectangle.
  */
 export async function POST(
   request: Request,
@@ -31,6 +36,9 @@ export async function POST(
 
   const { id } = await params;
   if (!isUuid(id)) return problem(404, "That order does not exist.");
+
+  const caller = identify(request);
+  if (!caller.ok) return problem(400, caller.message);
 
   let body: unknown;
   try {
@@ -54,7 +62,7 @@ export async function POST(
 
   try {
     const paid = await markPaid(id, buyerPubkey, verified.signature);
-    return json(paid, { headers: NO_STORE });
+    return json(toPublicOrder(paid), { headers: NO_STORE });
   } catch (error) {
     if (error instanceof OrderNotFound) return problem(404, error.message);
     if (error instanceof OrderNotYours) return problem(403, error.message);

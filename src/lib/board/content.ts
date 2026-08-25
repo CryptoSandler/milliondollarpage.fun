@@ -23,7 +23,18 @@ export const CONTENT_LIMITS = {
   maxBytes: 102_400,
   maxDimension: 1000,
   captionMaxLength: 32,
+  // The conventional practical URL limit — long enough for any real link,
+  // short enough that a caller cannot store a megabyte of text in a column
+  // meant for a URL.
+  linkMaxLength: 2048,
 } as const;
+
+// Multipart framing — boundary markers, per-part headers, and field names
+// other than the image itself — adds bytes on top of the image. 8 KiB
+// comfortably covers that overhead. Used by the content route's
+// content-length gate (see content/route.ts) to reject an oversized request
+// before a single byte of the body is read.
+export const MULTIPART_FRAMING_ALLOWANCE_BYTES = 8192;
 
 const ACCEPTED_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
@@ -137,15 +148,29 @@ function validateImageFit(imageFit: string): ImageFitValidation {
   };
 }
 
-function validateLink(link: string): ContentRejection | null {
+function validateLink(link: string): { rejection: ContentRejection | null; trimmed: string } {
+  const trimmed = link.trim();
+
+  // Checked before `new URL()`: a link this long is rejected for its length
+  // alone, the same way an oversized image is rejected before it is decoded.
+  if (trimmed.length > CONTENT_LIMITS.linkMaxLength) {
+    return {
+      rejection: {
+        field: "link",
+        reason: `The link must be ${CONTENT_LIMITS.linkMaxLength} characters or fewer.`,
+      },
+      trimmed,
+    };
+  }
+
   try {
-    const url = new URL(link);
+    const url = new URL(trimmed);
     if (url.protocol !== "https:") {
-      return { field: "link", reason: "The link must use https." };
+      return { rejection: { field: "link", reason: "The link must use https." }, trimmed };
     }
-    return null;
+    return { rejection: null, trimmed };
   } catch {
-    return { field: "link", reason: "That is not a valid link." };
+    return { rejection: { field: "link", reason: "That is not a valid link." }, trimmed };
   }
 }
 
@@ -172,7 +197,7 @@ export async function validateContent(input: ContentInput): Promise<ValidateCont
   const imageResult = await validateImage(input.bytes);
   if (!imageResult.ok) rejections.push(imageResult.rejection);
 
-  const linkRejection = validateLink(input.link);
+  const { rejection: linkRejection, trimmed: link } = validateLink(input.link);
   if (linkRejection) rejections.push(linkRejection);
 
   const { rejection: captionRejection, trimmed: caption } = validateCaption(input.caption);
@@ -194,7 +219,7 @@ export async function validateContent(input: ContentInput): Promise<ValidateCont
       isAnimated: imageResult.isAnimated,
       width: imageResult.width,
       height: imageResult.height,
-      link: input.link,
+      link,
       caption,
       imageFit: imageFitResult.imageFit,
     },

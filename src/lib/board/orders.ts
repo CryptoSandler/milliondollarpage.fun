@@ -149,6 +149,38 @@ export async function getOrder(id: string): Promise<Order | null> {
   return row ? toOrder(row) : null;
 }
 
+/** An `Order` with everything a route may safely hand back to any caller. */
+export type PublicOrder = Omit<Order, "buyerPubkey">;
+
+/**
+ * Strips `buyerPubkey` before an `Order` leaves this module for an HTTP
+ * response.
+ *
+ * `buyerPubkey` is the one thing every ownership check in this file compares
+ * against — the whole reason `/content` and `/confirm` can trust a caller is
+ * that only the real buyer is supposed to know it. `/board` already publishes
+ * every live block's id, so an `Order` returned with its `buyerPubkey` intact
+ * would let anyone chain "read the board" -> "GET this order" -> "POST
+ * content as its buyer" and overwrite a stranger's hold. Every route that
+ * returns an `Order` must send this, never the `Order` itself.
+ */
+export function toPublicOrder(order: Order): PublicOrder {
+  return {
+    id: order.id,
+    rect: order.rect,
+    status: order.status,
+    pricePerPixelBaseUnits: order.pricePerPixelBaseUnits,
+    totalBaseUnits: order.totalBaseUnits,
+    paymentBaseUnits: order.paymentBaseUnits,
+    expiresAt: order.expiresAt,
+    hasContent: order.hasContent,
+    caption: order.caption,
+    link: order.link,
+    imageFit: order.imageFit,
+    isAnimated: order.isAnimated,
+  };
+}
+
 export async function attachContent(
   id: string,
   buyerPubkey: string,
@@ -181,9 +213,13 @@ export async function attachContent(
       content.imageFit,
     ],
   );
-  // The row was just loaded successfully inside this same call; it cannot
-  // have vanished between there and here.
-  return toOrder(updated!);
+  // The row existed a moment ago in loadOwnedLiveRow, but a concurrent sweep
+  // can delete a reserved row between that read and this UPDATE — reachable
+  // whenever a hold's expiry lands mid-request. That is not a server error;
+  // it is the same OrderExpired a request arriving a few milliseconds later
+  // would have gotten straight from loadOwnedLiveRow.
+  if (!updated) throw new OrderExpired();
+  return toOrder(updated);
 }
 
 export async function markPaid(id: string, buyerPubkey: string, signature: string): Promise<Order> {
@@ -208,7 +244,10 @@ export async function markPaid(id: string, buyerPubkey: string, signature: strin
         RETURNING ${ORDER_COLUMNS}`,
       [id, signature],
     );
-    return toOrder(updated!);
+    // Same race as attachContent above: the row can vanish between
+    // loadOwnedLiveRow's read and this UPDATE if a hold expires mid-request.
+    if (!updated) throw new OrderExpired();
+    return toOrder(updated);
   } catch (error) {
     if (isUniqueViolation(error) && violatedConstraint(error) === "blocks_payment_signature_unique") {
       throw new SignatureAlreadyUsed();

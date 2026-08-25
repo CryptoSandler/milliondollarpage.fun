@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import { execute } from "../../../lib/db";
 import { reserveRect } from "../../../lib/board/reserve";
+import { CONTENT_LIMITS, MULTIPART_FRAMING_ALLOWANCE_BYTES } from "../../../lib/board/content";
 import { GET } from "../orders/[id]/route";
 import { POST as POST_CONTENT } from "../orders/[id]/content/route";
 import { POST as POST_CONFIRM } from "../orders/[id]/confirm/route";
@@ -24,20 +25,36 @@ async function png(): Promise<Buffer> {
     .toBuffer();
 }
 
-async function contentRequest(overrides: Record<string, string> = {}, bytes?: Buffer) {
+// A real browser sends `content-length` for a multipart body: every part's
+// size is known upfront. Node's `Request` does not compute it automatically
+// for a `FormData` body (it treats it as a stream), so it is added by hand
+// here — via a `Response` over the same body, which forces it to be
+// serialized so its true byte length can be measured — to make these
+// fixtures match what the content-length gate in content/route.ts actually
+// sees in production.
+async function withContentLength(form: FormData, headers: Record<string, string>): Promise<Request> {
+  const bytes = await new Response(form).arrayBuffer();
+  return new Request("http://localhost/api/orders/x/content", {
+    method: "POST",
+    headers: { ...headers, "content-length": String(bytes.byteLength) },
+    body: form,
+  });
+}
+
+async function contentRequest(overrides: Record<string, string> = {}, bytes?: Buffer, ip = "203.0.113.9") {
   const form = new FormData();
   form.set("image", new Blob([new Uint8Array(bytes ?? (await png()))], { type: "image/png" }), "block.png");
   form.set("link", overrides.link ?? "https://example.com/");
   form.set("caption", overrides.caption ?? "A caption");
   form.set("imageFit", overrides.imageFit ?? "contain");
   form.set("buyerPubkey", overrides.buyerPubkey ?? BUYER);
-  return new Request("http://localhost/api/orders/x/content", { method: "POST", body: form });
+  return withContentLength(form, { "x-forwarded-for": ip });
 }
 
-function confirmRequest(buyerPubkey = BUYER) {
+function confirmRequest(buyerPubkey = BUYER, ip = "203.0.113.9") {
   return new Request("http://localhost/api/orders/x/confirm", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "x-forwarded-for": ip },
     body: JSON.stringify({ buyerPubkey }),
   });
 }
@@ -61,6 +78,13 @@ describe("GET /api/orders/:id", () => {
   it("answers 404 for an id that is not a uuid, rather than 500ing", async () => {
     const response = await GET(new Request("http://localhost/"), ctx("not-a-uuid"));
     expect(response.status).toBe(404);
+  });
+
+  it("never publishes the buyer's pubkey, which is the only thing the other routes check", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    const body = await (await GET(new Request("http://localhost/"), ctx(held.id))).json();
+    expect(body).not.toHaveProperty("buyerPubkey");
+    expect(JSON.stringify(body)).not.toContain(BUYER);
   });
 });
 
@@ -114,6 +138,37 @@ describe("POST /api/orders/:id/content", () => {
   it("answers 404 for an id that is not a uuid, rather than 500ing", async () => {
     const response = await POST_CONTENT(await contentRequest(), ctx("not-a-uuid"));
     expect(response.status).toBe(404);
+  });
+
+  it("answers 413 for a declared content-length over the cap, before the body is ever read", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    const oversized = new Request("http://localhost/api/orders/x/content", {
+      method: "POST",
+      headers: {
+        "x-forwarded-for": "203.0.113.9",
+        "content-length": String(CONTENT_LIMITS.maxBytes + MULTIPART_FRAMING_ALLOWANCE_BYTES + 1),
+      },
+      // The body is deliberately tiny and not even valid multipart: the
+      // content-length gate must reject this from the header alone, before
+      // request.formData() (and therefore sharp) ever runs.
+      body: "this is not a form and is never read",
+    });
+    const response = await POST_CONTENT(oversized, ctx(held.id));
+    expect(response.status).toBe(413);
+  });
+
+  it("answers 413 when content-length is absent entirely", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    const noLength = new Request("http://localhost/api/orders/x/content", {
+      method: "POST",
+      headers: { "x-forwarded-for": "203.0.113.9" },
+    });
+    // Node's Request never sets content-length for a plain string body with
+    // no other length hint here, which is exactly the "absent" case the
+    // gate must also refuse.
+    expect(noLength.headers.get("content-length")).toBeNull();
+    const response = await POST_CONTENT(noLength, ctx(held.id));
+    expect(response.status).toBe(413);
   });
 });
 

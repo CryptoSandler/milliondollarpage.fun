@@ -61,3 +61,25 @@ export function assertStubPaymentsNotInProduction(): void {
     );
   }
 }
+
+/**
+ * Refuses to start in production with `ALLOW_UNTRUSTED_CLIENT_IP` enabled.
+ *
+ * That flag exists so `next dev` — which sits behind no proxy — has a
+ * client address to rate-limit against at all. Set in production it does the
+ * opposite of what a rate limit is for: every caller collapses into the
+ * single identity `clientIp` invents for it, so every visitor on the
+ * internet shares one bucket. With a 3-hold ceiling per caller, the fourth
+ * visitor anywhere would find every rectangle already "held" by that shared
+ * identity — a trivially self-inflicted outage, not merely a weaker limit.
+ */
+export function assertUntrustedClientIpNotInProduction(): void {
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_UNTRUSTED_CLIENT_IP?.trim()) {
+    throw new Error(
+      "ALLOW_UNTRUSTED_CLIENT_IP is set in production. This would collapse every " +
+        "caller into a single shared rate-limit identity, and the board's 3-hold " +
+        "ceiling would make the site unusable for everyone after the first few " +
+        "visitors. Remove it before this can start.",
+    );
+  }
+}

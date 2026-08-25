@@ -103,6 +103,32 @@ describe("validateContent — the link", () => {
       if (!result.ok) expect(result.rejections.some((r) => r.field === "link")).toBe(true);
     }
   });
+
+  it("trims surrounding whitespace before validating and storing it", async () => {
+    const result = await validateContent({
+      ...GOOD,
+      link: "  https://example.com/a  ",
+      bytes: await png(10, 10),
+      declaredMime: "image/png",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.content.link).toBe("https://example.com/a");
+  });
+
+  it("rejects a link over the length cap", async () => {
+    const huge = `https://example.com/${"a".repeat(CONTENT_LIMITS.linkMaxLength)}`;
+    const result = await validateContent({ ...GOOD, link: huge, bytes: await png(10, 10), declaredMime: "image/png" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.rejections.some((r) => r.field === "link")).toBe(true);
+  });
+
+  it("accepts a link at exactly the length cap", async () => {
+    const prefix = "https://example.com/";
+    const atCap = `${prefix}${"a".repeat(CONTENT_LIMITS.linkMaxLength - prefix.length)}`;
+    expect(atCap.length).toBe(CONTENT_LIMITS.linkMaxLength);
+    const result = await validateContent({ ...GOOD, link: atCap, bytes: await png(10, 10), declaredMime: "image/png" });
+    expect(result.ok).toBe(true);
+  });
 });
 
 describe("validateContent — the caption", () => {
