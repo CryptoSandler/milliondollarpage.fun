@@ -25,12 +25,58 @@ body {
   font-family: var(--font-sans);
 }
 
+:root {
+  --bar-top-h: 52px;
+  --bar-bottom-h: 88px;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --bar-top-h: 44px;
+    --bar-bottom-h: 76px;
+  }
+}
+
+.board-shell {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
 .board-canvas {
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  max-height: 80vh;
   display: block;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh; /* phones: excludes the browser chrome that 100vh includes */
   touch-action: none;
   cursor: crosshair;
-  border-radius: 0.5rem;
+}
+
+.board-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0 0.75rem;
+  background: color-mix(in oklab, var(--background) 82%, transparent);
+  backdrop-filter: blur(8px);
+  border-color: color-mix(in oklab, var(--foreground) 12%, transparent);
+}
+
+.board-bar--top {
+  top: 0;
+  height: var(--bar-top-h);
+  border-bottom-width: 1px;
+}
+
+.board-bar--bottom {
+  bottom: 0;
+  min-height: var(--bar-bottom-h);
+  border-top-width: 1px;
+  flex-wrap: wrap;
+  padding-top: 0.5rem;
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
 }
