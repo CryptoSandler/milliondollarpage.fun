@@ -454,8 +454,8 @@ but the rectangle and content it bought are ours to keep safe. Consequences:
 Overlap is enforced by a Postgres exclusion constraint, not by an on-chain
 program. If the database is wrong or compromised, two people can hold NFTs
 claiming the same rectangle and nothing on-chain forbids it. The nearest
-competitor enforces this in an Anchor program — `a program-level refusal` is a program
-error there, not an HTTP 409.
+competitor enforces this in an on-chain program, so a double-sell is refused by
+the chain itself rather than by a web server.
 
 Accepted deliberately: a custom program means Rust, an audit, and an
 upgrade-authority question that partly re-opens the key custody problem we just
