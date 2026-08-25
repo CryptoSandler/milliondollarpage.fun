@@ -6,6 +6,7 @@ import type { Selection } from "../lib/board/selection";
 import BoardCanvas from "./BoardCanvas";
 import BoardCounters from "./BoardCounters";
 import InteractionLegend from "./InteractionLegend";
+import PurchaseDialog from "./PurchaseDialog";
 import SelectionPanel from "./SelectionPanel";
 
 type BoardPayload = {
@@ -20,11 +21,19 @@ type BoardPayload = {
 const FALLBACK_BARS = { top: 52, bottom: 88 };
 
 export default function BoardView({ initial }: { initial: BoardPayload }) {
-  const [board] = useState(initial);
+  const [board, setBoard] = useState(initial);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [activePreset, setActivePreset] = useState<number | null>(null);
   const [hovered, setHovered] = useState<LiveBlock | null>(null);
   const [bars, setBars] = useState(FALLBACK_BARS);
+  // A plain text field until a real wallet arrives in a later batch: there is
+  // no connection and no signature yet, only an address the buyer types in.
+  const [buyerPubkey, setBuyerPubkey] = useState("");
+  // The selection a purchase is in progress for. Frozen separately from
+  // `selection` so the canvas remains free to change (or clear) the live
+  // selection underneath a dialog that is already holding a rectangle.
+  const [purchaseSelection, setPurchaseSelection] = useState<Selection | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const topBarRef = useRef<HTMLElement>(null);
   const bottomBarRef = useRef<HTMLDivElement>(null);
 
@@ -37,6 +46,52 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
     setActivePreset(size);
     setSelection(null);
   }, []);
+
+  // Re-fetches the same payload the page loaded with. Best-effort: a failed
+  // refresh just leaves the board as it was, and the next reservation sweep
+  // or page reload catches up.
+  const refreshBoard = useCallback(async () => {
+    try {
+      const response = await fetch("/api/board", { cache: "no-store" });
+      if (!response.ok) return;
+      setBoard((await response.json()) as BoardPayload);
+    } catch {
+      // Nothing useful to show for a failed poll; see comment above.
+    }
+  }, []);
+
+  const handleBuy = useCallback(() => {
+    if (!selection) return;
+    if (buyerPubkey.trim() === "") {
+      setNotice("Enter a wallet address before buying.");
+      return;
+    }
+    setPurchaseSelection(selection);
+  }, [selection, buyerPubkey]);
+
+  // Reservation holds sweep expired rows as a side effect of being created,
+  // and a purchase turns a block from reserved to paid — either way the
+  // board this instance last fetched may now be stale, whether the dialog
+  // ends in a completed purchase or in a rectangle somebody else just took.
+  const closeDialog = useCallback(
+    (dialogNotice?: string) => {
+      setPurchaseSelection(null);
+      setSelection(null);
+      setNotice(dialogNotice ?? null);
+      void refreshBoard();
+    },
+    [refreshBoard],
+  );
+
+  const handlePurchased = useCallback(() => {
+    void refreshBoard();
+  }, [refreshBoard]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timeout = setTimeout(() => setNotice(null), 6000);
+    return () => clearTimeout(timeout);
+  }, [notice]);
 
   // --bar-top-h / --bar-bottom-h are only the *nominal* heights. The bottom
   // bar is `flex-wrap`, and on a narrow screen its presets, selection summary
@@ -93,7 +148,22 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           activePreset={activePreset}
           onPresetChange={changePreset}
           onClear={clear}
+          onBuy={handleBuy}
         />
+        <label className="flex items-center gap-2 text-xs text-neutral-400">
+          <span>
+            Wallet address{" "}
+            <span className="text-neutral-500">(temporary text field — a connected wallet replaces this later)</span>
+          </span>
+          <input
+            type="text"
+            value={buyerPubkey}
+            onChange={(event) => setBuyerPubkey(event.target.value)}
+            placeholder="Your wallet address"
+            disabled={purchaseSelection !== null}
+            className="w-40 rounded border border-neutral-700 bg-transparent px-2 py-1 text-xs disabled:opacity-50"
+          />
+        </label>
         <InteractionLegend />
       </div>
 
@@ -105,6 +175,24 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           <p className="font-medium">{hovered.caption ?? "Untitled block"}</p>
           <p className="text-neutral-400">{hovered.link}</p>
         </div>
+      )}
+
+      {notice && (
+        <div
+          className="pointer-events-none fixed left-1/2 z-30 -translate-x-1/2 rounded bg-black/80 px-4 py-2 text-sm"
+          style={{ top: `calc(${bars.top}px + 0.5rem)` }}
+        >
+          {notice}
+        </div>
+      )}
+
+      {purchaseSelection && (
+        <PurchaseDialog
+          selection={purchaseSelection}
+          buyerPubkey={buyerPubkey}
+          onClose={closeDialog}
+          onPurchased={handlePurchased}
+        />
       )}
     </div>
   );

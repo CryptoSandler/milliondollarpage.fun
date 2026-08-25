@@ -17,12 +17,14 @@ export default function SelectionPanel({
   activePreset,
   onPresetChange,
   onClear,
+  onBuy,
 }: {
   selection: Selection | null;
   perPixel: number;
   activePreset: number | null;
   onPresetChange: (size: number | null) => void;
   onClear: () => void;
+  onBuy: () => void;
 }) {
   return (
     <section className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2">
@@ -77,6 +79,7 @@ export default function SelectionPanel({
           )}
           <button
             type="button"
+            onClick={onBuy}
             disabled={!selection.buyable}
             className="rounded bg-emerald-500 px-3 py-1 text-sm font-medium text-black disabled:cursor-not-allowed disabled:bg-neutral-700 disabled:text-neutral-400"
           >
