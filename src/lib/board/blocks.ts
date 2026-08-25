@@ -1,3 +1,4 @@
+import type { PoolClient } from "pg";
 import { execute, query } from "../db";
 import { TOTAL_PIXELS } from "./geometry";
 
@@ -66,10 +67,15 @@ export async function boardStats(): Promise<BoardStats> {
  * expired reservations out, and the reservation path will call this inside its
  * own transaction before inserting. This exists so the table does not grow a
  * tail of dead rows.
+ *
+ * Takes an optional client so the reservation path can run this on its own
+ * transaction's connection rather than the pool: the sweep and the exclusion
+ * constraint must see the same snapshot, and a version issued through the
+ * pooled `execute` would not be rolled back with a failed insert.
  */
-export async function sweepExpiredReservations(): Promise<number> {
-  return execute(
-    `DELETE FROM blocks
-      WHERE status = 'reserved' AND (expires_at IS NULL OR expires_at <= now())`,
-  );
+export async function sweepExpiredReservations(client?: PoolClient): Promise<number> {
+  const sql = `DELETE FROM blocks
+                WHERE status = 'reserved' AND (expires_at IS NULL OR expires_at <= now())`;
+  if (client) return (await client.query(sql)).rowCount ?? 0;
+  return execute(sql);
 }

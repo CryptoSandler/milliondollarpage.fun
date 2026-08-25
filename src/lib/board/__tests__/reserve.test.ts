@@ -131,4 +131,26 @@ describe("reserveRect", () => {
     ]);
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(2);
   });
+
+  it("rolls the sweep back when the insert fails, proving the sweep is in the transaction", async () => {
+    // An expired hold somewhere harmless, and a minted block in the way of the
+    // rectangle we are about to ask for.
+    await seedBlock(0, 0, "reserved", -1);      // expired, would be swept
+    await seedBlock(500, 500, "minted", null);  // blocks the request below
+
+    await expect(
+      reserveRect({ x: 500, y: 500, w: 20, h: 20 }, BUYER, CALLER),
+    ).rejects.toBeInstanceOf(RectangleTaken);
+
+    // The sweep ran inside the failed transaction, so it was rolled back with it
+    // and the expired hold is still there. If the sweep were issued on a pooled
+    // connection outside the transaction, this row would be gone.
+    const survivors = await query<{ x: number }>(
+      "SELECT x FROM blocks WHERE status = 'reserved'",
+    );
+    expect(
+      survivors,
+      "the expired hold must survive a failed reservation, or the sweep is not in the transaction",
+    ).toHaveLength(1);
+  });
 });

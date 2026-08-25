@@ -1,5 +1,6 @@
 import { randomInt } from "node:crypto";
 import { transaction } from "../db";
+import { sweepExpiredReservations } from "./blocks";
 import { type Rect, rectIsValid, rectPixels } from "./geometry";
 import { totalBaseUnits } from "./pricing";
 
@@ -71,10 +72,7 @@ export async function reserveRect(
 
   try {
     return await transaction(async (client) => {
-      await client.query(
-        `DELETE FROM blocks
-          WHERE status = 'reserved' AND (expires_at IS NULL OR expires_at <= now())`,
-      );
+      await sweepExpiredReservations(client);
 
       // Read the price inside the transaction so the row and the number the
       // buyer is quoted come from the same snapshot.
@@ -115,7 +113,7 @@ export async function reserveRect(
     });
   } catch (error) {
     // 23P01 is the exclusion constraint: somebody else holds those pixels.
-    if ((error as { code?: string }).code === "23P01") throw new RectangleTaken();
+    if ((error as { code?: string } | null)?.code === "23P01") throw new RectangleTaken();
     throw error;
   }
 }
