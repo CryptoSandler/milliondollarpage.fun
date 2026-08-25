@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { BoardStats, LiveBlock } from "../lib/board/blocks";
 import type { Selection } from "../lib/board/selection";
 import BoardCanvas from "./BoardCanvas";
@@ -19,6 +19,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
   const [selection, setSelection] = useState<Selection | null>(null);
   const [activePreset, setActivePreset] = useState<number | null>(null);
   const [hovered, setHovered] = useState<LiveBlock | null>(null);
+  const [bars, setBars] = useState({ top: 52, bottom: 88 });
 
   const clear = useCallback(() => setSelection(null), []);
 
@@ -30,39 +31,60 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
     setSelection(null);
   }, []);
 
+  // The bar heights live in globals.css (and change under a media query on
+  // narrow screens); reading them here rather than hardcoding a second copy
+  // means the fit maths and the visible bars can never disagree.
+  useEffect(() => {
+    function readBars() {
+      const style = getComputedStyle(document.documentElement);
+      const px = (name: string, fallback: number) => {
+        const parsed = Number.parseFloat(style.getPropertyValue(name));
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+      };
+      setBars({ top: px("--bar-top-h", 52), bottom: px("--bar-bottom-h", 88) });
+    }
+    readBars();
+    window.addEventListener("resize", readBars);
+    return () => window.removeEventListener("resize", readBars);
+  }, []);
+
   return (
-    <main className="mx-auto flex max-w-5xl flex-col gap-6 p-6">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold">milliondollarpage.fun</h1>
+    <div className="board-shell">
+      <BoardCanvas
+        blocks={board.blocks}
+        selection={selection}
+        activePreset={activePreset}
+        perPixel={board.pricePerPixelBaseUnits}
+        bars={bars}
+        onSelectionChange={setSelection}
+        onHoverChange={setHovered}
+      />
+
+      <header className="board-bar board-bar--top">
+        <h1 className="shrink-0 text-sm font-semibold tracking-tight">milliondollarpage.fun</h1>
         <BoardCounters stats={board.stats} perPixel={board.pricePerPixelBaseUnits} />
       </header>
 
-      <div className="relative">
-        <BoardCanvas
-          blocks={board.blocks}
+      <div className="board-bar board-bar--bottom">
+        <SelectionPanel
           selection={selection}
-          activePreset={activePreset}
           perPixel={board.pricePerPixelBaseUnits}
-          onSelectionChange={setSelection}
-          onHoverChange={setHovered}
+          activePreset={activePreset}
+          onPresetChange={changePreset}
+          onClear={clear}
         />
-        {hovered && (
-          <div className="pointer-events-none absolute left-2 top-2 rounded bg-black/80 px-3 py-2 text-sm">
-            <p className="font-medium">{hovered.caption ?? "Untitled block"}</p>
-            <p className="text-neutral-400">{hovered.link}</p>
-          </div>
-        )}
+        <InteractionLegend />
       </div>
 
-      <InteractionLegend />
-
-      <SelectionPanel
-        selection={selection}
-        perPixel={board.pricePerPixelBaseUnits}
-        activePreset={activePreset}
-        onPresetChange={changePreset}
-        onClear={clear}
-      />
-    </main>
+      {hovered && (
+        <div
+          className="pointer-events-none fixed left-2 rounded bg-black/80 px-3 py-2 text-sm"
+          style={{ bottom: "calc(var(--bar-bottom-h) + 0.5rem)" }}
+        >
+          <p className="font-medium">{hovered.caption ?? "Untitled block"}</p>
+          <p className="text-neutral-400">{hovered.link}</p>
+        </div>
+      )}
+    </div>
   );
 }

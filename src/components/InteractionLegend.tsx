@@ -7,7 +7,7 @@
  */
 export default function InteractionLegend() {
   return (
-    <div className="flex flex-col gap-1 text-xs text-neutral-500">
+    <div className="flex shrink-0 flex-col gap-1 text-xs text-neutral-500">
       <p className="hidden sm:block">
         scroll · zoom &nbsp;|&nbsp; shift-drag · pan &nbsp;|&nbsp; drag · select &nbsp;|&nbsp; click ·
         one block &nbsp;|&nbsp; esc · clear

@@ -9,6 +9,7 @@ import {
   type Viewport,
   boardToScreen,
   clampToBoard,
+  initialViewport,
   isTap,
   panBy,
   screenToBoard,
@@ -32,6 +33,7 @@ type Props = {
   selection: Selection | null;
   activePreset: number | null;
   perPixel: number;
+  bars: { top: number; bottom: number };
   onSelectionChange: (selection: Selection | null) => void;
   onHoverChange: (block: LiveBlock | null) => void;
 };
@@ -46,17 +48,22 @@ export default function BoardCanvas({
   selection,
   activePreset,
   perPixel,
+  bars,
   onSelectionChange,
   onHoverChange,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [viewport, setViewport] = useState<Viewport>({
-    centreX: BOARD_PIXELS / 2,
-    centreY: BOARD_PIXELS / 2,
-    scale: 0.6,
-  });
+  // The canvas has no size before layout runs, so this starts from the
+  // function's zero-screen answer and gets re-fit once the ResizeObserver
+  // below reports the real size.
+  const [viewport, setViewport] = useState<Viewport>(() =>
+    initialViewport({ width: 0, height: 0 }, bars, { width: BOARD_PIXELS, height: BOARD_PIXELS }),
+  );
   const [resizeTick, setResizeTick] = useState(0);
   const drag = useRef<Drag>({ kind: "none" });
+  // Set on the first pointerdown or wheel; once the user has zoomed or
+  // panned, a resize must not throw that away by re-fitting the board.
+  const hasInteracted = useRef(false);
 
   const publish = useCallback(
     (next: Selection | null) => {
@@ -66,17 +73,36 @@ export default function BoardCanvas({
   );
 
   // The canvas has no intrinsic size; its box is set entirely by CSS (see
-  // .board-canvas, which caps height at 80vh). On mobile that cap moves
+  // .board-canvas, which fills the viewport). On mobile that box moves
   // whenever the address bar collapses, so the backing store must be
   // re-measured independently of any prop change or it goes stale while
   // hit-testing (which reads a live getBoundingClientRect) does not.
+  //
+  // While the user has not interacted yet, a resize also re-fits the board
+  // to the new size — this is what makes the initial fit correct once the
+  // canvas's real dimensions (and not the zero-size placeholder) are known.
+  // Once they have zoomed or panned, a resize must not discard that.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const observer = new ResizeObserver(() => setResizeTick((t) => t + 1));
+    const observer = new ResizeObserver(() => {
+      setResizeTick((t) => t + 1);
+      if (!hasInteracted.current) {
+        const el = canvasRef.current;
+        if (el) {
+          setViewport(
+            initialViewport(
+              { width: el.clientWidth, height: el.clientHeight },
+              bars,
+              { width: BOARD_PIXELS, height: BOARD_PIXELS },
+            ),
+          );
+        }
+      }
+    });
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, []);
+  }, [bars]);
 
   // Draw. Everything here is a rectangle; nothing here decides anything.
   useEffect(() => {
@@ -150,6 +176,7 @@ export default function BoardCanvas({
   }
 
   function onPointerDown(event: ReactPointerEvent<HTMLCanvasElement>) {
+    hasInteracted.current = true;
     event.currentTarget.setPointerCapture(event.pointerId);
     const at = pointerBoard(event);
 
@@ -237,6 +264,7 @@ export default function BoardCanvas({
     if (!canvas) return;
 
     function handler(event: WheelEvent) {
+      hasInteracted.current = true;
       event.preventDefault();
       const rect = canvas!.getBoundingClientRect();
       const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };

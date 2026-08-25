@@ -25,14 +25,14 @@ export default function SelectionPanel({
   onClear: () => void;
 }) {
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2">
       <div className="flex flex-wrap gap-2">
         {PRESETS.map((preset) => (
           <button
             key={preset.size}
             type="button"
             onClick={() => onPresetChange(activePreset === preset.size ? null : preset.size)}
-            className={`rounded border px-3 py-2 text-sm ${
+            className={`rounded border px-2 py-1 text-xs ${
               activePreset === preset.size
                 ? "border-emerald-400 bg-emerald-400/10"
                 : "border-neutral-700 hover:border-neutral-500"
@@ -51,34 +51,34 @@ export default function SelectionPanel({
             onPresetChange(null);
             onClear();
           }}
-          className="rounded border border-neutral-700 px-3 py-2 text-sm hover:border-neutral-500"
+          className="rounded border border-neutral-700 px-2 py-1 text-xs hover:border-neutral-500"
         >
           Freehand
         </button>
       </div>
 
       {selection === null ? (
-        <p className="text-sm text-neutral-400">
+        <p className="text-xs text-neutral-400">
           Nothing selected. Click a block to start, or drag to outline a bigger one.
         </p>
       ) : (
-        <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
-          <p className="text-lg tabular-nums">
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+          <p className="text-sm tabular-nums">
             {selection.rect.w} × {selection.rect.h} at ({selection.rect.x}, {selection.rect.y})
           </p>
-          <p className="text-lg tabular-nums">
+          <p className="text-sm tabular-nums">
             {selection.pixels.toLocaleString("en-US")} pixels ·{" "}
             <span className="font-semibold">{formatUsdc(selection.totalBaseUnits)}</span>
           </p>
           {selection.collidesWith.length > 0 && (
-            <p className="text-sm text-red-400">
+            <p className="text-xs text-red-400">
               Part of this rectangle already belongs to someone. The blocks in red are not for sale.
             </p>
           )}
           <button
             type="button"
             disabled={!selection.buyable}
-            className="rounded bg-emerald-500 px-4 py-2 font-medium text-black disabled:cursor-not-allowed disabled:bg-neutral-700 disabled:text-neutral-400"
+            className="rounded bg-emerald-500 px-3 py-1 text-sm font-medium text-black disabled:cursor-not-allowed disabled:bg-neutral-700 disabled:text-neutral-400"
           >
             Buy these pixels
           </button>
