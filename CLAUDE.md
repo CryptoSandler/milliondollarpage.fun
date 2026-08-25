@@ -1,3 +1,5 @@
+@AGENTS.md
+
 # milliondollarpage.fun
 
 A Million Dollar Homepage on Solana. See [docs/superpowers/specs/](docs/superpowers/specs/)
