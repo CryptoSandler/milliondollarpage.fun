@@ -28,6 +28,15 @@ beforeAll(() => {
 
   // Everything under test reads DATABASE_URL. Redirect it once, here.
   process.env.DATABASE_URL = test;
+
+  // ALLOW_UNTRUSTED_CLIENT_IP is a local-development escape hatch: `next dev`
+  // sits behind no proxy, so without it there is no trustworthy client
+  // address and every request is refused. .env.local sets it to keep `next
+  // dev` usable, but if it were also true here the suite would never exercise
+  // the strict path — a caller with no trustworthy address must still be
+  // refused. Delete it so the suite always runs the strict path regardless of
+  // what a developer's .env.local has set.
+  delete process.env.ALLOW_UNTRUSTED_CLIENT_IP;
 });
 
 /**
