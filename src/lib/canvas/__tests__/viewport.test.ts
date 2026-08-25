@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { TAP_SLOP_PX, clampToBoard, isTap, panBy, screenToBoard, zoomAt } from "../viewport";
+import {
+  TAP_SLOP_PX,
+  boardToScreen,
+  clampToBoard,
+  initialViewport,
+  isTap,
+  panBy,
+  screenToBoard,
+  zoomAt,
+} from "../viewport";
 
 const SCREEN = { width: 800, height: 600 };
 const BOARD = { width: 200, height: 200 };
@@ -71,5 +80,67 @@ describe("the whole board fits and a single block is reachable", () => {
     const after = zoomAt(before, screen, cursor, 4, { min: 0.1, max: 40 });
     expect(screenToBoard(after, screen, cursor).x).toBeCloseTo(under.x, 9);
     expect(screenToBoard(after, screen, cursor).y).toBeCloseTo(under.y, 9);
+  });
+});
+
+describe("initialViewport", () => {
+  const board = { width: 1000, height: 1000 };
+
+  it("fits the whole board between the bars", () => {
+    const screen = { width: 1400, height: 900 };
+    const bars = { top: 52, bottom: 52 };
+    const v = initialViewport(screen, bars, board);
+
+    // 900 - 104 = 796 of usable height, which is the binding dimension here.
+    expect(v.scale).toBeCloseTo(796 / 1000, 10);
+
+    const topLeft = boardToScreen(v, screen, { x: 0, y: 0 });
+    const bottomRight = boardToScreen(v, screen, { x: 1000, y: 1000 });
+    expect(topLeft.y).toBeGreaterThanOrEqual(bars.top - 0.001);
+    expect(bottomRight.y).toBeLessThanOrEqual(screen.height - bars.bottom + 0.001);
+  });
+
+  it("centres the board in the free region, not in the viewport", () => {
+    const screen = { width: 1400, height: 900 };
+    const bars = { top: 52, bottom: 52 };
+    const v = initialViewport(screen, bars, board);
+    const centre = boardToScreen(v, screen, { x: 500, y: 500 });
+    expect(centre.y).toBeCloseTo(bars.top + (screen.height - bars.top - bars.bottom) / 2, 6);
+    expect(centre.x).toBeCloseTo(screen.width / 2, 6);
+  });
+
+  it("handles bars of different heights", () => {
+    const screen = { width: 1400, height: 900 };
+    const bars = { top: 80, bottom: 40 };
+    const v = initialViewport(screen, bars, board);
+    const centre = boardToScreen(v, screen, { x: 500, y: 500 });
+    expect(centre.y).toBeCloseTo(bars.top + (screen.height - bars.top - bars.bottom) / 2, 6);
+  });
+
+  it("is limited by width on a short wide viewport", () => {
+    const screen = { width: 600, height: 2000 };
+    const v = initialViewport(screen, { top: 52, bottom: 52 }, board);
+    expect(v.scale).toBeCloseTo(600 / 1000, 10);
+  });
+
+  it("is limited by height on a tall narrow viewport", () => {
+    const screen = { width: 2000, height: 600 };
+    const v = initialViewport(screen, { top: 44, bottom: 44 }, board);
+    expect(v.scale).toBeCloseTo((600 - 88) / 1000, 10);
+  });
+
+  it("never returns a zero or negative scale, however cramped the viewport", () => {
+    // A phone in landscape with the keyboard up can leave less height than the
+    // bars occupy. A non-positive scale divides by zero everywhere downstream.
+    const v = initialViewport({ width: 320, height: 60 }, { top: 52, bottom: 52 }, board);
+    expect(v.scale).toBeGreaterThan(0);
+    expect(Number.isFinite(v.scale)).toBe(true);
+  });
+
+  it("survives a zero-sized screen before layout has run", () => {
+    const v = initialViewport({ width: 0, height: 0 }, { top: 52, bottom: 52 }, board);
+    expect(v.scale).toBeGreaterThan(0);
+    expect(Number.isFinite(v.centreX)).toBe(true);
+    expect(Number.isFinite(v.centreY)).toBe(true);
   });
 });

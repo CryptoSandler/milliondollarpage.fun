@@ -73,3 +73,32 @@ export function clampToBoard(v: Viewport, board: Size): Viewport {
     centreY: Math.min(board.height, Math.max(0, v.centreY)),
   };
 }
+
+/**
+ * The view the board opens on: the whole thing visible, centred in the space
+ * the bars leave rather than in the viewport.
+ *
+ * The bars float over the canvas, so the canvas is the full viewport and the
+ * board has to be placed inside a smaller region. `boardToScreen` maps the
+ * board's centre to the screen's centre, so landing it in the free region's
+ * centre means offsetting centreY by half the difference between the bars.
+ *
+ * The clamp on scale is not decoration: a viewport shorter than its own bars
+ * yields a non-positive scale, and every screen-to-board conversion downstream
+ * divides by it.
+ */
+const MIN_INITIAL_SCALE = 0.01;
+
+export function initialViewport(screen: Size, bars: { top: number; bottom: number }, board: Size): Viewport {
+  const usableHeight = Math.max(1, screen.height - bars.top - bars.bottom);
+  const usableWidth = Math.max(1, screen.width);
+  const scale = Math.max(
+    MIN_INITIAL_SCALE,
+    Math.min(usableWidth / board.width, usableHeight / board.height),
+  );
+  return {
+    scale,
+    centreX: board.width / 2,
+    centreY: board.height / 2 - (bars.top - bars.bottom) / (2 * scale),
+  };
+}
