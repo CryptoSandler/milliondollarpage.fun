@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { BoardStats, LiveBlock } from "../lib/board/blocks";
 import type { Selection } from "../lib/board/selection";
 import BoardCanvas from "./BoardCanvas";
@@ -14,12 +14,19 @@ type BoardPayload = {
   pricePerPixelBaseUnits: number;
 };
 
+// Matches the --bar-top-h / --bar-bottom-h defaults in globals.css: the very
+// first paint, before the bars exist to be measured, has to assume something,
+// and this is what the CSS assumes too.
+const FALLBACK_BARS = { top: 52, bottom: 88 };
+
 export default function BoardView({ initial }: { initial: BoardPayload }) {
   const [board] = useState(initial);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [activePreset, setActivePreset] = useState<number | null>(null);
   const [hovered, setHovered] = useState<LiveBlock | null>(null);
-  const [bars, setBars] = useState({ top: 52, bottom: 88 });
+  const [bars, setBars] = useState(FALLBACK_BARS);
+  const topBarRef = useRef<HTMLElement>(null);
+  const bottomBarRef = useRef<HTMLDivElement>(null);
 
   const clear = useCallback(() => setSelection(null), []);
 
@@ -31,21 +38,35 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
     setSelection(null);
   }, []);
 
-  // The bar heights live in globals.css (and change under a media query on
-  // narrow screens); reading them here rather than hardcoding a second copy
-  // means the fit maths and the visible bars can never disagree.
+  // --bar-top-h / --bar-bottom-h are only the *nominal* heights. The bottom
+  // bar is `flex-wrap`, and on a narrow screen its presets, selection summary
+  // and legend wrap to a second row — its real rendered height then exceeds
+  // the variable. Feeding the nominal number to initialViewport would reserve
+  // too little space and let the bar cover part of the board, so this
+  // measures the two bar elements directly instead of reading the CSS
+  // variables off the root.
+  //
+  // This cannot loop: the measured heights only flow into `bars` state, which
+  // affects the canvas's viewport (a different element) and the hover card's
+  // position, never a style on the bar elements themselves from inside their
+  // own observer callback.
   useEffect(() => {
-    function readBars() {
-      const style = getComputedStyle(document.documentElement);
-      const px = (name: string, fallback: number) => {
-        const parsed = Number.parseFloat(style.getPropertyValue(name));
-        return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-      };
-      setBars({ top: px("--bar-top-h", 52), bottom: px("--bar-bottom-h", 88) });
+    const topEl = topBarRef.current;
+    const bottomEl = bottomBarRef.current;
+    if (!topEl || !bottomEl) return;
+
+    function measure() {
+      setBars({
+        top: topEl!.offsetHeight || FALLBACK_BARS.top,
+        bottom: bottomEl!.offsetHeight || FALLBACK_BARS.bottom,
+      });
     }
-    readBars();
-    window.addEventListener("resize", readBars);
-    return () => window.removeEventListener("resize", readBars);
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(topEl);
+    observer.observe(bottomEl);
+    return () => observer.disconnect();
   }, []);
 
   return (
@@ -60,12 +81,12 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
         onHoverChange={setHovered}
       />
 
-      <header className="board-bar board-bar--top">
+      <header ref={topBarRef} className="board-bar board-bar--top">
         <h1 className="shrink-0 text-sm font-semibold tracking-tight">milliondollarpage.fun</h1>
         <BoardCounters stats={board.stats} perPixel={board.pricePerPixelBaseUnits} />
       </header>
 
-      <div className="board-bar board-bar--bottom">
+      <div ref={bottomBarRef} className="board-bar board-bar--bottom">
         <SelectionPanel
           selection={selection}
           perPixel={board.pricePerPixelBaseUnits}
@@ -79,7 +100,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
       {hovered && (
         <div
           className="pointer-events-none fixed left-2 rounded bg-black/80 px-3 py-2 text-sm"
-          style={{ bottom: "calc(var(--bar-bottom-h) + 0.5rem)" }}
+          style={{ bottom: `calc(${bars.bottom}px + 0.5rem)` }}
         >
           <p className="font-medium">{hovered.caption ?? "Untitled block"}</p>
           <p className="text-neutral-400">{hovered.link}</p>
