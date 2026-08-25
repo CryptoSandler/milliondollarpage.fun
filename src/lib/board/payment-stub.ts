@@ -1,4 +1,3 @@
-import { assertStubPaymentsNotInProduction } from "../config";
 import type { Order } from "./orders";
 
 /**
@@ -9,12 +8,14 @@ import type { Order } from "./orders";
  * treasury or an RPC proxy exist. Batch 3 replaces this module wholesale with
  * an on-chain USDC verifier; the call site does not change.
  *
- * It is gated on an environment flag that fails startup in production, so the
- * route that uses it does not merely refuse there — it does not exist. The
- * check runs the moment this module is loaded, not on first call.
+ * It is gated on an environment flag that fails startup in production. That
+ * check lives in `src/instrumentation.ts`'s `register()`, not here: `next
+ * build` statically evaluates every route module while collecting page
+ * data, and this module will be imported by routes from Task 6 onward, so a
+ * throw at THIS module's top level would fail the build itself rather than
+ * refusing at real server startup. `register()` runs once when a server
+ * instance actually boots, which build-time collection is not.
  */
-assertStubPaymentsNotInProduction();
-
 export function stubPaymentsAllowed(): boolean {
   return process.env.ALLOW_STUB_PAYMENTS?.trim() === "true";
 }

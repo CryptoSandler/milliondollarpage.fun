@@ -85,15 +85,20 @@ type OrderRow = {
   payment_fraction: number | null;
   payment_signature: string | null;
   expires_at: Date | null;
-  pending_image: Buffer | null;
+  has_content: boolean;
   caption: string | null;
   link: string | null;
   image_fit: string | null;
   is_animated: boolean;
 };
 
+// `pending_image` itself is never selected here: it is up to 100 KiB of
+// bytes that no reader of an `Order` ever needs, only whether it is set. The
+// boolean is computed in SQL instead of dragging the bytes out of Neon on
+// every order read just to throw them away in `toOrder`.
 const ORDER_COLUMNS = `id, x, y, w, h, status, buyer_pubkey, price_per_pixel_usdc, total_usdc,
-       payment_fraction, payment_signature, expires_at, pending_image, caption, link,
+       payment_fraction, payment_signature, expires_at,
+       pending_image IS NOT NULL AS has_content, caption, link,
        image_fit, is_animated`;
 
 function toOrder(row: OrderRow): Order {
@@ -111,7 +116,7 @@ function toOrder(row: OrderRow): Order {
     totalBaseUnits: total,
     paymentBaseUnits: total + fraction,
     expiresAt: row.expires_at ? row.expires_at.toISOString() : null,
-    hasContent: row.pending_image !== null,
+    hasContent: row.has_content,
     caption: row.caption,
     link: row.link,
     imageFit: row.image_fit as "contain" | "cover" | null,
@@ -189,7 +194,7 @@ export async function markPaid(id: string, buyerPubkey: string, signature: strin
     throw new OrderNotReady("This order has already been paid with a different signature.");
   }
 
-  if (row.pending_image === null) {
+  if (!row.has_content) {
     throw new OrderNotReady("Content must be attached before an order can be paid.");
   }
 
