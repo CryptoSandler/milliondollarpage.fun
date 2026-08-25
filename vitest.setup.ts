@@ -55,11 +55,19 @@ export function sameTarget(a: string, b: string | undefined): boolean {
   }
 }
 
-/** Empties every table except the migration ledger. */
+/**
+ * Empties every table except the migration ledger and `settings`.
+ *
+ * `settings` is excluded because its rows are migration-seeded defaults, not
+ * test fixtures — truncating it between tests would delete the price a
+ * migration put there rather than data a test created. A test that needs a
+ * different price writes one and puts it back.
+ */
 export async function truncateAll(): Promise<void> {
   const tables = await query<{ tablename: string }>(
     `SELECT tablename FROM pg_tables
-      WHERE schemaname = 'public' AND tablename <> 'schema_migrations'`,
+      WHERE schemaname = 'public'
+        AND tablename NOT IN ('schema_migrations', 'settings')`,
   );
   if (tables.length === 0) return;
   await execute(`TRUNCATE ${tables.map((t) => `"${t.tablename}"`).join(", ")} CASCADE`);
