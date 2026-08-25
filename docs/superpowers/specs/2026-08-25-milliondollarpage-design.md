@@ -63,7 +63,7 @@ The board. One row per rectangle, whatever its state.
 | Column | Notes |
 | --- | --- |
 | `id` | uuid |
-| `rect` | `box`, GiST-indexed. Grid coordinates, not pixels: `(0,0)..(100,100)` |
+| `x_range`, `y_range` | `int4range`, half-open, GiST-indexed. Pixel coordinates. A 10×10 block at the origin is `[0,10)` × `[0,10)` |
 | `x, y, w, h` | Pixel coordinates, denormalised for reads and for NFT attributes |
 | `status` | `reserved` \| `paid` \| `minted` \| `removed` |
 | `buyer_pubkey` | Bound at reservation. The only wallet that may pay and mint |
@@ -85,9 +85,19 @@ The board. One row per rectangle, whatever its state.
 
 ```sql
 ALTER TABLE blocks ADD CONSTRAINT blocks_no_overlap
-  EXCLUDE USING gist (rect WITH &&)
+  EXCLUDE USING gist (x_range WITH &&, y_range WITH &&)
   WHERE (status IN ('reserved', 'paid', 'minted'));
 ```
+
+Two `int4range` columns rather than one `box`, for a reason that was verified
+against a real Postgres before it was written down: **`box &&` reports two boxes
+that merely share an edge as overlapping.** Every block on a full board touches
+its neighbours, so a `box` constraint would have rejected the second block ever
+sold and every block after it. `int4range` is half-open and exact — `[0,10)` and
+`[10,20)` do not overlap, `[0,10)` and `[5,15)` do — and a two-column exclusion
+constraint conflicts only when *both* ranges overlap, which is precisely
+rectangle intersection. Neither column needs `btree_gist`; `status` appears only
+in the predicate, never as an operator column.
 
 `removed` is excluded so a moderated block's rectangle returns to the board.
 
@@ -394,11 +404,56 @@ reason.
 - **Unmatched payments and stuck mints**: inherited from outbid-tokens'
   `unmatched` view, extended with `paid` orders that never minted.
 
-## 14. Known integrity gap
+## 14. The chain is the source of truth
+
+**Doctrine: for minted blocks, the chain is authoritative and Postgres is a
+cache that can be thrown away and rebuilt.** Nothing about a minted block exists
+only in our database. Position and size are in the asset's immutable attributes,
+image, link and caption are in its immutable metadata on Arweave, and ownership
+is the asset's owner field. If the database and the chain disagree, the chain is
+right and the database is repaired — never the other way around.
+
+This is what makes the integrity gap below survivable rather than fatal, and it
+must be true in practice, not in principle. So it is executable:
+
+**`scripts/rebuild-from-chain.mts`** reconstructs the `blocks` table from an
+empty database. It pages the collection with DAS `getAssetsByGroup`, reads `x`,
+`y`, `width`, `height`, `image_fit` and the rest from each asset's attributes,
+reads the metadata URI for image, link and caption, and inserts one `minted` row
+per asset with its current owner. It is idempotent, and it is the disaster
+recovery procedure: restore nothing, run this.
+
+One wrinkle the implementation has to solve rather than discover: DAS is an
+indexer, not an RPC method, so it does not exist on a local validator. The
+"list every asset in the collection" step is therefore an interface with two
+implementations — DAS in production, `getProgramAccounts` via the Core SDK in
+tests — and the rest of the script is identical either way.
+
+**The test that keeps this honest** mints a handful of blocks against a local
+validator, truncates the `blocks` table, runs the rebuild, and asserts the
+result equals what was there before, row for row and field for field. A rebuild
+path that is never executed is a rebuild path that does not work.
+
+**What the chain does not hold: paid orders that never minted.** Those live only
+in Postgres, and the rebuild cannot invent them. Their on-chain anchor is the
+payment signature — the USDC transfer is a real, permanent transaction, so a
+paid order can always be proven to exist and be reconstructed by hand from it,
+but the rectangle and content it bought are ours to keep safe. Consequences:
+
+- `rebuild-from-chain` never deletes `paid` rows. It rebuilds `minted` rows and
+  leaves everything else alone; run against a genuinely empty database it
+  produces only `minted` rows, and paid-but-unminted orders must then be
+  restored from a backup or re-entered from their payment signature.
+- Database backups matter for exactly this one state, which is a small, bounded,
+  short-lived set of rows.
+- `/api/reconcile` already surfaces `paid` orders with no `mint_address`. The
+  faster that queue drains, the less there is that only we hold.
+
+### The gap that remains
 
 Overlap is enforced by a Postgres exclusion constraint, not by an on-chain
 program. If the database is wrong or compromised, two people can hold NFTs
-claiming the same rectangle and nothing on-chain contradicts them. The nearest
+claiming the same rectangle and nothing on-chain forbids it. The nearest
 competitor enforces this in an Anchor program — `a program-level refusal` is a program
 error there, not an HTTP 409.
 
@@ -406,10 +461,12 @@ Accepted deliberately: a custom program means Rust, an audit, and an
 upgrade-authority question that partly re-opens the key custody problem we just
 spent §12 constraining. The mitigations are that the rectangle is written into
 the asset's immutable attributes, making a duplicate publicly detectable and
-provably second by mint order; that the constraint makes a double-sell
-impossible short of database compromise; and that reservations are bound to a
-pubkey. Recorded as the first thing to reach for if the board gets big enough
-to be worth attacking.
+**provably second by mint order** — which is also the rule the rebuild applies
+when it meets two assets claiming the same pixels: the earlier mint keeps the
+rectangle and the later one is flagged for review rather than silently dropped.
+Beyond that, the constraint makes a double-sell impossible short of database
+compromise, and reservations are bound to a pubkey. A custom program stays the
+first thing to reach for if the board gets big enough to be worth attacking.
 
 ## 15. Configuration
 
@@ -439,6 +496,8 @@ a time.
 The cases that must exist because they are where this design can silently fail:
 
 - Two concurrent reservations for overlapping rectangles: exactly one wins.
+- Two edge-adjacent rectangles are both accepted. This is the case a `box`
+  column silently fails.
 - A reservation whose sweep and insert race an expiring neighbour.
 - Payment from a wallet other than `buyer_pubkey` does not settle the order.
 - A payment signature cannot settle two orders.
@@ -451,6 +510,10 @@ The cases that must exist because they are where this design can silently fail:
 - Startup refuses to boot when the authority key holds any balance.
 - A removed block's rectangle can be sold again.
 - Composite regeneration failure leaves the previous board serving.
+- Blocks minted locally, table truncated, rebuild run: the table comes back
+  identical, row for row and field for field.
+- A rebuild run over a database holding `paid` rows leaves every one of them
+  untouched.
 
 ## 17. Build order
 
@@ -467,7 +530,10 @@ Each batch ends with a working, deployable site.
    unique amounts, `/api/rpc` proxy, rate limits, `/api/reconcile`.
 5. **Mint** — Irys upload and hash verification, Core asset creation with all
    three plugins, co-signing, platform fee, retry path, startup balance check.
-6. **Ownership sync** — DAS `getAssetsByGroup` in the reconcile cron.
+6. **Ownership sync and rebuild** — the asset-listing interface with its DAS and
+   `getProgramAccounts` implementations, `getAssetsByGroup` in the reconcile
+   cron, `scripts/rebuild-from-chain.mts`, and the mint/truncate/rebuild/compare
+   test.
 7. **Admin and moderation** — settings with audit log, block removal, reports.
 8. **Featured slot** — FIFO queue, OG image.
 9. **Rules, SECURITY.md, README, security headers.**
