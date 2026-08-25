@@ -42,3 +42,22 @@ export function allowUntrustedClientIp(): boolean {
 export function trustedPlatformHeader(): string | null {
   return process.env.TRUSTED_PLATFORM_HEADER?.trim() || null;
 }
+
+/**
+ * Refuses to start in production with stub payments enabled.
+ *
+ * `ALLOW_STUB_PAYMENTS=true` makes `markPaid` accept a synthetic signature
+ * with no on-chain check at all. If that were ever set in production, anyone
+ * could mark any order paid without sending any money — every rectangle on
+ * the board would be free for the asking. It exists only so this batch can
+ * be built and tested before batch 3 ships the real Solana/USDC verifier;
+ * this check is what keeps it from ever reaching a real deploy.
+ */
+export function assertStubPaymentsNotInProduction(): void {
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_STUB_PAYMENTS?.trim()) {
+    throw new Error(
+      "ALLOW_STUB_PAYMENTS is set in production. This would let anyone mark any order " +
+        "paid without sending money. Remove it before this can start.",
+    );
+  }
+}
