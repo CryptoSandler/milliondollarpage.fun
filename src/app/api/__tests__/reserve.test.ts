@@ -1,6 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { RESERVATION_LIMITS } from "../../../lib/callers/limits";
 import { POST } from "../reserve/route";
+
+// This file drives up to `liveHoldsPerCaller` sequential POSTs per test, and
+// every POST costs several round trips to the remote Neon test branch. The
+// 5s default is tuned for a single query, not that loop, so it's raised only
+// here rather than repo-wide.
+vi.setConfig({ testTimeout: 20_000 });
 
 const BUYER = "BuyerPubkey1111111111111111111111111111111";
 
@@ -72,12 +78,15 @@ describe("POST /api/reserve", () => {
   });
 
   it("refuses a caller with no trustworthy address", async () => {
+    // The suite always deletes ALLOW_UNTRUSTED_CLIENT_IP, so with no
+    // x-forwarded-for header `identify` deterministically fails closed with
+    // a 400 — asserted exactly, not as one of several acceptable outcomes.
     const anonymous = new Request("http://localhost/api/reserve", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ rect: { x: 0, y: 0, w: 10, h: 10 }, buyerPubkey: BUYER }),
     });
     const response = await POST(anonymous);
-    expect([400, 429]).toContain(response.status);
+    expect(response.status).toBe(400);
   });
 });

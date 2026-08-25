@@ -45,3 +45,19 @@ export function problem(
 ): Response {
   return json({ message, ...extra }, { status, headers: { ...NO_STORE, ...headers } });
 }
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * True for the standard 8-4-4-4-12 hex UUID shape, case-insensitive.
+ *
+ * Every `[id]` route checks this before touching the database: `blocks.id`
+ * is a `uuid` column, and handing Postgres a string that isn't one raises
+ * 22P02, which would otherwise surface as an unauthenticated 500 on a
+ * trivially reachable route. An id that cannot name an order does not name
+ * an order, so the answer is the same 404 an absent-but-well-formed id gets
+ * — a caller must not be able to tell "malformed" from "not found".
+ */
+export function isUuid(value: string): boolean {
+  return UUID_PATTERN.test(value);
+}

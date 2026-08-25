@@ -1,5 +1,5 @@
 import { getOrder } from "../../../../lib/board/orders";
-import { NO_STORE, json, problem } from "../../../../lib/http";
+import { NO_STORE, isUuid, json, problem } from "../../../../lib/http";
 
 /**
  * An order's current state, for polling a hold or a confirmation screen.
@@ -13,6 +13,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await params;
+  if (!isUuid(id)) return problem(404, "That order does not exist.");
+
   const order = await getOrder(id);
   if (!order) return problem(404, "That order does not exist.");
   return json(order, { headers: NO_STORE });

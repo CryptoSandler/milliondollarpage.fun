@@ -1,10 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import { execute } from "../../../lib/db";
 import { reserveRect } from "../../../lib/board/reserve";
 import { GET } from "../orders/[id]/route";
 import { POST as POST_CONTENT } from "../orders/[id]/content/route";
 import { POST as POST_CONFIRM } from "../orders/[id]/confirm/route";
+
+// Reserving, attaching content and confirming each cost their own round trips
+// to the remote Neon test branch, and several tests chain two or three of
+// them. The 5s default is tuned for a single query, so it's raised only here
+// rather than repo-wide.
+vi.setConfig({ testTimeout: 20_000 });
 
 const BUYER = "BuyerPubkey1111111111111111111111111111111";
 const STRANGER = "StrangerPubkey11111111111111111111111111111";
@@ -50,6 +56,11 @@ describe("GET /api/orders/:id", () => {
     const body = await response.json();
     expect(body.status).toBe("reserved");
     expect(body.hasContent).toBe(false);
+  });
+
+  it("answers 404 for an id that is not a uuid, rather than 500ing", async () => {
+    const response = await GET(new Request("http://localhost/"), ctx("not-a-uuid"));
+    expect(response.status).toBe(404);
   });
 });
 
@@ -99,6 +110,11 @@ describe("POST /api/orders/:id/content", () => {
     );
     expect(response.status).toBe(404);
   });
+
+  it("answers 404 for an id that is not a uuid, rather than 500ing", async () => {
+    const response = await POST_CONTENT(await contentRequest(), ctx("not-a-uuid"));
+    expect(response.status).toBe(404);
+  });
 });
 
 describe("POST /api/orders/:id/confirm", () => {
@@ -123,6 +139,19 @@ describe("POST /api/orders/:id/confirm", () => {
     await POST_CONTENT(await contentRequest(), ctx(held.id));
     const response = await POST_CONFIRM(confirmRequest(STRANGER), ctx(held.id));
     expect(response.status).toBe(403);
+  });
+
+  it("answers 403 to a stranger even when the order has no content", async () => {
+    // Without an explicit ownership check this returns 409 and tells the
+    // stranger what state somebody else's order is in.
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    const response = await POST_CONFIRM(confirmRequest(STRANGER), ctx(held.id));
+    expect(response.status).toBe(403);
+  });
+
+  it("answers 404 for an id that is not a uuid, rather than 500ing", async () => {
+    const response = await POST_CONFIRM(confirmRequest(), ctx("not-a-uuid"));
+    expect(response.status).toBe(404);
   });
 
   it("does not exist at all when stub payments are disabled", async () => {
