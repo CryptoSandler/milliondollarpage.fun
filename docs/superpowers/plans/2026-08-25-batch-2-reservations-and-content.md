@@ -1034,93 +1034,316 @@ git commit -m "Validate an image by its bytes, a link by its scheme, before anyo
 **Files:**
 - Create: `src/lib/board/orders.ts`, `src/lib/board/payment-stub.ts`
 - Test: `src/lib/board/__tests__/orders.test.ts`
+- Modify: `src/lib/config.ts`, `.env.example`
 
 **Interfaces:**
-- Consumes: `query`, `queryOne`, `execute`, `transaction` from `src/lib/db.ts`; `ValidatedContent` from `./content`.
+- Consumes: `query`, `queryOne`, `execute` from `src/lib/db.ts`; `Rect` from `./geometry`; `ValidatedContent` from `./content`; `reserveRect` from `./reserve`.
 - Produces:
-  - `type Order = { id: string; rect: Rect; status: "reserved" | "paid"; buyerPubkey: string; totalBaseUnits: number; paymentBaseUnits: number; expiresAt: string | null; hasContent: boolean; caption: string | null; link: string | null; imageFit: string | null }`
+  - `type OrderStatus = "reserved" | "paid"`
+  - `type Order = { id: string; rect: Rect; status: OrderStatus; buyerPubkey: string; pricePerPixelBaseUnits: number; totalBaseUnits: number; paymentBaseUnits: number; expiresAt: string | null; hasContent: boolean; caption: string | null; link: string | null; imageFit: "contain" | "cover" | null; isAnimated: boolean }`
   - `getOrder(id: string): Promise<Order | null>`
   - `attachContent(id: string, buyerPubkey: string, content: ValidatedContent): Promise<Order>`
   - `markPaid(id: string, buyerPubkey: string, signature: string): Promise<Order>`
-  - `class OrderNotFound`, `class OrderNotYours`, `class OrderExpired`, `class OrderNotReady`
-  - From `payment-stub.ts`: `stubVerifyPayment(order: Order): Promise<{ ok: true; signature: string } | { ok: false; reason: string }>`
+  - `class OrderNotFound extends Error`, `class OrderNotYours extends Error`, `class OrderExpired extends Error`, `class OrderNotReady extends Error`, `class SignatureAlreadyUsed extends Error`
+  - From `payment-stub.ts`: `stubPaymentsAllowed(): boolean`, `stubVerifyPayment(order: Order): Promise<{ ok: true; signature: string } | { ok: false; reason: string }>`
 
-**The stub, stated plainly:** this batch ships no payment verification. `stubVerifyPayment` returns a synthetic signature and is gated on `ALLOW_STUB_PAYMENTS=true`, which must be absent in production and is checked in `startup-check`. Batch 3 replaces the module wholesale with the real on-chain verifier; the call site does not change.
+**The stub, stated plainly:** this batch ships no payment verification. `stubVerifyPayment` returns a synthetic signature and is gated on `ALLOW_STUB_PAYMENTS=true`, which must be absent in production and fails startup there. Batch 3 replaces the module wholesale with the real on-chain verifier; the call site does not change.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `src/lib/board/__tests__/orders.test.ts` covering, at minimum:
+Create `src/lib/board/__tests__/orders.test.ts`:
 
 ```ts
-// getOrder
-it("returns null for an id that does not exist")
-it("returns a reserved order with its expiry and no content")
-it("reports hasContent once content is attached")
+import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
+import { execute, query } from "../../db";
+import type { ValidatedContent } from "../content";
+import {
+  OrderExpired,
+  OrderNotFound,
+  OrderNotReady,
+  OrderNotYours,
+  SignatureAlreadyUsed,
+  attachContent,
+  getOrder,
+  markPaid,
+} from "../orders";
+import { reserveRect } from "../reserve";
 
-// attachContent
-it("stores the bytes, the hash, the mime, the animated flag, the link, caption and fit")
-it("refuses content for an order belonging to a different pubkey")   // OrderNotYours
-it("refuses content for an expired hold")                            // OrderExpired
-it("replaces content when supplied twice before payment")            // still editable pre-payment
-it("refuses content once the order is paid")                         // OrderNotReady
+const BUYER = "BuyerPubkey1111111111111111111111111111111";
+const STRANGER = "StrangerPubkey11111111111111111111111111111";
+const CALLER = "d".repeat(64);
 
-// markPaid
-it("moves reserved to paid and NULLS the expiry")
-it("records the payment signature")
-it("refuses to mark paid an order with no content attached")         // OrderNotReady
-it("refuses a signature already used by another order")              // unique violation surfaced
-it("refuses an order belonging to a different pubkey")               // OrderNotYours
-it("refuses an expired hold")                                        // OrderExpired
-it("is idempotent: marking an already-paid order with the same signature returns the same order")
-```
+function content(overrides: Partial<ValidatedContent> = {}): ValidatedContent {
+  const bytes = Buffer.from("fake-png-bytes");
+  return {
+    bytes,
+    mime: "image/png",
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    isAnimated: false,
+    width: 100,
+    height: 100,
+    link: "https://example.com/",
+    caption: "A caption",
+    imageFit: "contain",
+    ...overrides,
+  };
+}
 
-Write each of those as a real test with real assertions — the list above is the coverage contract, not a substitute for the code.
+async function hold(x = 0, y = 0, w = 10, h = 10) {
+  return reserveRect({ x, y, w, h }, BUYER, CALLER);
+}
 
-The two most important, spell out fully:
+/** Pushes a live hold's expiry into the past without touching anything else. */
+async function expire(id: string): Promise<void> {
+  await execute("UPDATE blocks SET expires_at = now() - interval '1 minute' WHERE id = $1", [id]);
+}
 
-```ts
-it("moves reserved to paid and NULLS the expiry", async () => {
-  const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
-  await attachContent(held.id, BUYER, validContent());
-  const paid = await markPaid(held.id, BUYER, "sig-1");
-  expect(paid.status).toBe("paid");
-  expect(paid.expiresAt).toBeNull();
+describe("getOrder", () => {
+  it("returns null for an id that does not exist", async () => {
+    expect(await getOrder("00000000-0000-0000-0000-000000000000")).toBeNull();
+  });
 
-  const rows = await query<{ expires_at: Date | null }>(
-    "SELECT expires_at FROM blocks WHERE id = $1",
-    [held.id],
-  );
-  expect(rows[0].expires_at).toBeNull();
+  it("returns a reserved order with its expiry and no content", async () => {
+    const held = await hold();
+    const order = await getOrder(held.id);
+    expect(order).not.toBeNull();
+    expect(order!.status).toBe("reserved");
+    expect(order!.rect).toEqual({ x: 0, y: 0, w: 10, h: 10 });
+    expect(order!.buyerPubkey).toBe(BUYER);
+    expect(order!.totalBaseUnits).toBe(100_000_000);
+    expect(order!.paymentBaseUnits).toBeGreaterThan(order!.totalBaseUnits);
+    expect(order!.expiresAt).not.toBeNull();
+    expect(order!.hasContent).toBe(false);
+    expect(order!.caption).toBeNull();
+  });
+
+  it("reports hasContent once content is attached", async () => {
+    const held = await hold();
+    await attachContent(held.id, BUYER, content());
+    const order = await getOrder(held.id);
+    expect(order!.hasContent).toBe(true);
+    expect(order!.caption).toBe("A caption");
+    expect(order!.link).toBe("https://example.com/");
+    expect(order!.imageFit).toBe("contain");
+  });
 });
 
-it("survives the sweep once paid", async () => {
-  // The property the whole retry story rests on: a paid order is never
-  // reclaimed, however long the buyer takes from here.
-  const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
-  await attachContent(held.id, BUYER, validContent());
-  await markPaid(held.id, BUYER, "sig-2");
+describe("attachContent", () => {
+  it("stores the bytes, the hash, the mime and the animated flag", async () => {
+    const held = await hold();
+    await attachContent(held.id, BUYER, content({ isAnimated: true, mime: "image/gif" }));
+    const rows = await query<{
+      pending_image: Buffer;
+      pending_image_mime: string;
+      image_sha256: string;
+      is_animated: boolean;
+    }>(
+      `SELECT pending_image, pending_image_mime, image_sha256, is_animated
+         FROM blocks WHERE id = $1`,
+      [held.id],
+    );
+    expect(rows[0].pending_image.toString()).toBe("fake-png-bytes");
+    expect(rows[0].pending_image_mime).toBe("image/gif");
+    expect(rows[0].image_sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(rows[0].is_animated).toBe(true);
+  });
 
-  await execute(
-    `DELETE FROM blocks WHERE status = 'reserved' AND (expires_at IS NULL OR expires_at <= now())`,
-  );
-  const still = await getOrder(held.id);
-  expect(still?.status).toBe("paid");
+  it("refuses an order that does not exist", async () => {
+    await expect(
+      attachContent("00000000-0000-0000-0000-000000000000", BUYER, content()),
+    ).rejects.toBeInstanceOf(OrderNotFound);
+  });
+
+  it("refuses content for an order belonging to a different pubkey", async () => {
+    const held = await hold();
+    await expect(attachContent(held.id, STRANGER, content())).rejects.toBeInstanceOf(OrderNotYours);
+  });
+
+  it("refuses content for an expired hold", async () => {
+    const held = await hold();
+    await expire(held.id);
+    await expect(attachContent(held.id, BUYER, content())).rejects.toBeInstanceOf(OrderExpired);
+  });
+
+  it("replaces content when supplied twice before payment", async () => {
+    const held = await hold();
+    await attachContent(held.id, BUYER, content({ caption: "First" }));
+    await attachContent(held.id, BUYER, content({ caption: "Second" }));
+    const order = await getOrder(held.id);
+    expect(order!.caption).toBe("Second");
+  });
+
+  it("refuses content once the order is paid", async () => {
+    // Content is editable right up to payment and never afterwards. This is the
+    // line the whole product rests on.
+    const held = await hold();
+    await attachContent(held.id, BUYER, content());
+    await markPaid(held.id, BUYER, "sig-locked");
+    await expect(attachContent(held.id, BUYER, content({ caption: "Nope" }))).rejects.toBeInstanceOf(
+      OrderNotReady,
+    );
+  });
+});
+
+describe("markPaid", () => {
+  it("moves reserved to paid and NULLS the expiry", async () => {
+    const held = await hold();
+    await attachContent(held.id, BUYER, content());
+    const paid = await markPaid(held.id, BUYER, "sig-1");
+    expect(paid.status).toBe("paid");
+    expect(paid.expiresAt).toBeNull();
+
+    const rows = await query<{ expires_at: Date | null; status: string }>(
+      "SELECT expires_at, status FROM blocks WHERE id = $1",
+      [held.id],
+    );
+    expect(rows[0].status).toBe("paid");
+    expect(rows[0].expires_at).toBeNull();
+  });
+
+  it("records the payment signature", async () => {
+    const held = await hold();
+    await attachContent(held.id, BUYER, content());
+    await markPaid(held.id, BUYER, "sig-recorded");
+    const rows = await query<{ payment_signature: string }>(
+      "SELECT payment_signature FROM blocks WHERE id = $1",
+      [held.id],
+    );
+    expect(rows[0].payment_signature).toBe("sig-recorded");
+  });
+
+  it("survives the sweep once paid", async () => {
+    // The property the whole retry story rests on: a paid order is never
+    // reclaimed, however long the buyer takes from here.
+    const held = await hold();
+    await attachContent(held.id, BUYER, content());
+    await markPaid(held.id, BUYER, "sig-2");
+
+    await execute(
+      `DELETE FROM blocks WHERE status = 'reserved' AND (expires_at IS NULL OR expires_at <= now())`,
+    );
+    const still = await getOrder(held.id);
+    expect(still?.status).toBe("paid");
+  });
+
+  it("refuses to mark paid an order with no content attached", async () => {
+    const held = await hold();
+    await expect(markPaid(held.id, BUYER, "sig-3")).rejects.toBeInstanceOf(OrderNotReady);
+  });
+
+  it("refuses a signature already used by another order", async () => {
+    const a = await hold(0, 0);
+    const b = await hold(20, 0);
+    await attachContent(a.id, BUYER, content());
+    await attachContent(b.id, BUYER, content());
+    await markPaid(a.id, BUYER, "sig-shared");
+    await expect(markPaid(b.id, BUYER, "sig-shared")).rejects.toBeInstanceOf(SignatureAlreadyUsed);
+  });
+
+  it("refuses an order belonging to a different pubkey", async () => {
+    const held = await hold();
+    await attachContent(held.id, BUYER, content());
+    await expect(markPaid(held.id, STRANGER, "sig-4")).rejects.toBeInstanceOf(OrderNotYours);
+  });
+
+  it("refuses an expired hold", async () => {
+    const held = await hold();
+    await attachContent(held.id, BUYER, content());
+    await expire(held.id);
+    await expect(markPaid(held.id, BUYER, "sig-5")).rejects.toBeInstanceOf(OrderExpired);
+  });
+
+  it("is idempotent: re-marking with the same signature returns the same order", async () => {
+    // The client can retry a confirm that timed out without being told its
+    // order is already paid by somebody else.
+    const held = await hold();
+    await attachContent(held.id, BUYER, content());
+    const first = await markPaid(held.id, BUYER, "sig-same");
+    const second = await markPaid(held.id, BUYER, "sig-same");
+    expect(second.id).toBe(first.id);
+    expect(second.status).toBe("paid");
+    expect(second.expiresAt).toBeNull();
+  });
+
+  it("refuses re-marking a paid order with a DIFFERENT signature", async () => {
+    const held = await hold();
+    await attachContent(held.id, BUYER, content());
+    await markPaid(held.id, BUYER, "sig-first");
+    await expect(markPaid(held.id, BUYER, "sig-second")).rejects.toBeInstanceOf(OrderNotReady);
+  });
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails, implement, run to verify it passes**
+- [ ] **Step 2: Run the test to verify it fails**
 
 ```bash
 npm test -- src/lib/board/__tests__/orders.test.ts
 ```
 
-`markPaid` must set `status='paid'` and `expires_at=NULL` in **one** UPDATE — the `blocks_paid_never_expires` CHECK from Task 1 rejects any statement that sets one without the other, which is the point.
+Expected: FAIL, cannot resolve `../orders`.
 
-- [ ] **Step 3: Add the stub's guard to startup-check**
+- [ ] **Step 3: Write the implementation**
 
-`ALLOW_STUB_PAYMENTS=true` must be a startup failure when `NODE_ENV === "production"`. Add it to `src/lib/config.ts` and to `.env.example` with a comment saying it exists only until batch 3 lands and must never be set in production.
+Create `src/lib/board/orders.ts`. Requirements the tests pin down, restated so nothing is inferred:
 
-- [ ] **Step 4: Commit**
+- `getOrder` selects one row and maps it. `hasContent` is `pending_image IS NOT NULL`. `paymentBaseUnits` is `total_usdc + payment_fraction`. A `removed` or `minted` row is out of scope for this batch — return it as-is rather than inventing a status.
+- Every mutating function loads the row first and throws, in this order: `OrderNotFound`, then `OrderNotYours` (pubkey mismatch), then `OrderExpired` (status `reserved` and `expires_at <= now()`), then the operation's own precondition. The order matters — a stranger must not learn whether somebody else's hold expired.
+- `attachContent` requires `status = 'reserved'`; anything else is `OrderNotReady`.
+- `markPaid` requires content attached (`OrderNotReady` otherwise) and sets `status='paid'` **and** `expires_at=NULL` in ONE `UPDATE`. The `blocks_paid_never_expires` CHECK from Task 1 rejects any statement setting one without the other, which is the point of having it.
+- `markPaid` is idempotent for the same signature: if the row is already `paid` with `payment_signature` equal to the argument, return it. If it is already `paid` with a different signature, throw `OrderNotReady`.
+- A `23505` on `blocks_payment_signature_unique` becomes `SignatureAlreadyUsed`. Use `isUniqueViolation` and `violatedConstraint` from `src/lib/db.ts` rather than matching on the message.
+
+Create `src/lib/board/payment-stub.ts`:
+
+```ts
+import type { Order } from "./orders";
+
+/**
+ * The payment step, until batch 3 makes it real.
+ *
+ * This verifies nothing. It exists so the state machine, the dialog and the
+ * confirmation screen can be built and driven end to end before a wallet, a
+ * treasury or an RPC proxy exist. Batch 3 replaces this module wholesale with
+ * an on-chain USDC verifier; the call site does not change.
+ *
+ * It is gated on an environment flag that fails startup in production, so the
+ * route that uses it does not merely refuse there — it does not exist.
+ */
+export function stubPaymentsAllowed(): boolean {
+  return process.env.ALLOW_STUB_PAYMENTS?.trim() === "true";
+}
+
+export async function stubVerifyPayment(
+  order: Order,
+): Promise<{ ok: true; signature: string } | { ok: false; reason: string }> {
+  if (!stubPaymentsAllowed()) {
+    return { ok: false, reason: "Stub payments are not enabled." };
+  }
+  if (!order.hasContent) {
+    return { ok: false, reason: "This order has no content yet." };
+  }
+  return { ok: true, signature: `stub-${order.id}` };
+}
+```
+
+- [ ] **Step 4: Add the production guard**
+
+In `src/lib/config.ts`, add a check that throws when `NODE_ENV === "production"` and `ALLOW_STUB_PAYMENTS` is set, with a message saying what it would mean: anyone could mark any order paid without sending money. Add `ALLOW_STUB_PAYMENTS` to `.env.example` commented out, with a note that it exists only until batch 3 lands.
+
+Set `ALLOW_STUB_PAYMENTS=true` in `.env.local` so the tests and local dev can use it.
+
+- [ ] **Step 5: Run the test to verify it passes**
+
+```bash
+npm test -- src/lib/board/__tests__/orders.test.ts
+npx tsc --noEmit
+npm run lint
+```
+
+Expected: PASS, 18 tests.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add src/lib/board/orders.ts src/lib/board/payment-stub.ts src/lib/board/__tests__/orders.test.ts src/lib/config.ts .env.example
@@ -1133,27 +1356,377 @@ git commit -m "Take an order from held to paid, and make a paid order unexpirabl
 
 **Files:**
 - Create: `src/app/api/reserve/route.ts`, `src/app/api/orders/[id]/route.ts`, `src/app/api/orders/[id]/content/route.ts`, `src/app/api/orders/[id]/confirm/route.ts`
-- Modify: `src/lib/http.ts` (add `identify()` and an error helper)
-- Test: `src/app/api/__tests__/reserve.test.ts`, `src/app/api/__tests__/orders.test.ts`
+- Modify: `src/lib/http.ts`
+- Test: `src/app/api/__tests__/reserve.test.ts`, `src/app/api/__tests__/orders-api.test.ts`
 
 **Interfaces:**
 - Consumes: everything from Tasks 2-5.
-- Produces: `identify(request: Request): { ok: true; ipHash: string } | { ok: false; message: string }` in `src/lib/http.ts`; the four route handlers.
+- Produces:
+  - In `src/lib/http.ts`: `identify(request: Request): { ok: true; ipHash: string } | { ok: false; message: string }`, and `problem(status: number, message: string, extra?: Record<string, unknown>): Response`
+  - `POST /api/reserve`, `GET /api/orders/[id]`, `POST /api/orders/[id]/content`, `POST /api/orders/[id]/confirm`
 
-**Read `node_modules/next/dist/docs/` before writing these.** Next 16's dynamic route params and the request body API are both places where training-data recall goes wrong. In particular, confirm how `params` is typed and whether it is a promise in this version.
+**READ THE NEXT 16 DOCS FIRST.** Two things in this task are where training-data recall goes wrong: how dynamic route `params` is typed (in recent Next it is a `Promise` you must await), and the request body APIs. Read `node_modules/next/dist/docs/01-app/01-getting-started/15-route-handlers.md` and the dynamic-routes guide before writing anything, and say in your report what they told you.
 
-Each route must:
+- [ ] **Step 1: Write the failing tests**
 
-- **`POST /api/reserve`** — body `{ rect, buyerPubkey }`. Identify the caller, check limits, call `reserveRect`. Map `RectangleTaken` to **409** with the message "Those pixels were just taken.", `RectangleInvalid` to **400**, a limit refusal to **429** with `retry-after`. Never 500 on a race.
-- **`GET /api/orders/:id`** — the order's current state, for the client's countdown and for resuming a purchase. `no-store`.
-- **`POST /api/orders/:id/content`** — multipart or base64 body with image, link, caption, fit. Validate, then attach. Return **422** with the full `rejections` array, not just the first, so the form can mark every bad field at once.
-- **`POST /api/orders/:id/confirm`** — the stubbed payment step. **404 when `ALLOW_STUB_PAYMENTS` is not set**, so the route does not exist in production rather than merely refusing.
+Create `src/app/api/__tests__/reserve.test.ts`:
 
-Tests must cover: the happy path end to end; a 409 on an overlapping reserve; a 429 when the limit is hit; a 422 listing multiple rejections; a 403 when a different pubkey tries to attach content; a 410 on an expired hold; and that `/confirm` 404s with the flag unset.
+```ts
+import { describe, expect, it } from "vitest";
+import { execute } from "../../../lib/db";
+import { RESERVATION_LIMITS } from "../../../lib/callers/limits";
+import { POST } from "../reserve/route";
 
-- [ ] **Step 1-5:** test first, run, implement, run, commit, per the standard cycle.
+const BUYER = "BuyerPubkey1111111111111111111111111111111";
+
+function request(body: unknown, ip = "203.0.113.7"): Request {
+  return new Request("http://localhost/api/reserve", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-forwarded-for": ip },
+    body: JSON.stringify(body),
+  });
+}
+
+describe("POST /api/reserve", () => {
+  it("holds a free rectangle and returns its price and expiry", async () => {
+    const response = await POST(request({ rect: { x: 0, y: 0, w: 20, h: 20 }, buyerPubkey: BUYER }));
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.pixels).toBe(400);
+    expect(body.totalBaseUnits).toBe(400_000_000);
+    expect(body.paymentBaseUnits).toBeGreaterThan(body.totalBaseUnits);
+    expect(typeof body.id).toBe("string");
+    expect(Date.parse(body.expiresAt)).toBeGreaterThan(Date.now());
+  });
+
+  it("is never cached", async () => {
+    const response = await POST(request({ rect: { x: 0, y: 0, w: 10, h: 10 }, buyerPubkey: BUYER }));
+    expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("answers 409, not 500, when the pixels were just taken", async () => {
+    await POST(request({ rect: { x: 0, y: 0, w: 20, h: 20 }, buyerPubkey: BUYER }));
+    const second = await POST(
+      request({ rect: { x: 10, y: 10, w: 20, h: 20 }, buyerPubkey: BUYER }, "203.0.113.8"),
+    );
+    expect(second.status).toBe(409);
+    const body = await second.json();
+    expect(typeof body.message).toBe("string");
+  });
+
+  it("answers 400 for a rectangle off the grid", async () => {
+    const response = await POST(request({ rect: { x: 5, y: 0, w: 10, h: 10 }, buyerPubkey: BUYER }));
+    expect(response.status).toBe(400);
+  });
+
+  it("answers 400 for a malformed body", async () => {
+    for (const body of [{}, { rect: {} }, { rect: { x: 0, y: 0, w: 10, h: 10 } }, { buyerPubkey: BUYER }]) {
+      const response = await POST(request(body));
+      expect(response.status, JSON.stringify(body)).toBe(400);
+    }
+  });
+
+  it("answers 429 with a retry-after once the caller's ceiling is reached", async () => {
+    for (let i = 0; i < RESERVATION_LIMITS.liveHoldsPerCaller; i++) {
+      const ok = await POST(request({ rect: { x: i * 30, y: 0, w: 10, h: 10 }, buyerPubkey: BUYER }));
+      expect(ok.status).toBe(201);
+    }
+    const refused = await POST(request({ rect: { x: 500, y: 0, w: 10, h: 10 }, buyerPubkey: BUYER }));
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get("retry-after")).not.toBeNull();
+  });
+
+  it("counts callers separately", async () => {
+    for (let i = 0; i < RESERVATION_LIMITS.liveHoldsPerCaller; i++) {
+      await POST(request({ rect: { x: i * 30, y: 0, w: 10, h: 10 }, buyerPubkey: BUYER }, "198.51.100.1"));
+    }
+    const other = await POST(
+      request({ rect: { x: 500, y: 0, w: 10, h: 10 }, buyerPubkey: BUYER }, "198.51.100.2"),
+    );
+    expect(other.status).toBe(201);
+  });
+
+  it("refuses a caller with no trustworthy address", async () => {
+    const anonymous = new Request("http://localhost/api/reserve", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ rect: { x: 0, y: 0, w: 10, h: 10 }, buyerPubkey: BUYER }),
+    });
+    const response = await POST(anonymous);
+    expect([400, 429]).toContain(response.status);
+  });
+});
+```
+
+**Note for the implementer:** the last test depends on `ALLOW_UNTRUSTED_CLIENT_IP`. Set it in `.env.local` for local development, and make the test explicit about which behaviour it expects under the value the suite runs with — do not leave it ambiguous.
+
+Create `src/app/api/__tests__/orders-api.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import sharp from "sharp";
+import { execute } from "../../../lib/db";
+import { reserveRect } from "../../../lib/board/reserve";
+import { GET } from "../orders/[id]/route";
+import { POST as POST_CONTENT } from "../orders/[id]/content/route";
+import { POST as POST_CONFIRM } from "../orders/[id]/confirm/route";
+
+const BUYER = "BuyerPubkey1111111111111111111111111111111";
+const STRANGER = "StrangerPubkey11111111111111111111111111111";
+const CALLER = "e".repeat(64);
+
+const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
+
+async function png(): Promise<Buffer> {
+  return sharp({ create: { width: 50, height: 50, channels: 3, background: { r: 1, g: 2, b: 3 } } })
+    .png()
+    .toBuffer();
+}
+
+async function contentRequest(overrides: Record<string, string> = {}, bytes?: Buffer) {
+  const form = new FormData();
+  form.set("image", new Blob([bytes ?? (await png())], { type: "image/png" }), "block.png");
+  form.set("link", overrides.link ?? "https://example.com/");
+  form.set("caption", overrides.caption ?? "A caption");
+  form.set("imageFit", overrides.imageFit ?? "contain");
+  form.set("buyerPubkey", overrides.buyerPubkey ?? BUYER);
+  return new Request("http://localhost/api/orders/x/content", { method: "POST", body: form });
+}
+
+function confirmRequest(buyerPubkey = BUYER) {
+  return new Request("http://localhost/api/orders/x/confirm", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ buyerPubkey }),
+  });
+}
+
+describe("GET /api/orders/:id", () => {
+  it("returns 404 for an unknown id", async () => {
+    const response = await GET(new Request("http://localhost/"), ctx("00000000-0000-0000-0000-000000000000"));
+    expect(response.status).toBe(404);
+  });
+
+  it("returns the order's state and never caches it", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    const response = await GET(new Request("http://localhost/"), ctx(held.id));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    const body = await response.json();
+    expect(body.status).toBe("reserved");
+    expect(body.hasContent).toBe(false);
+  });
+});
+
+describe("POST /api/orders/:id/content", () => {
+  it("accepts a valid image, link and caption", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    const response = await POST_CONTENT(await contentRequest(), ctx(held.id));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.hasContent).toBe(true);
+    expect(body.caption).toBe("A caption");
+  });
+
+  it("reports EVERY rejected field at once, not just the first", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    const bad = await contentRequest(
+      { link: "javascript:alert(1)", caption: "x".repeat(99) },
+      Buffer.from("not an image"),
+    );
+    const response = await POST_CONTENT(bad, ctx(held.id));
+    expect(response.status).toBe(422);
+    const body = await response.json();
+    expect(body.rejections.map((r: { field: string }) => r.field).sort()).toEqual([
+      "caption",
+      "image",
+      "link",
+    ]);
+  });
+
+  it("answers 403 when a different pubkey tries to attach content", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    const response = await POST_CONTENT(await contentRequest({ buyerPubkey: STRANGER }), ctx(held.id));
+    expect(response.status).toBe(403);
+  });
+
+  it("answers 410 for an expired hold", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    await execute("UPDATE blocks SET expires_at = now() - interval '1 minute' WHERE id = $1", [held.id]);
+    const response = await POST_CONTENT(await contentRequest(), ctx(held.id));
+    expect(response.status).toBe(410);
+  });
+
+  it("answers 404 for an unknown order", async () => {
+    const response = await POST_CONTENT(
+      await contentRequest(),
+      ctx("00000000-0000-0000-0000-000000000000"),
+    );
+    expect(response.status).toBe(404);
+  });
+});
+
+describe("POST /api/orders/:id/confirm", () => {
+  it("marks a described order paid and clears its expiry", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    await POST_CONTENT(await contentRequest(), ctx(held.id));
+    const response = await POST_CONFIRM(confirmRequest(), ctx(held.id));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.status).toBe("paid");
+    expect(body.expiresAt).toBeNull();
+  });
+
+  it("refuses an order with no content", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    const response = await POST_CONFIRM(confirmRequest(), ctx(held.id));
+    expect(response.status).toBe(409);
+  });
+
+  it("answers 403 for a different pubkey", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    await POST_CONTENT(await contentRequest(), ctx(held.id));
+    const response = await POST_CONFIRM(confirmRequest(STRANGER), ctx(held.id));
+    expect(response.status).toBe(403);
+  });
+
+  it("does not exist at all when stub payments are disabled", async () => {
+    // Not "refuses" — 404. In production this route must be indistinguishable
+    // from a route that was never deployed.
+    const previous = process.env.ALLOW_STUB_PAYMENTS;
+    delete process.env.ALLOW_STUB_PAYMENTS;
+    try {
+      const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+      const response = await POST_CONFIRM(confirmRequest(), ctx(held.id));
+      expect(response.status).toBe(404);
+    } finally {
+      if (previous !== undefined) process.env.ALLOW_STUB_PAYMENTS = previous;
+    }
+  });
+});
+```
+
+- [ ] **Step 2: Run the tests to verify they fail**
 
 ```bash
+npm test -- src/app/api/__tests__/reserve.test.ts src/app/api/__tests__/orders-api.test.ts
+```
+
+Expected: FAIL, cannot resolve the route modules.
+
+- [ ] **Step 3: Extend `src/lib/http.ts`**
+
+```ts
+import { clientIp, hashIp } from "./callers/client-ip";
+
+/**
+ * Who is calling, in one place.
+ *
+ * Fails closed on the address: without a trustworthy one there is no rate
+ * limit, and a shared bucket for every anonymous caller is either an unlimited
+ * allowance or a self-inflicted outage. The operational reason goes to the
+ * server log, never to the caller.
+ */
+export type Caller = { ok: true; ipHash: string } | { ok: false; message: string };
+
+export function identify(request: Request): Caller {
+  const identity = clientIp(request);
+  if (!identity.ok) {
+    console.error(`identify: ${identity.reason}`);
+    return { ok: false, message: "This request could not be verified. Please try again." };
+  }
+  return { ok: true, ipHash: hashIp(identity.ip) };
+}
+
+/** An error response with a message the client can render as-is. */
+export function problem(
+  status: number,
+  message: string,
+  extra: Record<string, unknown> = {},
+  headers: Record<string, string> = {},
+): Response {
+  return json({ message, ...extra }, { status, headers: { ...NO_STORE, ...headers } });
+}
+```
+
+- [ ] **Step 4: Write the four routes**
+
+`src/app/api/reserve/route.ts`:
+
+```ts
+import { reserveRect, RectangleInvalid, RectangleTaken } from "../../../lib/board/reserve";
+import { checkReservationLimits } from "../../../lib/callers/limits";
+import { NO_STORE, identify, json, problem } from "../../../lib/http";
+
+/**
+ * Hold a rectangle for thirty minutes.
+ *
+ * A 409 here is an ordinary outcome, not a failure: two people wanted the same
+ * pixels and Postgres picked one. It must never surface as a 500.
+ */
+export async function POST(request: Request): Promise<Response> {
+  const caller = identify(request);
+  if (!caller.ok) return problem(400, caller.message);
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return problem(400, "That request body is not JSON.");
+  }
+
+  const parsed = parseReserveBody(body);
+  if (!parsed) return problem(400, "A rectangle and a wallet address are required.");
+
+  const limit = await checkReservationLimits(caller.ipHash);
+  if (!limit.ok) {
+    const seconds = Math.max(1, Math.ceil((Date.parse(limit.retryAt) - Date.now()) / 1000));
+    return problem(429, limit.message, { retryAt: limit.retryAt }, { "retry-after": String(seconds) });
+  }
+
+  try {
+    const held = await reserveRect(parsed.rect, parsed.buyerPubkey, caller.ipHash);
+    return json(held, { status: 201, headers: NO_STORE });
+  } catch (error) {
+    if (error instanceof RectangleTaken) return problem(409, "Those pixels were just taken.");
+    if (error instanceof RectangleInvalid) return problem(400, "That is not a rectangle this board can sell.");
+    throw error;
+  }
+}
+
+function parseReserveBody(body: unknown): { rect: { x: number; y: number; w: number; h: number }; buyerPubkey: string } | null {
+  if (typeof body !== "object" || body === null) return null;
+  const { rect, buyerPubkey } = body as Record<string, unknown>;
+  if (typeof buyerPubkey !== "string" || buyerPubkey.trim() === "") return null;
+  if (typeof rect !== "object" || rect === null) return null;
+  const { x, y, w, h } = rect as Record<string, unknown>;
+  if (![x, y, w, h].every((n) => typeof n === "number" && Number.isInteger(n))) return null;
+  return { rect: { x: x as number, y: y as number, w: w as number, h: h as number }, buyerPubkey };
+}
+```
+
+The other three follow the same shape. Requirements, not code, because they are mechanical once the above is written:
+
+- **`GET /api/orders/[id]`** — `getOrder`, 404 when null, `no-store`. Never returns `pending_image`; the bytes are not the client's business and would balloon the response.
+- **`POST /api/orders/[id]/content`** — read `request.formData()`, pull `image` (a `File`/`Blob`), `link`, `caption`, `imageFit`, `buyerPubkey`. Convert the blob with `Buffer.from(await file.arrayBuffer())`. Call `validateContent`, and on failure return **422** with the whole `rejections` array. On success call `attachContent` and return the order. Map `OrderNotFound`→404, `OrderNotYours`→403, `OrderExpired`→410, `OrderNotReady`→409.
+- **`POST /api/orders/[id]/confirm`** — **first line: if `!stubPaymentsAllowed()` return 404**, before looking anything up. Then `getOrder`, the same error mapping, then `stubVerifyPayment`, then `markPaid` with the returned signature.
+
+Every route is `no-store`. Every route maps a known domain error to a status and lets an unknown one throw.
+
+- [ ] **Step 5: Run the tests to verify they pass**
+
+```bash
+npm test -- src/app/api/__tests__/
+npx tsc --noEmit
+npm run lint
+```
+
+Expected: PASS, 8 reserve tests and 12 order-API tests, plus the batch 1 board test still green.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/app/api/ src/lib/http.ts
 git commit -m "Expose holding, describing and confirming an order over HTTP"
 ```
 
@@ -1162,47 +1735,89 @@ git commit -m "Expose holding, describing and confirming an order over HTTP"
 ### Task 7: The purchase dialog
 
 **Files:**
-- Create: `src/components/PurchaseDialog.tsx`, `src/components/ContentForm.tsx`, `src/components/ConfirmationStep.tsx`, `src/components/HoldTimer.tsx`
-- Modify: `src/components/BoardView.tsx`, `src/components/SelectionPanel.tsx`
+- Create: `src/components/PurchaseDialog.tsx`, `src/components/ContentForm.tsx`, `src/components/ConfirmationStep.tsx`, `src/components/HoldTimer.tsx`, `src/lib/board/purchase-client.ts`
+- Modify: `src/components/SelectionPanel.tsx`, `src/components/BoardView.tsx`
 
 **Interfaces:**
-- Consumes: the four endpoints; `Selection` from `src/lib/board/selection.ts`; `formatUsdc` from `src/lib/board/pricing.ts`.
-- Produces: the Buy button, inert since batch 1, becomes live.
+- Consumes: the four endpoints; `Selection` from `./selection`; `formatUsdc` from `./pricing`.
+- Produces:
+  - In `src/lib/board/purchase-client.ts`: `type ClientOrder`, `createHold(rect, buyerPubkey)`, `submitContent(orderId, form)`, `confirmOrder(orderId, buyerPubkey)`, `fetchOrder(orderId)` — each returning `{ ok: true; order } | { ok: false; status; message; rejections? }`.
+  - `<PurchaseDialog selection buyerPubkey onClose onPurchased />`
 
-**No unit tests for these components**, for the reason argued in batch 1's plan: everything they decide is already tested, and what remains is DOM plumbing. They are verified by hand in Task 8. Do not add jsdom, happy-dom, Playwright, or testing-library.
+**No unit tests for the components**, for the reason argued in batch 1's plan: everything they decide is tested, and what remains is DOM plumbing. `purchase-client.ts` is the exception — it is pure request/response mapping and it DOES get a test with a stubbed `fetch`.
 
-The flow, four steps in one dialog:
+- [ ] **Step 1: Write `purchase-client.ts` test first**
 
-1. **Hold** — shows the rectangle, the pixel count, the total, and starts the 30-minute countdown on success. A 409 closes the dialog and refreshes the board.
-2. **Describe** — image, link, caption, fit. Every field carries its own permanence warning **directly under the input**, in your own words. A 422 marks every rejected field at once.
-3. **Confirm** — a dedicated screen listing the rectangle, the image preview, the link, the caption, the fit and the price, with an explicit statement that none of it can ever be changed. This is the highest-value screen in the flow; do not collapse it into step 2.
-4. **Pay** — in this batch, the stub. The button says plainly that no payment is taken yet.
+Create `src/lib/board/__tests__/purchase-client.test.ts` with a stubbed `globalThis.fetch`, covering: a 201 becoming `{ok: true}`; a 409 becoming `{ok: false, status: 409}` with the server's message preserved; a 422 carrying `rejections` through; a 429 preserving `retryAt`; and a network throw becoming `{ok: false}` rather than an unhandled rejection. Restore `fetch` in `afterEach`.
 
-`HoldTimer` counts down and, at zero, tells the buyer the hold has expired and the pixels are back on the board. Follow batch 1's precedent of putting the countdown inside the control it gates rather than in a separate widget.
+- [ ] **Step 2: Write the four components**
 
-**Copy rules for this task, restated because this is where it went wrong last time:** every string is yours. Do not reach for a phrasing because it sounds familiar — familiar is exactly the failure mode. If you find yourself writing something that reads like another pixel-selling site's copy, rewrite it.
+**`HoldTimer`** — counts down to `expiresAt`, rendered inside the control it gates rather than as a separate widget, following batch 1's precedent. `HH:MM:SS` above a minute, seconds below. At zero it calls `onExpired`. Update every 500 ms above one minute and every 100 ms below, so a countdown nobody is staring at does not run a per-frame timer.
 
-- [ ] **Step 1:** Write the components. **Step 2:** `npx tsc --noEmit`, `npm run lint`, `npm test` — all clean, existing suite unchanged. **Step 3:** Commit.
+**`ContentForm`** — file input (`accept="image/png,image/jpeg,image/webp,image/gif"`), link, caption (`maxLength={32}` with a live counter), and a contain/cover choice. Each field carries its own permanence warning **directly under the input**. Render a local `URL.createObjectURL` preview and revoke it on unmount. On a 422, mark every field named in `rejections` and show its reason beside that field.
+
+**`ConfirmationStep`** — the rectangle and its position, the image preview at the fit that was chosen, the link, the caption, the pixel count and the total. One explicit sentence that none of it can ever be changed, in your own words. A back button and a confirm button. **Do not collapse this into the form**; it is the highest-value screen in the flow.
+
+**`PurchaseDialog`** — holds the step machine (`holding → describing → confirming → paying → done`), the order, and the error. Opening it calls `createHold`. A 409 closes it and asks the parent to refresh the board. `Escape` and a backdrop click close it, but only with a confirmation once the hold exists, since closing abandons a live hold.
+
+**`SelectionPanel`** — the Buy button stops being inert and calls `onBuy`. It stays disabled when the selection is not buyable.
+
+**`BoardView`** — owns `buyerPubkey` (a plain text input in this batch, labelled as temporary until the wallet arrives in batch 3), opens the dialog, and refreshes the board from `/api/board` after a hold or a purchase.
+
+**Copy rules, restated because this is where it went wrong before:** every string is yours. Do not reach for a phrasing because it sounds familiar — familiar is the failure mode. Nothing in this repo may echo another pixel-selling site.
+
+- [ ] **Step 3: Verify**
+
+```bash
+npx tsc --noEmit
+npm run lint
+npm test
+```
+
+All clean, the existing suite unchanged plus the `purchase-client` tests.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git commit -m "Let a buyer hold a rectangle, describe it, and confirm what becomes permanent"
+```
 
 ---
 
 ### Task 8: Wire it, and verify by using it
 
 **Files:**
-- Modify: `src/app/page.tsx`, `src/components/BoardView.tsx`
+- Modify: `src/components/BoardView.tsx`, `src/app/page.tsx` if needed
 
-- [ ] **Step 1:** Wire the dialog to the Buy button and re-fetch the board after a successful hold so the rectangle shows as held.
+- [ ] **Step 1: Wire it end to end**
 
-- [ ] **Step 2: Verify group (a) yourself** and quote the evidence:
-  - `npx tsc --noEmit` clean, `npm run lint` clean, `npm test` green with the new count, `npm run build` succeeds and `/` is still dynamic.
-  - `curl` the four endpoints in sequence against `next dev` and show the happy path: reserve → attach content → confirm → the order reads `paid` with a null expiry.
-  - `curl` a second reserve overlapping the first and show the 409.
-  - Confirm `/api/orders/:id/confirm` returns 404 with `ALLOW_STUB_PAYMENTS` unset.
+The Buy button opens the dialog; a successful hold re-fetches `/api/board` so the held rectangle renders as taken; a completed purchase re-fetches again and clears the selection.
 
-- [ ] **Step 3: Write the group (b) checklist for a human**, numbered, with the exact expected result for each: dragging a rectangle and buying it; watching the countdown; letting a hold expire and seeing the pixels return; submitting a bad image and seeing every field marked at once; reaching the confirmation screen and reading back exactly what was entered; and confirming the board shows the held rectangle to a second browser tab.
-  **Do not claim to have run these.** Do not install a browser automation dependency.
+- [ ] **Step 2: Verify group (a) yourself, and quote the evidence**
 
-- [ ] **Step 4:** Commit.
+- `npx tsc --noEmit` clean — quote the output
+- `npm run lint` clean
+- `npm test` green — state the count
+- `npm run build` succeeds and `/` is still dynamic — quote the route table line
+- With `next dev` running, drive the whole flow with `curl` and show each response:
+  1. `POST /api/reserve` → 201, capture the id
+  2. `POST /api/orders/:id/content` with a real small PNG → 200, `hasContent: true`
+  3. `POST /api/orders/:id/confirm` → 200, `status: "paid"`, `expiresAt: null`
+  4. `GET /api/board` → the rectangle now appears among the blocks
+- `POST /api/reserve` for an overlapping rectangle → **409**, and show the body
+- Unset `ALLOW_STUB_PAYMENTS`, restart, and show `POST /api/orders/:id/confirm` → **404**
+
+- [ ] **Step 3: Write the group (b) checklist for a human**
+
+Numbered, with the exact expected result for each, covering at least: dragging a rectangle and buying it; the countdown appearing and ticking; letting a hold expire and watching the pixels return to the board; submitting a broken image with a bad link and an over-long caption and seeing all three fields marked at once; reaching the confirmation screen and reading back exactly what was entered; closing the dialog with a live hold and being asked to confirm; and a second browser tab seeing the held rectangle as unavailable.
+
+**Do not claim to have run these.** Do not install browser automation.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git commit -m "Wire the purchase flow into the board"
+```
 
 ---
 
