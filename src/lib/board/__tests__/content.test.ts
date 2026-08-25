@@ -134,6 +134,43 @@ describe("validateContent — the caption", () => {
   });
 });
 
+describe("validateContent — the image fit", () => {
+  it("accepts contain and cover", async () => {
+    for (const imageFit of ["contain", "cover"] as const) {
+      const result = await validateContent({ ...GOOD, imageFit, bytes: await png(10, 10), declaredMime: "image/png" });
+      expect(result.ok, `imageFit should have been accepted: ${imageFit}`).toBe(true);
+      if (result.ok) expect(result.content.imageFit).toBe(imageFit);
+    }
+  });
+
+  it("rejects anything else, including the empty string", async () => {
+    for (const imageFit of ["banana", "COVER", "fill", ""]) {
+      const result = await validateContent({ ...GOOD, imageFit, bytes: await png(10, 10), declaredMime: "image/png" });
+      expect(result.ok, `imageFit should have been rejected: ${imageFit}`).toBe(false);
+      if (!result.ok) expect(result.rejections.some((r) => r.field === "imageFit")).toBe(true);
+    }
+  });
+
+  it("is reported alongside every other bad field, not instead of them", async () => {
+    const result = await validateContent({
+      bytes: Buffer.from("nope"),
+      declaredMime: "image/png",
+      link: "javascript:alert(1)",
+      caption: "x".repeat(99),
+      imageFit: "banana",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.rejections.map((r) => r.field).sort()).toEqual([
+        "caption",
+        "image",
+        "imageFit",
+        "link",
+      ]);
+    }
+  });
+});
+
 describe("validateContent — reporting", () => {
   it("reports every bad field at once, not just the first", async () => {
     const result = await validateContent({

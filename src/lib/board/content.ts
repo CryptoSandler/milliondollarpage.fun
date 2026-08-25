@@ -27,8 +27,12 @@ export const CONTENT_LIMITS = {
 
 const ACCEPTED_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
+// The same two values migration 001's blocks_image_fit_known CHECK allows.
+const IMAGE_FIT_VALUES = new Set(["contain", "cover"]);
+type ImageFit = "contain" | "cover";
+
 export type ContentRejection = {
-  field: "image" | "link" | "caption";
+  field: "image" | "link" | "caption" | "imageFit";
   reason: string;
 };
 
@@ -41,15 +45,22 @@ export type ValidatedContent = {
   height: number;
   link: string;
   caption: string;
-  imageFit: "contain" | "cover";
+  imageFit: ImageFit;
 };
 
 type ContentInput = {
   bytes: Buffer;
+  // Carried so callers can pass what the browser reported (e.g. from the
+  // upload's Content-Type), but deliberately never read: the module trusts
+  // only what `sharp` decodes from the bytes themselves. See validateImage.
   declaredMime: string;
   link: string;
   caption: string;
-  imageFit: "contain" | "cover";
+  // A plain string, not the ImageFit union: at an HTTP boundary this arrives
+  // from request.formData(), where every value is a string the caller
+  // chose, and the union is unenforceable there. validateImageFit narrows
+  // it below; that narrowing is the entire point of checking it here.
+  imageFit: string;
 };
 
 type ValidateContentResult =
@@ -112,6 +123,20 @@ async function validateImage(bytes: Buffer): Promise<ImageValidation> {
   };
 }
 
+type ImageFitValidation =
+  | { ok: true; imageFit: ImageFit }
+  | { ok: false; rejection: ContentRejection };
+
+function validateImageFit(imageFit: string): ImageFitValidation {
+  if (IMAGE_FIT_VALUES.has(imageFit)) {
+    return { ok: true, imageFit: imageFit as ImageFit };
+  }
+  return {
+    ok: false,
+    rejection: { field: "imageFit", reason: 'imageFit must be "contain" or "cover".' },
+  };
+}
+
 function validateLink(link: string): ContentRejection | null {
   try {
     const url = new URL(link);
@@ -153,7 +178,10 @@ export async function validateContent(input: ContentInput): Promise<ValidateCont
   const { rejection: captionRejection, trimmed: caption } = validateCaption(input.caption);
   if (captionRejection) rejections.push(captionRejection);
 
-  if (!imageResult.ok || rejections.length > 0) {
+  const imageFitResult = validateImageFit(input.imageFit);
+  if (!imageFitResult.ok) rejections.push(imageFitResult.rejection);
+
+  if (!imageResult.ok || !imageFitResult.ok || rejections.length > 0) {
     return { ok: false, rejections };
   }
 
@@ -168,7 +196,7 @@ export async function validateContent(input: ContentInput): Promise<ValidateCont
       height: imageResult.height,
       link: input.link,
       caption,
-      imageFit: input.imageFit,
+      imageFit: imageFitResult.imageFit,
     },
   };
 }
