@@ -4,8 +4,8 @@
  * Kept pure so the fiddly part — the part where a zoom drifts by half a pixel
  * and nobody can say why — is unit tested instead of eyeballed.
  *
- * This board is 1000x1000 pixels. It has to stay readable zoomed all the way
- * out to fit a laptop screen, and zoomable in far enough to pick out a single
+ * This board is 1000x1000 pixels. THE WHOLE OF IT IS ALWAYS ON SCREEN at the
+ * bottom of the zoom ladder, and zoom goes in far enough to pick out a single
  * 10-pixel block.
  *
  * The last section of the file is about crispness rather than position: the
@@ -16,6 +16,17 @@
 export type Size = { width: number; height: number };
 export type Point = { x: number; y: number };
 export type Viewport = { centreX: number; centreY: number; scale: number };
+
+/**
+ * The chrome around the board, in CSS pixels, one number per edge.
+ *
+ * Whatever the layout puts there — the top bar, the bottom bar on a phone, the
+ * side panel on a landscape window — is an inset the board is not allowed to
+ * sit under. Measured from the real elements rather than assumed, because a
+ * bar's height depends on rem sizing and safe-area insets that no constant
+ * can mirror.
+ */
+export type Chrome = { top: number; right: number; bottom: number; left: number };
 
 /**
  * How far a pointer may travel and still count as a tap.
@@ -87,102 +98,151 @@ export function clampToBoard(v: Viewport, board: Size): Viewport {
 }
 
 /**
- * COVER, not contain.
+ * CONTAIN, not cover.
  *
- * The board is scaled by WIDTH alone: the rendered board is exactly as wide as
- * the viewport, board pixels stay square, and whatever height that produces
- * overflows the free region between the bars and is panned. A 1000×1000 board
- * in a 1440px-wide window is 1440px tall, and that is correct — the alternative
- * (fitting the whole thing between the bars) leaves cream margins down both
- * sides of the artwork, which is the one thing the board must never do.
+ * The whole board is always on screen. It is scaled by its LIMITING dimension —
+ * whichever of the free region's width and height runs out first — so all four
+ * corners are visible at once, board pixels stay square, and nothing overflows
+ * in either axis. A 1000×1000 board in a free region 1400 wide and 800 tall
+ * renders 800×800 with the slack on the left and right.
  *
- * The clamp on scale is not decoration: a zero-width viewport (the first paint,
+ * This reverses the previous contract, which filled the viewport width and
+ * panned the vertical overflow. That is a deliberate change of mind by the
+ * owner after using the thing, not a regression: the leftover width is no
+ * longer dead margin, because in a landscape window the controls live in it.
+ *
+ * The clamp on scale is not decoration: a zero-sized viewport (the first paint,
  * before layout has run) yields a scale of zero, and every screen-to-board
- * conversion downstream divides by it.
+ * conversion downstream divides by it. It is the ONE case in which the fitted
+ * board can be larger than the region it is fitted into — a region that has no
+ * room for a board at all.
  */
-const MIN_INITIAL_SCALE = 0.01;
+const MIN_FIT_SCALE = 0.01;
 
-export function coverScale(screen: Size, board: Size): number {
-  return Math.max(MIN_INITIAL_SCALE, screen.width / board.width);
+/** The rectangle of viewport the board may use: everything the chrome leaves. */
+export function freeRegion(screen: Size, chrome: Chrome): { x: number; y: number } & Size {
+  return {
+    x: chrome.left,
+    y: chrome.top,
+    width: Math.max(0, screen.width - chrome.left - chrome.right),
+    height: Math.max(0, screen.height - chrome.top - chrome.bottom),
+  };
+}
+
+/** The scale at which the entire board sits inside the free region. */
+export function fitScale(screen: Size, chrome: Chrome, board: Size): number {
+  const free = freeRegion(screen, chrome);
+  return Math.max(MIN_FIT_SCALE, Math.min(free.width / board.width, free.height / board.height));
 }
 
 /**
- * The range `centreY` may take while the board still covers the free region
- * between the bars, expressed in board pixels.
+ * How much room the board actually asks for at the fit scale.
  *
- * `min` puts the board's TOP edge on the free region's top edge; `max` puts its
- * BOTTOM edge on the region's bottom edge. When the board is too short to span
- * the region — a very tall, narrow window — the range inverts (`min > max`),
- * which is the signal that there is nothing to pan and the board should simply
- * sit in the middle of the region instead.
+ * Exported because "the document never scrolls" is an arithmetic claim before
+ * it is a CSS one, and this is the arithmetic: for any viewport, this plus the
+ * chrome must be no larger than the viewport itself. `overflow: hidden` then
+ * has nothing left to hide.
  */
-function verticalPanRange(
-  screen: Size,
-  bars: { top: number; bottom: number },
-  board: Size,
+export function fittedBoardSize(screen: Size, chrome: Chrome, board: Size): Size {
+  const scale = fitScale(screen, chrome, board);
+  return { width: board.width * scale, height: board.height * scale };
+}
+
+/**
+ * Where the viewport centre sits, on one axis, to put the board's own centre in
+ * the middle of the free region.
+ *
+ * Independent of the screen size: it only depends on how lopsided the chrome
+ * is. With 52px of bar above and nothing below, the board's centre has to sit
+ * 26 screen pixels — 26/scale board pixels — below the middle of the window.
+ */
+function centredOnAxis(before: number, after: number, boardSize: number, scale: number): number {
+  return boardSize / 2 + (after - before) / (2 * scale);
+}
+
+/**
+ * The range the viewport centre may take on one axis while the board still
+ * covers the free region there, in board pixels.
+ *
+ * `min` puts the board's leading edge on the region's leading edge; `max` puts
+ * its trailing edge on the region's trailing edge. When the board is smaller
+ * than the region on this axis — which at the base rung is true of everything
+ * except the limiting dimension — the range inverts (`min > max`), and that
+ * inversion is the signal that there is nothing to pan here.
+ */
+function panRange(
+  screenSize: number,
+  before: number,
+  after: number,
+  boardSize: number,
   scale: number,
 ): { min: number; max: number } {
-  const half = screen.height / 2;
+  const half = screenSize / 2;
   return {
-    min: (half - bars.top) / scale,
-    max: board.height - (screen.height - bars.bottom - half) / scale,
+    min: (half - before) / scale,
+    max: boardSize - (screenSize - after - half) / scale,
   };
 }
 
-/** Where the board sits when it is shorter than the region: centred in it. */
-function centredInRegion(bars: { top: number; bottom: number }, board: Size, scale: number): number {
-  return board.height / 2 - (bars.top - bars.bottom) / (2 * scale);
+function clampAxis(
+  centre: number,
+  screenSize: number,
+  before: number,
+  after: number,
+  boardSize: number,
+  scale: number,
+): number {
+  const { min, max } = panRange(screenSize, before, after, boardSize, scale);
+  return min <= max ? Math.min(max, Math.max(min, centre)) : centredOnAxis(before, after, boardSize, scale);
 }
 
 /**
- * The view the board opens on.
+ * The view the board opens on: the whole thing, centred in the free region.
  *
- * Full-width, square pixels, and — when the board overflows the free region,
- * which is the normal case — anchored to its TOP edge rather than centred.
- * Top-aligned because the board's origin is (0, 0): a buyer landing mid-board
- * has no way to tell how much is above them, whereas landing on the top edge
- * makes the one visible boundary a fact about the artwork and turns every
- * remaining pixel into a downward scroll. It also matches where the canvas
- * fills in from, so the busiest part of the board is what greets a visitor.
- *
- * When the board is shorter than the region (a tall, narrow window) there is
- * nothing to anchor to, and it is centred between the bars instead.
+ * No anchoring to the top edge any more, because there is no overflow to
+ * anchor against — every corner of the artwork is already on screen, and the
+ * first thing a visitor sees is the board's shape rather than a crop of it.
  */
-export function initialViewport(screen: Size, bars: { top: number; bottom: number }, board: Size): Viewport {
-  const scale = coverScale(screen, board);
-  const { min, max } = verticalPanRange(screen, bars, board, scale);
+export function initialViewport(screen: Size, chrome: Chrome, board: Size): Viewport {
+  const scale = fitScale(screen, chrome, board);
   return {
     scale,
-    centreX: board.width / 2,
-    centreY: min <= max ? min : centredInRegion(bars, board, scale),
+    centreX: centredOnAxis(chrome.left, chrome.right, board.width, scale),
+    centreY: centredOnAxis(chrome.top, chrome.bottom, board.height, scale),
   };
 }
 
 /**
- * Keeps the board covering the viewport while it is panned or zoomed.
+ * Keeps the board where the contract says it belongs while it is zoomed.
  *
- * `clampToBoard` above only keeps the centre somewhere on the board, which is
- * enough to stop the canvas being lost but not enough to stop cream showing
- * down one side. This is the cover version: pan until an edge of the board
- * meets the corresponding edge of the free region and no further, in each axis
- * independently, so no drag can open a margin the design forbids.
+ * Per axis: once the board is bigger than the free region on that axis — which
+ * only happens above the base rung — pan until an edge of the board meets the
+ * corresponding edge of the region and no further, so no drag can pull the
+ * artwork off screen and leave cream where it was. While it is smaller, there
+ * is nothing to pan and it is pinned to the middle of the region, which is
+ * what makes a wheel-pan at the base rung a no-op by construction rather than
+ * by a check somebody could forget to write.
  */
-export function clampToCover(
-  v: Viewport,
-  screen: Size,
-  bars: { top: number; bottom: number },
-  board: Size,
-): Viewport {
-  const halfWidthInBoard = screen.width / 2 / v.scale;
-  const centreX =
-    board.width >= halfWidthInBoard * 2
-      ? Math.min(board.width - halfWidthInBoard, Math.max(halfWidthInBoard, v.centreX))
-      : board.width / 2;
+export function clampToFit(v: Viewport, screen: Size, chrome: Chrome, board: Size): Viewport {
+  return {
+    ...v,
+    centreX: clampAxis(v.centreX, screen.width, chrome.left, chrome.right, board.width, v.scale),
+    centreY: clampAxis(v.centreY, screen.height, chrome.top, chrome.bottom, board.height, v.scale),
+  };
+}
 
-  const { min, max } = verticalPanRange(screen, bars, board, v.scale);
-  const centreY = min <= max ? Math.min(max, Math.max(min, v.centreY)) : centredInRegion(bars, board, v.scale);
-
-  return { ...v, centreX, centreY };
+/**
+ * Whether there is anything to pan.
+ *
+ * THE READING OF "ZOOM 1" THIS PROJECT USES, so nobody has to guess it again:
+ * the base rung is the scale at which the whole board fits, NOT one screen
+ * pixel per board pixel. So the ladder's floor is `fit`, the integer rungs are
+ * the ones strictly above `fit`, and panning is enabled exactly when the scale
+ * is strictly above `fit` — at the floor the entire board is on screen and a
+ * drag or a wheel has nowhere to take it.
+ */
+export function canPan(scale: number, fit: number): boolean {
+  return above(scale, fit);
 }
 
 /* ------------------------------------------------------------------------- *
@@ -223,28 +283,30 @@ export function backingStoreSize(css: Size, dpr: number): Size {
 /**
  * The scales the wheel is allowed to stop on.
  *
- * The bottom rung is `cover` itself — the scale at which the board is exactly
- * as wide as the viewport. It is almost never an integer (1440 / 1000 = 1.44)
- * and it is not negotiable: anything below it opens cream margins down the
- * sides of the artwork, which DESIGN.md forbids outright. So the ladder is not
- * simply the powers of two.
+ * The bottom rung is `fit` itself — the scale at which the WHOLE BOARD is on
+ * screen. It is almost never an integer (a 760px-tall free region over a
+ * 1000-pixel board fits at 0.76) and it is not negotiable: anything below it
+ * would shrink a board that is already entirely visible, which buys nothing.
+ * So the ladder is not simply the powers of two.
  *
- * Above it are the powers of two STRICTLY GREATER than cover, up to `maxZoom`.
+ * Above it are the powers of two STRICTLY GREATER than fit, up to `maxZoom`.
  * Each doubles the screen pixels per board pixel, so a board pixel is a 2×2,
- * 4×4, 8×8 or 16×16 square of screen pixels and every edge in the artwork lands
- * on a pixel boundary.
+ * 4×4, 8×8 or 16×16 square of screen pixels and every edge in the artwork
+ * lands on a pixel boundary.
  *
- *   1440px wide → cover 1.44 → [1.44, 2, 4, 8, 16]
- *    900px wide → cover 0.90 → [0.9, 1, 2, 4, 8, 16]
+ *   760px free region → fit 0.76 → [0.76, 1, 2, 4, 8, 16]
+ *  1400px free region → fit 1.40 → [1.4, 2, 4, 8, 16]
  *
- * Note the 1440 case skips 1 entirely: 1 is below cover, so it is not a rung.
- * `cover` outranks `maxZoom` if they ever conflict, because a board that does
- * not cover is broken in a way that a board zoomed slightly too far is not.
+ * Note the 1400 case skips 1 entirely: 1 is below fit, so it is not a rung —
+ * and "zoom 1" in this project means this bottom rung, the whole board on
+ * screen, never one screen pixel per board pixel. `fit` outranks `maxZoom` if
+ * they ever conflict, because a board that does not fit breaks the contract in
+ * a way that a board zoomed slightly too far does not.
  */
-export function zoomLadder(cover: number, maxZoom: number): number[] {
-  const rungs = [cover];
+export function zoomLadder(fit: number, maxZoom: number): number[] {
+  const rungs = [fit];
   for (let rung = 1; rung <= maxZoom; rung *= 2) {
-    if (above(rung, cover)) rungs.push(rung);
+    if (above(rung, fit)) rungs.push(rung);
   }
   return rungs;
 }
@@ -256,18 +318,18 @@ export function zoomLadder(cover: number, maxZoom: number): number[] {
  * board pixel on 1.87 screen pixels far more often than on 2 and made every
  * upload look soft.
  *
- * `current` is not assumed to be on a rung: a window resize recomputes cover
- * and can leave the scale anywhere, so the step is always "the nearest rung in
- * that direction" rather than an index.
+ * `current` is not assumed to be on a rung: a window resize recomputes the fit
+ * scale and can leave the scale anywhere, so the step is always "the nearest
+ * rung in that direction" rather than an index.
  *
  * ONE HONEST CAVEAT, and it is not fixable from here. An integer CSS scale is
  * only an integer number of DEVICE pixels when `devicePixelRatio` is itself an
  * integer. At the 1.5 that Windows display scaling is full of, CSS scale 1 is
  * 1.5 device pixels per board pixel; at the 2.75 some Android phones report,
  * CSS scale 2 is 5.5. Snapping the ladder in device space instead would fix
- * that and break something worse — the bottom rung must be exactly `cover`,
- * an irrational-ish number fixed by the viewport width, and a device-space
- * ladder cannot contain it. So this ladder is deliberately in CSS space, and
+ * that and break something worse — the bottom rung must be exactly `fit`, an
+ * irrational-ish number fixed by the free region, and a device-space ladder
+ * cannot contain it. So this ladder is deliberately in CSS space, and
  * on a fractional ratio the residual error is left to the nearest-neighbour
  * sampling that BoardCanvas turns on: the artwork degrades to some rows of
  * device pixels being one wider than their neighbours — hard edges, slightly
@@ -276,10 +338,10 @@ export function zoomLadder(cover: number, maxZoom: number): number[] {
 export function nextZoomScale(
   current: number,
   direction: "in" | "out",
-  cover: number,
+  fit: number,
   maxZoom: number,
 ): number {
-  const rungs = zoomLadder(cover, maxZoom);
+  const rungs = zoomLadder(fit, maxZoom);
   const floor = rungs[0];
   const top = rungs[rungs.length - 1];
   // A scale that has drifted outside the ladder — a resize between wheel

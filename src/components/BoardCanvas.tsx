@@ -7,11 +7,13 @@ import { BLOCK_PIXELS, BOARD_PIXELS, rectContains, type Point } from "../lib/boa
 import { formatUsdc } from "../lib/board/pricing";
 import { type Selection, selectionFromDrag, selectionFromPreset } from "../lib/board/selection";
 import {
+  type Chrome,
   type Viewport,
   backingStoreSize,
   boardToScreen,
-  clampToCover,
-  coverScale,
+  canPan,
+  clampToFit,
+  fitScale,
   initialViewport,
   isTap,
   nextZoomScale,
@@ -30,6 +32,45 @@ import {
 const MAX_ZOOM = 16;
 
 /**
+ * How far two fingers have to spread before a pinch counts as one rung.
+ *
+ * The ladder is integer steps, so a pinch cannot be continuous either: it has
+ * to accumulate into a step. A third again as far apart is a deliberate
+ * gesture and not a hand resettling on the glass.
+ */
+const PINCH_STEP = 1.35;
+
+/**
+ * One rung of the zoom ladder about a point, clamped back into the contract.
+ *
+ * Module level and pure, so the native wheel listener (registered once, with
+ * no React closure to go stale) and the pinch handler can share exactly one
+ * definition of what a zoom step is.
+ *
+ * The floor is the FIT scale — the rung where the whole board is on screen —
+ * not 1. See canPan in viewport.ts for why that is the reading of "zoom 1".
+ */
+function steppedZoom(
+  v: Viewport,
+  screen: { width: number; height: number },
+  chrome: Chrome,
+  point: Point,
+  direction: "in" | "out",
+): Viewport {
+  const board = { width: BOARD_PIXELS, height: BOARD_PIXELS };
+  const fit = fitScale(screen, chrome, board);
+  return clampToFit(
+    zoomToScale(v, screen, point, nextZoomScale(v.scale, direction, fit, MAX_ZOOM), {
+      min: fit,
+      max: Math.max(fit, MAX_ZOOM),
+    }),
+    screen,
+    chrome,
+    board,
+  );
+}
+
+/**
  * The board's own palette, mirroring the tokens in globals.css.
  *
  * A canvas cannot read a CSS custom property without a `getComputedStyle` on
@@ -42,7 +83,12 @@ const MAX_ZOOM = 16;
  * true whether the artwork is black, neon, or the same cream as the paper.
  */
 const PAINT = {
-  ground: "#e9dfc9",
+  // The wall the sheet hangs on, and it is the SAME cream as the sheet. The
+  // board no longer fills the window, so there is always some of this beside
+  // it; painting it darker would letterbox the artwork, and DESIGN.md asks for
+  // a sheet of paper on a wall of the same paper instead. The board's own
+  // coarse rule draws its edge, which is all the separation it needs.
+  ground: "#f3ede0",
   paper: "#f3ede0",
   ruleFine: "rgba(43,36,28,0.10)",
   ruleCoarse: "#c9baa0",
@@ -97,7 +143,8 @@ type Props = {
   selection: Selection | null;
   activePreset: number | null;
   perPixel: number;
-  bars: { top: number; bottom: number };
+  /** The insets the board must stay clear of: the top bar, and the panel or bar carrying the controls. */
+  chrome: Chrome;
   onSelectionChange: (selection: Selection | null) => void;
   onHoverChange: (block: LiveBlock | null, at: Point | null) => void;
 };
@@ -113,7 +160,7 @@ export default function BoardCanvas({
   selection,
   activePreset,
   perPixel,
-  bars,
+  chrome,
   onSelectionChange,
   onHoverChange,
 }: Props) {
@@ -122,26 +169,29 @@ export default function BoardCanvas({
   // function's zero-screen answer and gets re-fit once the ResizeObserver
   // below reports the real size.
   const [viewport, setViewport] = useState<Viewport>(() =>
-    initialViewport({ width: 0, height: 0 }, bars, { width: BOARD_PIXELS, height: BOARD_PIXELS }),
+    initialViewport({ width: 0, height: 0 }, chrome, { width: BOARD_PIXELS, height: BOARD_PIXELS }),
   );
   const [resizeTick, setResizeTick] = useState(0);
   const [ants, setAnts] = useState(0);
   // Kept here as well as reported upwards, because the lift is painted on the
   // board and a hover must not depend on a round trip through the parent.
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-  // A board that covers the window looks like a board that ends at the window.
-  // One chip says otherwise, and disappears the first time anything is moved.
-  const [showPanHint, setShowPanHint] = useState(true);
   const drag = useRef<Drag>({ kind: "none" });
+  // Every pointer currently down, so a second finger can be recognised as the
+  // start of a pinch rather than as a second pan.
+  const pointers = useRef(new Map<number, Point>());
+  // The finger separation the current rung was reached at, or null when fewer
+  // than two fingers are down.
+  const pinch = useRef<{ distance: number } | null>(null);
   // Set on the first pointerdown or wheel; once the user has zoomed or
   // panned, a resize must not throw that away by re-fitting the board.
   const hasInteracted = useRef(false);
   // Read by the wheel listener, which is registered once and must not be torn
   // down and rebuilt every time a bar is re-measured.
-  const barsRef = useRef(bars);
+  const chromeRef = useRef(chrome);
   useEffect(() => {
-    barsRef.current = bars;
-  }, [bars]);
+    chromeRef.current = chrome;
+  }, [chrome]);
 
   const publish = useCallback(
     (next: Selection | null) => {
@@ -157,10 +207,10 @@ export default function BoardCanvas({
   // hit-testing (which reads a live getBoundingClientRect) does not.
   //
   // While the user has not interacted yet, a resize also re-fits the board
-  // to the new size — this is what makes the initial cover correct once the
+  // to the new size — this is what makes the initial fit correct once the
   // canvas's real dimensions (and not the zero-size placeholder) are known.
-  // Once they have zoomed or panned, a resize re-clamps instead: the board
-  // must still cover the new width, but where they had scrolled to stays.
+  // Once they have zoomed, a resize re-clamps instead: the new fit scale is
+  // the new floor, and where they had zoomed to stays.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -171,21 +221,21 @@ export default function BoardCanvas({
       const screen = { width: el.clientWidth, height: el.clientHeight };
       const board = { width: BOARD_PIXELS, height: BOARD_PIXELS };
       if (!hasInteracted.current) {
-        setViewport(initialViewport(screen, barsRef.current, board));
+        setViewport(initialViewport(screen, chromeRef.current, board));
         return;
       }
       setViewport((v) =>
-        clampToCover(
-          { ...v, scale: Math.max(coverScale(screen, board), v.scale) },
+        clampToFit(
+          { ...v, scale: Math.max(fitScale(screen, chromeRef.current, board), v.scale) },
           screen,
-          barsRef.current,
+          chromeRef.current,
           board,
         ),
       );
     });
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [bars]);
+  }, [chrome]);
 
   // Continuous motion, and the only continuous motion on the page: a drag in
   // progress is the one thing that genuinely differs from a thing at rest.
@@ -376,16 +426,11 @@ export default function BoardCanvas({
         x - 2,
         y - 2,
         accent,
-        bars.top,
+        chrome.top,
         family,
       );
     }
-
-    const freeRegion = height - bars.top - bars.bottom;
-    if (showPanHint && span > freeRegion && freeRegion > 80) {
-      drawPanHint(context, width / 2, height - bars.bottom - 20, family);
-    }
-  }, [blocks, ownHoldIds, selection, viewport, resizeTick, ants, hoveredId, showPanHint, bars.top, bars.bottom]);
+  }, [blocks, ownHoldIds, selection, viewport, resizeTick, ants, hoveredId, chrome.top]);
 
   function pointerBoard(event: ReactPointerEvent<HTMLCanvasElement>): Point {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -398,14 +443,23 @@ export default function BoardCanvas({
 
   function onPointerDown(event: ReactPointerEvent<HTMLCanvasElement>) {
     hasInteracted.current = true;
-    setShowPanHint(false);
     event.currentTarget.setPointerCapture(event.pointerId);
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    // A second finger is a pinch, never a second pan. Whatever the first one
+    // had started is abandoned rather than continued one-handed.
+    if (pointers.current.size === 2) {
+      drag.current = { kind: "none" };
+      pinch.current = { distance: pointerSeparation(pointers.current) };
+      return;
+    }
+
     const at = pointerBoard(event);
     const touch = event.pointerType === "touch";
 
     // Shift-drag pans and plain drag selects on a pointer; on a touchscreen,
-    // where there is no shift key and no wheel, a drag pans and a tap places
-    // the selection. The legend in the bottom bar says both.
+    // where there is no shift key and no wheel, a drag pans, a pinch zooms,
+    // and a tap places the selection. The legend says all of it.
     if (event.shiftKey || event.button === 1 || touch) {
       drag.current = {
         kind: "pan",
@@ -428,6 +482,15 @@ export default function BoardCanvas({
   }
 
   function onPointerMove(event: ReactPointerEvent<HTMLCanvasElement>) {
+    if (pointers.current.has(event.pointerId)) {
+      pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    }
+
+    if (pinch.current && pointers.current.size >= 2) {
+      handlePinch(event.currentTarget);
+      return;
+    }
+
     const at = pointerBoard(event);
     const current = drag.current;
 
@@ -451,13 +514,15 @@ export default function BoardCanvas({
         movement: current.movement + Math.abs(dx) + Math.abs(dy),
       };
       const rect = event.currentTarget.getBoundingClientRect();
+      const screen = { width: rect.width, height: rect.height };
+      const board = { width: BOARD_PIXELS, height: BOARD_PIXELS };
       setViewport((v) =>
-        clampToCover(
-          panBy(v, -dx / v.scale, -dy / v.scale),
-          { width: rect.width, height: rect.height },
-          barsRef.current,
-          { width: BOARD_PIXELS, height: BOARD_PIXELS },
-        ),
+        // Refused at the base rung: the whole board is already on screen, so
+        // there is nowhere for a drag to take it and nudging it would only
+        // open cream on one side.
+        canPan(v.scale, fitScale(screen, chromeRef.current, board))
+          ? clampToFit(panBy(v, -dx / v.scale, -dy / v.scale), screen, chromeRef.current, board)
+          : v,
       );
       return;
     }
@@ -471,10 +536,31 @@ export default function BoardCanvas({
     publish(selectionFromDrag(current.from, at, blocks, perPixel));
   }
 
+  /** Two fingers spreading or closing, resolved into whole rungs of the ladder. */
+  function handlePinch(canvas: HTMLCanvasElement) {
+    const started = pinch.current;
+    const distance = pointerSeparation(pointers.current);
+    if (!started || distance <= 0 || started.distance <= 0) return;
+
+    const ratio = distance / started.distance;
+    if (ratio < PINCH_STEP && ratio > 1 / PINCH_STEP) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const midpoint = pointerMidpoint(pointers.current);
+    const point = { x: midpoint.x - rect.left, y: midpoint.y - rect.top };
+    const direction = ratio > 1 ? "in" : "out";
+    // Re-anchored at the new separation, so a long continuous spread keeps
+    // stepping instead of firing once and then sitting on a stale baseline.
+    pinch.current = { distance };
+    setViewport((v) =>
+      steppedZoom(v, { width: rect.width, height: rect.height }, chromeRef.current, point, direction),
+    );
+  }
+
   function onPointerUp(event: ReactPointerEvent<HTMLCanvasElement>) {
     const current = drag.current;
     drag.current = { kind: "none" };
-    event.currentTarget.releasePointerCapture(event.pointerId);
+    releasePointer(event);
 
     if (current.kind !== "pan" || !isTap(current.movement)) return;
 
@@ -494,60 +580,47 @@ export default function BoardCanvas({
     // leave drag.current pointing at a stale anchor, or the next hover will
     // rubber-band a selection with nothing held down.
     drag.current = { kind: "none" };
+    releasePointer(event);
+  }
+
+  function releasePointer(event: ReactPointerEvent<HTMLCanvasElement>) {
+    pointers.current.delete(event.pointerId);
+    // One finger left is not a pinch, and the remaining one must not silently
+    // become a pan halfway through a gesture either.
+    if (pointers.current.size < 2) pinch.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
   }
 
   // React 19 registers onWheel as a passive listener, so it can never call
-  // preventDefault(). Without that, scrolling over the board would also scroll
-  // the page. A native listener registered as non-passive is the only way to
-  // stop that.
+  // preventDefault(). Without that, a wheel over the board would also scroll
+  // the page — and while the document is `overflow: hidden` and has nothing to
+  // scroll, an overscroll bounce or a stray scroll chain is still a jump the
+  // board did not ask for. A native non-passive listener is the only way to
+  // stop it.
   //
-  // The board covers the viewport width and overflows downwards, so a plain
-  // wheel PANS — that is what a scroll means on a page taller than its window.
-  // Zoom is ctrl/cmd-wheel, which is also what a trackpad pinch sends.
+  // THE WHEEL ZOOMS, and only zooms. It used to pan, because the board
+  // overflowed downwards and a scroll is what a page taller than its window
+  // means. The board fits now, so at the base rung there is nothing below to
+  // scroll to and a wheel that moved the board would only be able to move it
+  // wrong. A trackpad pinch arrives here as a ctrl-wheel and takes the same
+  // path, which is what makes "wheel and pinch" one behaviour and not two.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     function handler(event: WheelEvent) {
       hasInteracted.current = true;
-      setShowPanHint(false);
       event.preventDefault();
       const rect = canvas!.getBoundingClientRect();
       const screen = { width: rect.width, height: rect.height };
-      const board = { width: BOARD_PIXELS, height: BOARD_PIXELS };
-
-      if (event.ctrlKey || event.metaKey) {
-        const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-        const direction = event.deltaY < 0 ? "in" : "out";
-        const cover = coverScale(screen, board);
-        // One notch is one rung of the ladder, never a 1.15 multiplier. A
-        // continuous zoom leaves a board pixel sitting on 1.87 screen pixels
-        // far more often than on 2, and every buyer's bitmap goes soft.
-        setViewport((v) =>
-          clampToCover(
-            zoomToScale(v, screen, point, nextZoomScale(v.scale, direction, cover, MAX_ZOOM), {
-              min: cover,
-              max: Math.max(cover, MAX_ZOOM),
-            }),
-            screen,
-            barsRef.current,
-            board,
-          ),
-        );
-        return;
-      }
-
-      setViewport((v) =>
-        clampToCover(
-          panBy(v, event.deltaX / v.scale, event.deltaY / v.scale),
-          screen,
-          barsRef.current,
-          board,
-        ),
-      );
+      const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      const direction = event.deltaY < 0 ? "in" : "out";
+      // One notch is one rung of the ladder, never a 1.15 multiplier. A
+      // continuous zoom leaves a board pixel sitting on 1.87 screen pixels
+      // far more often than on 2, and every buyer's bitmap goes soft.
+      setViewport((v) => steppedZoom(v, screen, chromeRef.current, point, direction));
     }
 
     canvas.addEventListener("wheel", handler, { passive: false });
@@ -576,6 +649,19 @@ export default function BoardCanvas({
       }}
     />
   );
+}
+
+/** How far apart the two fingers of a pinch are, in screen pixels. */
+function pointerSeparation(pointers: Map<number, Point>): number {
+  const [a, b] = [...pointers.values()];
+  if (!a || !b) return 0;
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+/** The point a pinch is anchored on: halfway between the two fingers. */
+function pointerMidpoint(pointers: Map<number, Point>): Point {
+  const [a, b] = [...pointers.values()];
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 
 /** One tier of the graph paper, drawn only across the part of it on screen. */
@@ -642,26 +728,6 @@ function drawHeldHatch(
     context.lineTo(p + h, y + h);
   }
   context.stroke();
-  context.restore();
-}
-
-/** The one hint the board itself carries: there is more of it below. */
-function drawPanHint(context: CanvasRenderingContext2D, centreX: number, y: number, family: string) {
-  const text = "Scroll to see more of the board";
-  context.save();
-  context.font = `700 11.5px ${family}`;
-  const width = context.measureText(text).width + 28;
-  const height = 26;
-  const x = centreX - width / 2;
-  context.globalAlpha = 0.85;
-  context.fillStyle = PAINT.chip;
-  context.beginPath();
-  context.roundRect(x, y - height / 2, width, height, height / 2);
-  context.fill();
-  context.globalAlpha = 1;
-  context.fillStyle = PAINT.chipText;
-  context.textBaseline = "middle";
-  context.fillText(text, x + 14, y + 0.5);
   context.restore();
 }
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BoardStats, LiveBlock } from "../lib/board/blocks";
 import type { Point } from "../lib/board/geometry";
 import type { Selection } from "../lib/board/selection";
+import type { Chrome } from "../lib/canvas/viewport";
 import BoardCanvas from "./BoardCanvas";
 import BoardCounters from "./BoardCounters";
 import InteractionLegend from "./InteractionLegend";
@@ -17,9 +18,9 @@ type BoardPayload = {
 };
 
 // Matches the --bar-top-h / --bar-bottom-h defaults in globals.css: the very
-// first paint, before the bars exist to be measured, has to assume something,
-// and this is what the CSS assumes too.
-const FALLBACK_BARS = { top: 52, bottom: 88 };
+// first paint, before the chrome exists to be measured, has to assume
+// something, and this is what the CSS assumes too.
+const FALLBACK_CHROME: Chrome = { top: 52, right: 0, bottom: 88, left: 0 };
 
 // Somebody else's hold, or your own abandoned attempt in another tab, is
 // invisible until the board refetches — the selector otherwise keeps
@@ -34,7 +35,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
   const [selection, setSelection] = useState<Selection | null>(null);
   const [activePreset, setActivePreset] = useState<number | null>(null);
   const [hovered, setHovered] = useState<{ block: LiveBlock; at: Point } | null>(null);
-  const [bars, setBars] = useState(FALLBACK_BARS);
+  const [chrome, setChrome] = useState<Chrome>(FALLBACK_CHROME);
   // A plain text field until a real wallet arrives in a later batch: there is
   // no connection and no signature yet, only an address the buyer types in.
   const [buyerPubkey, setBuyerPubkey] = useState("");
@@ -269,9 +270,11 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
     if (!topEl || !bottomEl) return;
 
     function measure() {
-      setBars({
-        top: topEl!.offsetHeight || FALLBACK_BARS.top,
-        bottom: bottomEl!.offsetHeight || FALLBACK_BARS.bottom,
+      setChrome({
+        top: topEl!.offsetHeight || FALLBACK_CHROME.top,
+        right: 0,
+        bottom: bottomEl!.offsetHeight || FALLBACK_CHROME.bottom,
+        left: 0,
       });
     }
 
@@ -292,7 +295,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
         selection={selection}
         activePreset={activePreset}
         perPixel={board.pricePerPixelBaseUnits}
-        bars={bars}
+        chrome={chrome}
         onSelectionChange={setSelection}
         onHoverChange={handleHover}
       />
@@ -350,7 +353,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           className="floating-card pointer-events-none fixed z-20 w-52 p-3"
           style={{
             left: Math.min(hovered.at.x + 14, (typeof window === "undefined" ? 1200 : window.innerWidth) - 224),
-            top: Math.max(bars.top + 8, hovered.at.y - 88),
+            top: Math.max(chrome.top + 8, hovered.at.y - 88),
           }}
         >
           <p className="truncate font-display text-[14.5px] font-bold text-ink">
@@ -385,7 +388,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
         <div
           className="floating-card fixed left-1/2 z-30 max-w-md -translate-x-1/2 px-4 py-3 text-[13px] text-ink-soft"
           role="status"
-          style={{ top: `calc(${bars.top}px + 12px)` }}
+          style={{ top: `calc(${chrome.top}px + 12px)` }}
         >
           {notice}
         </div>

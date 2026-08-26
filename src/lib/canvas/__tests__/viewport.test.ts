@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  type Chrome,
+  type Size,
   TAP_SLOP_PX,
   backingStoreSize,
   boardToScreen,
+  canPan,
   clampToBoard,
-  clampToCover,
-  coverScale,
+  clampToFit,
+  fitScale,
+  fittedBoardSize,
+  freeRegion,
   initialViewport,
   isTap,
   nextZoomScale,
@@ -90,130 +95,273 @@ describe("the whole board fits and a single block is reachable", () => {
 });
 
 /**
- * COVER, not contain. These tests replace the seven that asserted the old
- * "whole board visible between the bars" fit: the board is now scaled by width
- * alone and the overflow is panned, which is a deliberate change of contract
- * rather than a regression. What is asserted here is what the board must never
- * do — show cream down its sides, or stretch a pixel out of square.
+ * CONTAIN, not cover.
+ *
+ * These replace the eight tests that asserted the old cover contract — the
+ * board as wide as the window with its height panned. The owner reversed that
+ * after living with it, so what is asserted here is the opposite and is a
+ * deliberate change of contract rather than a regression: every corner of the
+ * board is on screen at once, and nothing anywhere overflows.
  */
-describe("initialViewport covers the viewport width", () => {
+describe("initialViewport fits the whole board inside the free region", () => {
   const board = { width: 1000, height: 1000 };
+  const corners = [
+    { x: 0, y: 0 },
+    { x: 1000, y: 0 },
+    { x: 0, y: 1000 },
+    { x: 1000, y: 1000 },
+  ];
 
-  it("renders the board exactly as wide as the viewport, with no margin either side", () => {
+  /** Every corner of the board, on screen, inside the region the chrome leaves. */
+  function expectWhollyVisible(screen: Size, chrome: Chrome) {
+    const v = initialViewport(screen, chrome, board);
+    const free = freeRegion(screen, chrome);
+    for (const corner of corners) {
+      const at = boardToScreen(v, screen, corner);
+      expect(at.x).toBeGreaterThanOrEqual(free.x - 1e-6);
+      expect(at.x).toBeLessThanOrEqual(free.x + free.width + 1e-6);
+      expect(at.y).toBeGreaterThanOrEqual(free.y - 1e-6);
+      expect(at.y).toBeLessThanOrEqual(free.y + free.height + 1e-6);
+    }
+  }
+
+  it("puts all four corners inside the free region on a landscape window", () => {
+    expectWhollyVisible({ width: 1400, height: 900 }, { top: 52, right: 0, bottom: 0, left: 420 });
+  });
+
+  it("puts all four corners inside the free region on a portrait window", () => {
+    expectWhollyVisible({ width: 430, height: 932 }, { top: 48, right: 0, bottom: 92, left: 0 });
+  });
+
+  it("puts all four corners inside the free region on a lopsided chrome", () => {
+    expectWhollyVisible({ width: 1200, height: 700 }, { top: 80, right: 30, bottom: 20, left: 300 });
+  });
+
+  it("scales by height when height is the limiting dimension", () => {
+    // 1348 of free width against 848 of free height: height runs out first.
     const screen = { width: 1400, height: 900 };
-    const v = initialViewport(screen, { top: 52, bottom: 88 }, board);
+    const chrome = { top: 52, right: 0, bottom: 0, left: 52 };
+    const v = initialViewport(screen, chrome, board);
 
-    expect(v.scale).toBeCloseTo(1400 / 1000, 10);
+    expect(v.scale).toBeCloseTo(848 / 1000, 10);
+    expect(boardToScreen(v, screen, { x: 0, y: 0 }).y).toBeCloseTo(52, 6);
+    expect(boardToScreen(v, screen, { x: 0, y: 1000 }).y).toBeCloseTo(900, 6);
+  });
+
+  it("scales by width when width is the limiting dimension, which is portrait and phones", () => {
+    const screen = { width: 390, height: 844 };
+    const chrome = { top: 48, right: 0, bottom: 92, left: 0 };
+    const v = initialViewport(screen, chrome, board);
+
+    expect(v.scale).toBeCloseTo(390 / 1000, 10);
     expect(boardToScreen(v, screen, { x: 0, y: 0 }).x).toBeCloseTo(0, 6);
-    expect(boardToScreen(v, screen, { x: 1000, y: 0 }).x).toBeCloseTo(screen.width, 6);
+    expect(boardToScreen(v, screen, { x: 1000, y: 0 }).x).toBeCloseTo(390, 6);
   });
 
   it("keeps board pixels square: one board pixel is the same size across and down", () => {
     const screen = { width: 1337, height: 700 };
-    const v = initialViewport(screen, { top: 52, bottom: 88 }, board);
+    const chrome = { top: 52, right: 0, bottom: 0, left: 337 };
+    const v = initialViewport(screen, chrome, board);
     const topLeft = boardToScreen(v, screen, { x: 0, y: 0 });
     const bottomRight = boardToScreen(v, screen, { x: 100, y: 100 });
 
     expect(bottomRight.x - topLeft.x).toBeCloseTo(bottomRight.y - topLeft.y, 10);
-    expect(bottomRight.x - topLeft.x).toBeCloseTo(100 * (screen.width / 1000), 10);
+    // Height limits here — 648 of free height against 1000 of free width.
+    expect(bottomRight.x - topLeft.x).toBeCloseTo(100 * (648 / 1000), 10);
   });
 
-  it("anchors the board's top edge to the top of the free region and pans the overflow", () => {
+  it("centres the board in the free region rather than in the window", () => {
+    // A 420px panel down the left means the board's middle sits 210px right of
+    // the window's middle, not on it.
     const screen = { width: 1400, height: 900 };
-    const bars = { top: 52, bottom: 88 };
-    const v = initialViewport(screen, bars, board);
-
-    // Top-aligned, not centred: the buyer starts on the board's own top edge,
-    // and everything below it is a scroll away.
-    expect(boardToScreen(v, screen, { x: 0, y: 0 }).y).toBeCloseTo(bars.top, 6);
-    // And it genuinely overflows: 1400px of board against 760px of free region.
-    expect(boardToScreen(v, screen, { x: 0, y: 1000 }).y).toBeGreaterThan(screen.height - bars.bottom);
-  });
-
-  it("keeps that anchor when the two bars are different heights", () => {
-    const screen = { width: 1400, height: 900 };
-    const bars = { top: 80, bottom: 40 };
-    const v = initialViewport(screen, bars, board);
-    expect(boardToScreen(v, screen, { x: 0, y: 0 }).y).toBeCloseTo(bars.top, 6);
-  });
-
-  it("scales by width on a wide, short viewport instead of shrinking to fit the height", () => {
-    // The old contract fitted this to (600 - 88) / 1000 and left 1.4k of cream
-    // at the sides. Width wins now, and the height overflows.
-    const screen = { width: 2000, height: 600 };
-    const v = initialViewport(screen, { top: 44, bottom: 44 }, board);
-
-    expect(v.scale).toBeCloseTo(2, 10);
-    expect(boardToScreen(v, screen, { x: 1000, y: 0 }).x).toBeCloseTo(screen.width, 6);
-  });
-
-  it("still fills the width when the whole board fits between the bars, and centres it there", () => {
-    // 800px of board inside 1460px of free region: nothing to pan, and still
-    // not letterboxed — the width is exact, the slack is vertical.
-    const screen = { width: 800, height: 1600 };
-    const bars = { top: 52, bottom: 88 };
-    const v = initialViewport(screen, bars, board);
-
-    expect(boardToScreen(v, screen, { x: 0, y: 0 }).x).toBeCloseTo(0, 6);
-    expect(boardToScreen(v, screen, { x: 1000, y: 0 }).x).toBeCloseTo(screen.width, 6);
-
+    const chrome = { top: 52, right: 0, bottom: 0, left: 420 };
+    const v = initialViewport(screen, chrome, board);
+    const free = freeRegion(screen, chrome);
     const centre = boardToScreen(v, screen, { x: 500, y: 500 });
-    expect(centre.y).toBeCloseTo(bars.top + (screen.height - bars.top - bars.bottom) / 2, 6);
+
+    expect(centre.x).toBeCloseTo(free.x + free.width / 2, 6);
+    expect(centre.y).toBeCloseTo(free.y + free.height / 2, 6);
   });
 
   it("never returns a zero or negative scale, however cramped the viewport", () => {
     // A phone in landscape with the keyboard up can leave less height than the
-    // bars occupy. A non-positive scale divides by zero everywhere downstream.
-    const v = initialViewport({ width: 320, height: 60 }, { top: 52, bottom: 52 }, board);
+    // chrome occupies. A non-positive scale divides by zero everywhere
+    // downstream, so the fit scale has a floor and this is it.
+    const v = initialViewport({ width: 320, height: 60 }, { top: 52, right: 0, bottom: 52, left: 0 }, board);
     expect(v.scale).toBeGreaterThan(0);
     expect(Number.isFinite(v.scale)).toBe(true);
+    expect(Number.isFinite(v.centreX)).toBe(true);
     expect(Number.isFinite(v.centreY)).toBe(true);
   });
 
   it("survives a zero-sized screen before layout has run", () => {
-    const v = initialViewport({ width: 0, height: 0 }, { top: 52, bottom: 52 }, board);
+    const v = initialViewport({ width: 0, height: 0 }, { top: 52, right: 0, bottom: 52, left: 0 }, board);
     expect(v.scale).toBeGreaterThan(0);
     expect(Number.isFinite(v.centreX)).toBe(true);
     expect(Number.isFinite(v.centreY)).toBe(true);
   });
 });
 
-describe("clampToCover keeps the board covering the free region", () => {
+/**
+ * THE DOCUMENT NEVER SCROLLS, and that is arithmetic before it is CSS.
+ *
+ * `overflow: hidden` on the page is the belt; this is the braces. If the board
+ * plus its chrome ever asked for more room than the viewport has, hiding the
+ * overflow would be hiding artwork rather than hiding nothing.
+ *
+ * `chromeFor` mirrors the two layouts globals.css chooses between. The
+ * stylesheet is the authority on which one applies; this is here so that the
+ * numbers those layouts produce are checked against the fit maths rather than
+ * assumed to agree with it.
+ */
+describe("the board plus its chrome never needs more room than the viewport has", () => {
+  const board = { width: 1000, height: 1000 };
+  const SIDE_PANEL_MIN = 280;
+  const SIDE_PANEL_MAX = 560;
+
+  function chromeFor(screen: Size): Chrome {
+    const barTop = screen.width <= 640 ? 48 : 52;
+    // The side panel takes over at 640px and a 5:4 aspect — see the `side`
+    // variant in globals.css.
+    const side = screen.width >= 640 && screen.width * 4 >= screen.height * 5;
+    if (!side) {
+      return { top: barTop, right: 0, bottom: screen.width <= 640 ? 92 : 88, left: 0 };
+    }
+    // The panel absorbs whatever width the board does not need, between a
+    // width its controls stay usable at and one they stop growing at.
+    const wanted = screen.width - (screen.height - barTop);
+    const panel = Math.min(SIDE_PANEL_MAX, Math.max(SIDE_PANEL_MIN, wanted));
+    return { top: barTop, right: 0, bottom: 0, left: Math.min(panel, screen.width) };
+  }
+
+  const viewports: Array<[string, Size]> = [
+    ["a laptop", { width: 1440, height: 900 }],
+    ["a desktop", { width: 1920, height: 1080 }],
+    ["an ultrawide", { width: 3440, height: 1440 }],
+    ["extreme landscape", { width: 2560, height: 600 }],
+    ["a phone in landscape", { width: 844, height: 390 }],
+    ["a tablet in landscape", { width: 1024, height: 768 }],
+    ["a square window", { width: 800, height: 800 }],
+    ["a tablet in portrait", { width: 768, height: 1024 }],
+    ["a phone in portrait", { width: 390, height: 844 }],
+    ["a large phone in portrait", { width: 430, height: 932 }],
+    ["extreme portrait", { width: 1000, height: 3000 }],
+    ["a tiny window", { width: 320, height: 568 }],
+    ["a tinier window", { width: 240, height: 320 }],
+  ];
+
+  for (const [name, screen] of viewports) {
+    it(`fits on ${name} (${screen.width}×${screen.height}) with nothing to scroll`, () => {
+      const chrome = chromeFor(screen);
+      const free = freeRegion(screen, chrome);
+      const fitted = fittedBoardSize(screen, chrome, board);
+
+      // The chrome itself fits, so the free region is real rather than negative.
+      expect(chrome.left + chrome.right).toBeLessThanOrEqual(screen.width);
+      expect(chrome.top + chrome.bottom).toBeLessThanOrEqual(screen.height);
+      expect(free.width).toBeGreaterThan(0);
+      expect(free.height).toBeGreaterThan(0);
+
+      // And the board fits in what is left, in BOTH axes. Nothing overflows,
+      // so nothing scrolls.
+      expect(fitted.width).toBeLessThanOrEqual(free.width + 1e-9);
+      expect(fitted.height).toBeLessThanOrEqual(free.height + 1e-9);
+      expect(fitted.width + chrome.left + chrome.right).toBeLessThanOrEqual(screen.width + 1e-9);
+      expect(fitted.height + chrome.top + chrome.bottom).toBeLessThanOrEqual(screen.height + 1e-9);
+    });
+  }
+
+  it("names the one exception: a viewport with no room for a board at all", () => {
+    // Below the fit scale's floor the board is 10px square and the free region
+    // is nothing, so this is the single case where the arithmetic above cannot
+    // hold. It is not a scrolling case — there is no room for a scrollbar
+    // either — and the floor exists so that dividing by the scale downstream
+    // does not produce Infinity.
+    const screen = { width: 320, height: 40 };
+    const chrome = { top: 52, right: 0, bottom: 52, left: 0 };
+    expect(freeRegion(screen, chrome).height).toBe(0);
+    expect(fitScale(screen, chrome, board)).toBeGreaterThan(0);
+  });
+});
+
+describe("clampToFit keeps the whole board inside the free region", () => {
   const board = { width: 1000, height: 1000 };
   const screen = { width: 1000, height: 700 };
-  const bars = { top: 50, bottom: 100 };
-  const at = (centreY: number, centreX = 500, scale = 1) => ({ centreX, centreY, scale });
+  const chrome: Chrome = { top: 50, right: 0, bottom: 100, left: 0 };
+  const base = fitScale(screen, chrome, board); // 550 / 1000
+  const at = (centreY: number, centreX = 500, scale = base) => ({ centreX, centreY, scale });
 
-  it("stops an upward pan at the board's top edge", () => {
-    const clamped = clampToCover(at(-400), screen, bars, board);
-    expect(boardToScreen(clamped, screen, { x: 0, y: 0 }).y).toBeCloseTo(bars.top, 6);
+  it("pins the board to the middle of the free region at the base rung", () => {
+    const free = freeRegion(screen, chrome);
+    for (const wanted of [-9000, 0, 500, 9000]) {
+      const clamped = clampToFit(at(wanted), screen, chrome, board);
+      const centre = boardToScreen(clamped, screen, { x: 500, y: 500 });
+      expect(centre.y).toBeCloseTo(free.y + free.height / 2, 6);
+    }
   });
 
-  it("stops a downward pan at the board's bottom edge", () => {
-    const clamped = clampToCover(at(9000), screen, bars, board);
+  it("stops an upward pan at the board's top edge once zoomed in", () => {
+    const clamped = clampToFit(at(-400, 500, 2), screen, chrome, board);
+    expect(boardToScreen(clamped, screen, { x: 0, y: 0 }).y).toBeCloseTo(chrome.top, 6);
+  });
+
+  it("stops a downward pan at the board's bottom edge once zoomed in", () => {
+    const clamped = clampToFit(at(9000, 500, 2), screen, chrome, board);
     expect(boardToScreen(clamped, screen, { x: 0, y: 1000 }).y).toBeCloseTo(
-      screen.height - bars.bottom,
+      screen.height - chrome.bottom,
       6,
     );
   });
 
-  it("pins the board horizontally while it is exactly as wide as the viewport", () => {
-    expect(clampToCover(at(500, 20), screen, bars, board).centreX).toBeCloseTo(500, 6);
-  });
-
-  it("allows horizontal panning once zoomed in past cover, up to the board's edges", () => {
-    const zoomed = clampToCover(at(500, 0, 4), screen, bars, board);
-    // At 4x, half a 1000px viewport is 125 board pixels, so the left edge of
+  it("allows horizontal panning once zoomed in, up to the board's edges", () => {
+    const zoomed = clampToFit(at(500, 0, 4), screen, chrome, board);
+    // At 4x, half a 1000px free width is 125 board pixels, so the left edge of
     // the board is as far left as the view can go.
     expect(zoomed.centreX).toBeCloseTo(125, 6);
     expect(boardToScreen(zoomed, screen, { x: 0, y: 0 }).x).toBeCloseTo(0, 6);
   });
 
-  it("centres a board too short to span the region rather than clamping to an inverted range", () => {
-    const tall = { width: 400, height: 1600 };
-    const clamped = clampToCover(at(0, 200, 0.4), tall, bars, board);
-    const centre = boardToScreen(clamped, tall, { x: 500, y: 500 });
-    expect(centre.y).toBeCloseTo(bars.top + (tall.height - bars.top - bars.bottom) / 2, 6);
+  it("respects a side panel: the board never slides under it", () => {
+    const wide = { width: 1400, height: 900 };
+    const side: Chrome = { top: 52, right: 0, bottom: 0, left: 420 };
+    const clamped = clampToFit({ centreX: -500, centreY: 500, scale: 2 }, wide, side, board);
+    expect(boardToScreen(clamped, wide, { x: 0, y: 0 }).x).toBeCloseTo(side.left, 6);
+  });
+
+  it("centres an axis the board is still smaller than, rather than inverting the range", () => {
+    // Zoomed past fit vertically but not horizontally: 1000 board pixels at
+    // 0.8 is 800, narrower than the 1000 of free width.
+    const clamped = clampToFit(at(500, 0, 0.8), screen, chrome, board);
+    const centre = boardToScreen(clamped, screen, { x: 500, y: 500 });
+    expect(centre.x).toBeCloseTo(screen.width / 2, 6);
+  });
+});
+
+/**
+ * Panning is a thing you earn by zooming in. At the base rung the whole board
+ * is on screen, so there is nothing to pan and neither a drag nor a wheel is
+ * allowed to move it — which is also why "zoom 1" in this project means the
+ * rung where the board fits, not one screen pixel per board pixel.
+ */
+describe("canPan", () => {
+  it("refuses at the base rung", () => {
+    expect(canPan(0.848, 0.848)).toBe(false);
+    expect(canPan(1.4, 1.4)).toBe(false);
+  });
+
+  it("refuses below the base rung, which a resize can briefly produce", () => {
+    expect(canPan(0.5, 0.848)).toBe(false);
+  });
+
+  it("allows it on every rung above", () => {
+    expect(canPan(1, 0.848)).toBe(true);
+    expect(canPan(2, 1.4)).toBe(true);
+    expect(canPan(16, 0.32)).toBe(true);
+  });
+
+  it("is not fooled by a float round trip into offering a pan of nothing", () => {
+    const drifted = 0.848 * (2 / 0.848) * (0.848 / 2);
+    expect(canPan(drifted, 0.848)).toBe(false);
   });
 });
 
@@ -252,76 +400,84 @@ describe("backingStoreSize allocates real device pixels", () => {
  * The zoom ladder. Its whole reason to exist is that a board pixel should
  * cover a whole number of screen pixels, so a buyer's 10×10 bitmap reads as
  * squares rather than as a smear — with the one rung that cannot be an
- * integer, cover itself, at the bottom because the board must never show a
- * margin down its sides.
+ * integer, the fit scale, at the bottom because the whole board must always
+ * be on screen.
  */
 describe("zoomLadder", () => {
-  it("puts cover at the bottom and only the powers of two above it: 1440px wide", () => {
-    expect(zoomLadder(coverScale({ width: 1440, height: 900 }, BOARD_1000), 16)).toEqual([1.44, 2, 4, 8, 16]);
+  it("puts the fit scale at the bottom and only the powers of two above it", () => {
+    // A 1400×900 window with 52px of bar and a 420px panel fits at 0.848.
+    const fit = fitScale({ width: 1400, height: 900 }, { top: 52, right: 0, bottom: 0, left: 420 }, BOARD_1000);
+    expect(fit).toBeCloseTo(0.848, 10);
+    expect(zoomLadder(fit, 16)).toEqual([fit, 1, 2, 4, 8, 16]);
   });
 
-  it("includes 1 as a rung once cover is below it: 900px wide", () => {
-    expect(zoomLadder(coverScale({ width: 900, height: 900 }, BOARD_1000), 16)).toEqual([0.9, 1, 2, 4, 8, 16]);
+  it("skips 1 entirely once the fit scale is above it", () => {
+    expect(zoomLadder(1.4, 16)).toEqual([1.4, 2, 4, 8, 16]);
   });
 
   it("never lists a rung above maxZoom", () => {
     expect(zoomLadder(1.44, 8)).toEqual([1.44, 2, 4, 8]);
   });
 
-  it("drops an integer rung that is only equal to cover, not above it", () => {
-    // A 2000px viewport covers at exactly 2. Offering 2 twice would waste a
-    // wheel notch on a step that goes nowhere.
+  it("drops an integer rung that is only equal to the fit scale, not above it", () => {
+    // A free region 2000 across fits a 1000-pixel board at exactly 2. Offering
+    // 2 twice would waste a wheel notch on a step that goes nowhere.
     expect(zoomLadder(2, 16)).toEqual([2, 4, 8, 16]);
   });
 });
 
 describe("nextZoomScale steps the ladder", () => {
-  const COVER_1440 = 1.44;
-  const COVER_900 = 0.9;
+  // The fit scale of a landscape window with a side panel, and of a portrait
+  // phone: the floor of the ladder in each case.
+  const FIT_WIDE = 1.44;
+  const FIT_PHONE = 0.9;
   const MAX = 16;
 
-  it("steps up from cover to the first integer rung above it, not to 1", () => {
-    expect(nextZoomScale(COVER_1440, "in", COVER_1440, MAX)).toBe(2);
+  it("steps up from the fit scale to the first integer rung above it, not to 1", () => {
+    expect(nextZoomScale(FIT_WIDE, "in", FIT_WIDE, MAX)).toBe(2);
   });
 
-  it("steps up to 1 first when cover is below 1", () => {
-    expect(nextZoomScale(COVER_900, "in", COVER_900, MAX)).toBe(1);
+  it("steps up to 1 first when the fit scale is below 1", () => {
+    expect(nextZoomScale(FIT_PHONE, "in", FIT_PHONE, MAX)).toBe(1);
   });
 
   it("doubles on every further step up", () => {
-    let scale = nextZoomScale(COVER_1440, "in", COVER_1440, MAX);
+    let scale = nextZoomScale(FIT_WIDE, "in", FIT_WIDE, MAX);
     const climbed = [scale];
     for (let i = 0; i < 4; i += 1) {
-      scale = nextZoomScale(scale, "in", COVER_1440, MAX);
+      scale = nextZoomScale(scale, "in", FIT_WIDE, MAX);
       climbed.push(scale);
     }
     expect(climbed).toEqual([2, 4, 8, 16, 16]);
   });
 
-  it("steps down from the lowest integer rung onto cover exactly", () => {
-    expect(nextZoomScale(2, "out", COVER_1440, MAX)).toBe(COVER_1440);
-    expect(nextZoomScale(1, "out", COVER_900, MAX)).toBe(COVER_900);
+  it("steps down from the lowest integer rung onto the fit scale exactly", () => {
+    expect(nextZoomScale(2, "out", FIT_WIDE, MAX)).toBe(FIT_WIDE);
+    expect(nextZoomScale(1, "out", FIT_PHONE, MAX)).toBe(FIT_PHONE);
   });
 
-  it("stays on cover when stepping down from cover", () => {
-    expect(nextZoomScale(COVER_1440, "out", COVER_1440, MAX)).toBe(COVER_1440);
+  it("stays on the fit scale when stepping down from it", () => {
+    // The floor of the ladder is now the scale at which the whole board is
+    // visible. There is nothing below it worth offering.
+    expect(nextZoomScale(FIT_WIDE, "out", FIT_WIDE, MAX)).toBe(FIT_WIDE);
+    expect(nextZoomScale(FIT_PHONE, "out", FIT_PHONE, MAX)).toBe(FIT_PHONE);
   });
 
-  it("halves on the way back down and lands on cover, never past it", () => {
+  it("halves on the way back down and lands on the fit scale, never past it", () => {
     let scale = 16;
     const dropped = [];
     for (let i = 0; i < 6; i += 1) {
-      scale = nextZoomScale(scale, "out", COVER_1440, MAX);
+      scale = nextZoomScale(scale, "out", FIT_WIDE, MAX);
       dropped.push(scale);
     }
-    expect(dropped).toEqual([8, 4, 2, COVER_1440, COVER_1440, COVER_1440]);
+    expect(dropped).toEqual([8, 4, 2, FIT_WIDE, FIT_WIDE, FIT_WIDE]);
   });
 
-  it("never returns a scale below cover, from any starting point in either direction", () => {
-    for (const cover of [0.32, 0.9, 1, 1.44, 2.5, 3.84]) {
-      for (const start of [0.001, cover / 2, cover, 1, 3, 7.5, 16, 1000]) {
+  it("never returns a scale below the fit scale, from any start in either direction", () => {
+    for (const fit of [0.32, 0.9, 1, 1.44, 2.5, 3.84]) {
+      for (const start of [0.001, fit / 2, fit, 1, 3, 7.5, 16, 1000]) {
         for (const direction of ["in", "out"] as const) {
-          expect(nextZoomScale(start, direction, cover, 16)).toBeGreaterThanOrEqual(cover);
+          expect(nextZoomScale(start, direction, fit, 16)).toBeGreaterThanOrEqual(fit);
         }
       }
     }
@@ -335,15 +491,16 @@ describe("nextZoomScale steps the ladder", () => {
   });
 
   it("steps from the nearest rung when a resize has left the scale off the ladder", () => {
-    // Cover was 1.44, the window narrowed, and clampToCover left the scale at
-    // an in-between value. The next notch is still a rung, not 1.15 × mush.
+    // The fit scale was 1.44, the window changed shape, and clampToFit left
+    // the scale at an in-between value. The next notch is still a rung, not
+    // 1.15 × mush.
     expect(nextZoomScale(3.1, "in", 1.44, 16)).toBe(4);
     expect(nextZoomScale(3.1, "out", 1.44, 16)).toBe(2);
   });
 
   it("survives the float round trip a previous step leaves behind", () => {
-    // 1.44 * (2 / 1.44) is 2.0000000000000004 on this hardware. A step down
-    // from there must still be cover, not a no-op that lands on 2 again.
+    // 1.44 * (2 / 1.44) does not come back as exactly 2. A step down from
+    // there must still be the fit scale, not a no-op that lands on 2 again.
     const drifted = 1.44 * (2 / 1.44);
     expect(nextZoomScale(drifted, "out", 1.44, 16)).toBe(1.44);
     expect(nextZoomScale(drifted, "in", 1.44, 16)).toBe(4);
