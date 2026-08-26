@@ -3,6 +3,7 @@
 import { useEffect, useId, useMemo, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
 import { prepareImage } from "../lib/board/image-encode";
 import { MAX_INPUT_BYTES } from "../lib/board/image-plan";
+import { checkLink, normaliseLink } from "../lib/board/link";
 import { submitContent, type ClientOrder } from "../lib/board/purchase-client";
 import { singleFlight } from "../lib/board/single-flight";
 import { STEP_CEILING_MS } from "../lib/board/timing";
@@ -200,6 +201,20 @@ export default function ContentForm({
     setStage("preparing");
     setMessages(NO_UPLOAD_MESSAGES);
 
+    // The link, settled before anything is shrunk or sent. A bare domain gets
+    // its https:// here and the draft keeps it, so what the buyer confirms on
+    // the next screen is the exact address their block will carry; anything
+    // genuinely unusable is said beside the field rather than a round trip
+    // later. Both halves come from link.ts, which the server uses too.
+    const link = normaliseLink(draft.link);
+    const linkProblem = checkLink(link);
+    if (linkProblem) {
+      setMessages(describeUpload({ kind: "local", problem: linkProblem }));
+      setStage("idle");
+      return;
+    }
+    if (link !== draft.link) onDraftChange({ link });
+
     // The block's own size decides the stored size: four stored pixels per
     // block pixel, so a 10x10 rectangle carries 40x40 and a 100x100 carries
     // 400x400. The fit the buyer chose decides what is cropped.
@@ -217,7 +232,7 @@ export default function ContentForm({
     const form = new FormData();
     form.set("buyerPubkey", buyerPubkey);
     form.set("image", prepared.image.blob, prepared.image.filename);
-    form.set("link", draft.link);
+    form.set("link", link);
     form.set("caption", draft.caption);
     form.set("imageFit", draft.imageFit);
 
@@ -256,7 +271,13 @@ export default function ContentForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-3 flex flex-col gap-5">
+    // noValidate, and not as a convenience: the browser's own bubble is
+    // written by the browser, in the browser's voice, in whatever language the
+    // browser is in, and it appears where the browser decides. Every sentence
+    // on this screen is ours (see upload-errors.ts) and sits under the field
+    // it is about, so the native validator is turned off entirely rather than
+    // left to race ours.
+    <form noValidate onSubmit={handleSubmit} className="mt-3 flex flex-col gap-5">
       <div>
         <div className="flex items-baseline justify-between gap-2">
           <span className="text-[15px] font-bold text-ink">Image</span>
@@ -319,17 +340,24 @@ export default function ContentForm({
         <label htmlFor={linkId} className="text-[15px] font-bold text-ink">
           Link
         </label>
+        {/* `text`, not `url`, and that follows from noValidate: a bare
+            domain is a valid answer here (link.ts puts the https:// on), and
+            `type="url"` would mark it invalid in the browser's own eyes. The
+            keyboard hint is what `type="url"` was really for, and inputMode
+            asks for that without dragging a validator along with it. */}
         <input
           id={linkId}
-          type="url"
+          type="text"
+          inputMode="url"
+          autoComplete="url"
           value={draft.link}
           onChange={(event) => edit({ link: event.target.value })}
-          placeholder="https://yourproject.xyz"
+          placeholder="yourproject.xyz"
           className="field-input mt-1.5"
         />
         <Permanence>
-          Where your block sends people when they click it. Must start with https, and it is the
-          destination for good.
+          Where your block sends people when they click it. Type just the domain if you like —
+          yourproject.xyz becomes https://yourproject.xyz. Over https, and the destination for good.
         </Permanence>
         <FieldError message={messages.fields.link} />
       </div>

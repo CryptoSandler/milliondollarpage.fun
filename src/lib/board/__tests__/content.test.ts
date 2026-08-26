@@ -91,17 +91,34 @@ describe("validateContent — the link", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("rejects http, javascript, data and a bare host", async () => {
+  it("rejects http, javascript, data and an empty field", async () => {
     for (const link of [
       "http://example.com/",
       "javascript:alert(1)",
       "data:text/html;base64,PHNjcmlwdD4=",
-      "example.com",
       "",
     ]) {
       const result = await validateContent({ ...GOOD, link, bytes: await png(10, 10), declaredMime: "image/png" });
       expect(result.ok, `link should have been rejected: ${link}`).toBe(false);
       if (!result.ok) expect(result.rejections.some((r) => r.field === "link")).toBe(true);
+    }
+  });
+
+  // A bare host used to be refused alongside those. It is not a malformed
+  // address, it is an address with the obvious half left off, so link.ts puts
+  // the https:// on and this stores what it produced — the same string the
+  // form showed the buyer before they paid.
+  it("accepts a bare domain and stores it with https:// on the front", async () => {
+    const result = await validateContent({ ...GOOD, link: "adan.com/blocks", bytes: await png(10, 10), declaredMime: "image/png" });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.content.link).toBe("https://adan.com/blocks");
+  });
+
+  it("refuses http as http, rather than as something it cannot parse", async () => {
+    const result = await validateContent({ ...GOOD, link: "http://adan.com", bytes: await png(10, 10), declaredMime: "image/png" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.rejections.find((r) => r.field === "link")?.code).toBe("link_not_https");
     }
   });
 

@@ -1,5 +1,6 @@
 import type { ContentRejection, RejectionCode } from "./content";
 import type { ImageProblem } from "./image-encode";
+import type { LinkProblem } from "./link";
 
 /**
  * Every sentence the upload step can put on screen, and the one place that
@@ -24,11 +25,32 @@ import type { ImageProblem } from "./image-encode";
 
 export type UploadField = "image" | "link" | "caption" | "imageFit";
 
+/**
+ * Everything the BROWSER can refuse on its own, before a byte is sent.
+ *
+ * Two fields can produce one: the picture, and the link. Both are checked here
+ * rather than a round trip later, because a sentence that arrives the moment
+ * the buyer presses Continue is worth more than the identical sentence a
+ * second afterwards — and because the link's rules are pure (see link.ts) and
+ * the browser has every one of them.
+ */
+export type LocalProblem = ImageProblem | LinkProblem;
+
+/** Which field each local refusal belongs beside. */
+const LOCAL_FIELD: Record<LocalProblem, UploadField> = {
+  image_input_too_large: "image",
+  image_unreadable: "image",
+  image_unencodable: "image",
+  link_too_long: "link",
+  link_not_https: "link",
+  link_invalid: "link",
+};
+
 export type UploadOutcome =
   /** The ceiling fired: no answer came back at all. */
   | { kind: "timeout" }
-  /** The browser refused the file before sending it. */
-  | { kind: "local"; problem: ImageProblem }
+  /** The browser refused the file or the link before sending either. */
+  | { kind: "local"; problem: LocalProblem }
   /** The server answered, and did not like it. */
   | { kind: "failure"; status: number; rejections?: ContentRejection[]; retryAt?: string };
 
@@ -70,8 +92,12 @@ const FIELD_SENTENCES: Record<RejectionCode | ImageProblem, string> = {
   image_input_too_large: "That file is over 10 MB. Pick a lighter one — the shrinking is our job, but ten megabytes is where we stop.",
   image_unencodable: "We could not shrink that picture down to your block. Try a different one.",
   link_too_long: "That link is too long. Use a shorter address.",
-  link_not_https: "The link has to start with https.",
-  link_invalid: "That is not a web address. It should look like https://yourproject.xyz.",
+  link_not_https:
+    "A block can only send people somewhere over https. Change the front of that address to " +
+    "https:// and it will go through.",
+  link_invalid:
+    "That is not a web address. Something like yourproject.xyz will do — we put the https:// on " +
+    "the front for you.",
   caption_too_long: "The caption has to be 32 characters or fewer.",
   fit_unknown: "Choose how the picture should fill the rectangle.",
 };
@@ -118,7 +144,12 @@ export function describeUpload(outcome: UploadOutcome): UploadMessages {
   }
 
   if (outcome.kind === "local") {
-    return { fields: { image: FIELD_SENTENCES[outcome.problem] }, form: null, fatal: false, stalled: false };
+    return {
+      fields: { [LOCAL_FIELD[outcome.problem]]: FIELD_SENTENCES[outcome.problem] },
+      form: null,
+      fatal: false,
+      stalled: false,
+    };
   }
 
   const { status, rejections, retryAt } = outcome;

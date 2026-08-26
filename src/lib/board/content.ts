@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import sharp from "sharp";
 import { STORED_MAX_BYTES, STORED_MAX_LONG_EDGE } from "./image-plan";
+import { LINK_MAX_LENGTH, checkLink, normaliseLink } from "./link";
 
 /**
  * Validating the three things a buyer supplies before any money is asked for:
@@ -28,10 +29,9 @@ export const CONTENT_LIMITS = {
   maxBytes: STORED_MAX_BYTES,
   maxDimension: STORED_MAX_LONG_EDGE,
   captionMaxLength: 32,
-  // The conventional practical URL limit — long enough for any real link,
-  // short enough that a caller cannot store a megabyte of text in a column
-  // meant for a URL.
-  linkMaxLength: 2048,
+  // From link.ts, which the browser also reads: the form that normalises a
+  // link and the server that stores it work to one set of rules, not two.
+  linkMaxLength: LINK_MAX_LENGTH,
 } as const;
 
 // Multipart framing — boundary markers, per-part headers, field names, and
@@ -188,31 +188,28 @@ function validateImageFit(imageFit: string): ImageFitValidation {
   };
 }
 
-function validateLink(link: string): { rejection: ContentRejection | null; trimmed: string } {
-  const trimmed = link.trim();
+/**
+ * The rules themselves are in link.ts, which the browser shares; this only
+ * turns their answer into the rejection shape this module reports.
+ *
+ * What comes back as `normalised` is what gets STORED, so a buyer who typed a
+ * bare `adan.com` gets `https://adan.com` on their block — the same string the
+ * form put in front of them on the confirmation screen before they paid.
+ */
+const LINK_REASONS: Record<Exclude<ReturnType<typeof checkLink>, null>, string> = {
+  link_too_long: `The link must be ${LINK_MAX_LENGTH} characters or fewer.`,
+  link_not_https: "The link must use https.",
+  link_invalid: "That is not a valid link.",
+};
 
-  // Checked before `new URL()`: a link this long is rejected for its length
-  // alone, the same way an oversized image is rejected before it is decoded.
-  if (trimmed.length > CONTENT_LIMITS.linkMaxLength) {
-    return {
-      rejection: {
-        field: "link",
-        code: "link_too_long",
-        reason: `The link must be ${CONTENT_LIMITS.linkMaxLength} characters or fewer.`,
-      },
-      trimmed,
-    };
-  }
-
-  try {
-    const url = new URL(trimmed);
-    if (url.protocol !== "https:") {
-      return { rejection: { field: "link", code: "link_not_https", reason: "The link must use https." }, trimmed };
-    }
-    return { rejection: null, trimmed };
-  } catch {
-    return { rejection: { field: "link", code: "link_invalid", reason: "That is not a valid link." }, trimmed };
-  }
+function validateLink(link: string): { rejection: ContentRejection | null; normalised: string } {
+  const normalised = normaliseLink(link);
+  const problem = checkLink(normalised);
+  if (!problem) return { rejection: null, normalised };
+  return {
+    rejection: { field: "link", code: problem, reason: LINK_REASONS[problem] },
+    normalised,
+  };
 }
 
 /**
@@ -249,7 +246,7 @@ export async function validateContent(input: ContentInput): Promise<ValidateCont
   const imageResult = await validateImage(input.bytes);
   if (!imageResult.ok) rejections.push(imageResult.rejection);
 
-  const { rejection: linkRejection, trimmed: link } = validateLink(input.link);
+  const { rejection: linkRejection, normalised: link } = validateLink(input.link);
   if (linkRejection) rejections.push(linkRejection);
 
   const { rejection: captionRejection, trimmed: caption } = validateCaption(input.caption);

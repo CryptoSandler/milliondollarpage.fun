@@ -36,10 +36,11 @@ describe("describeUpload — the field sentences", () => {
 
   it("says what is actually wrong with the link, in plain words", () => {
     const https = describeUpload({ kind: "failure", status: 422, rejections: [rejection("link", "link_not_https")] });
-    expect(https.fields.link).toBe("The link has to start with https.");
+    expect(https.fields.link).toContain("https://");
+    expect(https.fields.link).toContain("will go through");
 
     const invalid = describeUpload({ kind: "failure", status: 422, rejections: [rejection("link", "link_invalid")] });
-    expect(invalid.fields.link).toContain("https://yourproject.xyz");
+    expect(invalid.fields.link).toContain("yourproject.xyz");
     expect(invalid.fields.link).not.toBe(https.fields.link);
   });
 
@@ -166,6 +167,33 @@ describe("describeUpload — what the browser refused before sending", () => {
     const unreadable = describeUpload({ kind: "local", problem: "image_unreadable" }).fields.image;
     const unencodable = describeUpload({ kind: "local", problem: "image_unencodable" }).fields.image;
     expect(unreadable).not.toBe(unencodable);
+  });
+});
+
+describe("describeUpload — what the browser refused about the link", () => {
+  it("puts a refused link beside the LINK field, never beside the picture", () => {
+    for (const problem of ["link_not_https", "link_invalid", "link_too_long"] as const) {
+      const said = describeUpload({ kind: "local", problem });
+      expect(Object.keys(said.fields), problem).toEqual(["link"]);
+      expect(said.form).toBeNull();
+      expect(said.fatal).toBe(false);
+    }
+  });
+
+  it("says http out loud, and says which way out", () => {
+    const said = describeUpload({ kind: "local", problem: "link_not_https" });
+    expect(said.fields.link).toContain("https://");
+    expect(said.fields.link).not.toContain("http://");
+  });
+
+  it("says the same thing whether the browser or the server caught it", () => {
+    const locally = describeUpload({ kind: "local", problem: "link_not_https" });
+    const remotely = describeUpload({
+      kind: "failure",
+      status: 422,
+      rejections: [{ field: "link", code: "link_not_https", reason: "ignored" }],
+    });
+    expect(locally.fields.link).toBe(remotely.fields.link);
   });
 });
 
