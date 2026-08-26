@@ -167,10 +167,10 @@ export function encodeAttempts(block: Box, maxLongEdge = STORED_MAX_LONG_EDGE): 
  * done to it, so it is sent exactly as the buyer chose it and keeps whatever
  * animation it had.
  *
- * // ponytail: this deliberately does NOT try to tell an animated GIF from a
- * // still one — that would mean parsing the GIF's block structure in the
- * // browser to save a few kilobytes on a still. If GIFs ever need their own
- * // handling, parse them here.
+ * It deliberately does not ask whether the GIF moves — that question belongs
+ * to `gif.ts`, which walks the block structure, and it is asked for a
+ * different reason: not to decide what to send, but to tell the buyer on the
+ * confirmation screen that an animation is about to become a still.
  */
 export function shouldSendUntouched(type: string, size: number, width: number, height: number): boolean {
   return (

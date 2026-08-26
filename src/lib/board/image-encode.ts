@@ -1,3 +1,4 @@
+import { willBecomeStill } from "./gif";
 import {
   MAX_INPUT_BYTES,
   STORED_MAX_BYTES,
@@ -36,7 +37,18 @@ export type PreparedImage = {
   filename: string;
 };
 
-export type PrepareResult = { ok: true; image: PreparedImage } | { ok: false; problem: ImageProblem };
+export type PrepareResult =
+  | {
+      ok: true;
+      image: PreparedImage;
+      /**
+       * The buyer picked an animated GIF and this is a still of its first
+       * frame. Reported rather than acted on: the confirmation screen says so
+       * before any money is asked for, and the buyer decides.
+       */
+      stillFromAnimation: boolean;
+    }
+  | { ok: false; problem: ImageProblem };
 
 const EXTENSIONS: Record<string, string> = {
   "image/webp": "webp",
@@ -55,6 +67,13 @@ const EXTENSIONS: Record<string, string> = {
 export async function prepareImage(file: File, block: Box, fit: Fit): Promise<PrepareResult> {
   if (file.size > MAX_INPUT_BYTES) return { ok: false, problem: "image_input_too_large" };
 
+  // The whole file, and only for a GIF: a frame count cannot be read from a
+  // prefix, because the second frame's descriptor sits after however many
+  // bytes the first one took. Nothing else is ever read this way, and a GIF is
+  // capped at the same ten megabytes as everything else.
+  const gifBytes =
+    file.type === "image/gif" ? new Uint8Array(await file.arrayBuffer()) : new Uint8Array(0);
+
   let bitmap: ImageBitmap;
   try {
     bitmap = await createImageBitmap(file);
@@ -63,10 +82,22 @@ export async function prepareImage(file: File, block: Box, fit: Fit): Promise<Pr
   }
 
   try {
+    // Whether the animation is about to be lost — which is exactly "this is a
+    // GIF that moves AND it is not going out untouched". Decided before the
+    // branch below so both paths report the same answer.
+    const stillFromAnimation = willBecomeStill(
+      gifBytes,
+      file.type,
+      file.size,
+      bitmap.width,
+      bitmap.height,
+    );
+
     if (shouldSendUntouched(file.type, file.size, bitmap.width, bitmap.height)) {
       return {
         ok: true,
         image: { blob: file, width: bitmap.width, height: bitmap.height, filename: "block.gif" },
+        stillFromAnimation,
       };
     }
 
@@ -110,14 +141,16 @@ export async function prepareImage(file: File, block: Box, fit: Fit): Promise<Pr
         height: canvas.height,
         filename,
       };
-      if (blob.size <= TARGET_STORED_BYTES) return { ok: true, image: encoded };
+      if (blob.size <= TARGET_STORED_BYTES) return { ok: true, image: encoded, stillFromAnimation };
       if (!smallest || blob.size < smallest.blob.size) smallest = encoded;
     }
 
     // Every rung tried and none landed under the target. The smallest of them
     // is still worth sending if it is under the stored cap itself — the
     // target is headroom, the cap is the rule.
-    if (smallest && smallest.blob.size <= STORED_MAX_BYTES) return { ok: true, image: smallest };
+    if (smallest && smallest.blob.size <= STORED_MAX_BYTES) {
+      return { ok: true, image: smallest, stillFromAnimation };
+    }
     return { ok: false, problem: "image_unencodable" };
   } finally {
     bitmap.close();

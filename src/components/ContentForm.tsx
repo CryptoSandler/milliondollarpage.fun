@@ -81,7 +81,13 @@ export default function ContentForm({
   buyerPubkey: string;
   draft: ContentDraft;
   onDraftChange: (patch: Partial<ContentDraft>) => void;
-  onSubmitted: (order: ClientOrder) => void;
+  /**
+   * Everything is attached and this order is ready for the confirmation
+   * screen. `stillFromAnimation` rides along because the confirmation screen
+   * has to say so BEFORE the payment, and this is the only place that knows:
+   * it comes out of the shrinking, which happens here.
+   */
+  onSubmitted: (order: ClientOrder, notes: { stillFromAnimation: boolean }) => void;
   onFatalError: (message: string) => void;
 }) {
   const [stage, setStage] = useState<Stage>("idle");
@@ -249,7 +255,7 @@ export default function ContentForm({
     setStage("idle");
 
     if (result.ok) {
-      onSubmitted(result.order);
+      onSubmitted(result.order, { stillFromAnimation: prepared.stillFromAnimation });
       return;
     }
 

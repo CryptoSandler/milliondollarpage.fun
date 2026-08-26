@@ -13,10 +13,15 @@ import type { ContentDraft } from "./ContentForm";
  * together, at the fit it will actually use, before the point of no return.
  * Every value shown here is read-only, and the sentence above the button says
  * plainly what pressing it does.
+ *
+ * It is also where anything the page DID to the buyer's picture gets owned up
+ * to. An animated GIF that has to be shrunk comes out a still, and this is the
+ * last screen where that is still free to undo.
  */
 export default function ConfirmationStep({
   order,
   draft,
+  stillFromAnimation,
   confirming,
   confirmError,
   onBack,
@@ -24,6 +29,12 @@ export default function ConfirmationStep({
 }: {
   order: ClientOrder;
   draft: ContentDraft;
+  /**
+   * The buyer picked a GIF that moves, and the copy small enough to store does
+   * not. Said here, before the money, because it is a change to the thing
+   * being bought — and it used to happen silently.
+   */
+  stillFromAnimation: boolean;
   confirming: boolean;
   confirmError: string | null;
   onBack: () => void;
@@ -85,6 +96,15 @@ export default function ConfirmationStep({
           </dd>
         </div>
       </dl>
+
+      {stillFromAnimation && (
+        <p className="rounded-lg border border-hairline-strong bg-card-warm px-3 py-2 text-[15px] leading-relaxed text-ink-soft">
+          <span className="font-bold text-ink">This GIF moves, and the copy on your block will not.</span>{" "}
+          It has to be shrunk to fit inside the rectangle, and shrinking it keeps the first frame and
+          nothing after it — so the board will show it as a still. Nothing has been charged: go back
+          and pick a different picture if that is not what you meant to buy.
+        </p>
+      )}
 
       <p className="text-[14px] leading-relaxed text-body">
         Paying claims these {pixels.toLocaleString("en-US")} pixels for good and charges{" "}

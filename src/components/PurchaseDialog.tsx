@@ -109,6 +109,10 @@ export default function PurchaseDialog({
   const [step, setStep] = useState<Step>("holding");
   const [order, setOrder] = useState<ClientOrder | null>(null);
   const [draft, setDraft] = useState<ContentDraft>(EMPTY_DRAFT);
+  // Said on the confirmation screen, and only there. Recomputed by every
+  // submission, so going back to swap the picture cannot leave a stale notice
+  // about a GIF that is no longer the one being bought.
+  const [stillFromAnimation, setStillFromAnimation] = useState(false);
   const [fatalMessage, setFatalMessage] = useState<string | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   // True when the hold that came back is one this browser already had, rather
@@ -543,8 +547,9 @@ export default function PurchaseDialog({
               buyerPubkey={ownerPubkey}
               draft={draft}
               onDraftChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
-              onSubmitted={(updated) => {
+              onSubmitted={(updated, notes) => {
                 setOrder(updated);
+                setStillFromAnimation(notes.stillFromAnimation);
                 setStep("confirming");
               }}
               onFatalError={setFatalMessage}
@@ -556,6 +561,7 @@ export default function PurchaseDialog({
             <ConfirmationStep
               order={order}
               draft={draft}
+              stillFromAnimation={stillFromAnimation}
               confirming={step === "paying"}
               confirmError={confirmError}
               onBack={() => setStep("describing")}
