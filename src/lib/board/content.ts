@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import sharp from "sharp";
+import { STORED_MAX_BYTES, STORED_MAX_LONG_EDGE } from "./image-plan";
 
 /**
  * Validating the three things a buyer supplies before any money is asked for:
@@ -20,8 +21,12 @@ import sharp from "sharp";
  */
 
 export const CONTENT_LIMITS = {
-  maxBytes: 102_400,
-  maxDimension: 1000,
+  // Both from image-plan.ts, which the browser also reads: the page that
+  // shrinks an upload and the server that accepts it have to be working to
+  // the same two numbers, and a second copy of either is a second number to
+  // forget to change.
+  maxBytes: STORED_MAX_BYTES,
+  maxDimension: STORED_MAX_LONG_EDGE,
   captionMaxLength: 32,
   // The conventional practical URL limit — long enough for any real link,
   // short enough that a caller cannot store a megabyte of text in a column
@@ -29,12 +34,17 @@ export const CONTENT_LIMITS = {
   linkMaxLength: 2048,
 } as const;
 
-// Multipart framing — boundary markers, per-part headers, and field names
-// other than the image itself — adds bytes on top of the image. 8 KiB
-// comfortably covers that overhead. Used by the content route's
-// content-length gate (see content/route.ts) to reject an oversized request
-// before a single byte of the body is read.
-export const MULTIPART_FRAMING_ALLOWANCE_BYTES = 8192;
+// Multipart framing — boundary markers, per-part headers, field names, and
+// the link, caption, fit and wallet address travelling in the same body —
+// adds bytes on top of the image. 16 KiB covers all of it with room to
+// spare, including a link at its own 2048-character cap.
+//
+// This is the REQUEST-level allowance, and it says nothing about what gets
+// stored: the content-length gate in content/route.ts uses it to refuse an
+// oversized request before a single byte of the body is read, while
+// `maxBytes` above is what the stored image itself may weigh. Widening this
+// buys framing margin; it does not widen the upload.
+export const MULTIPART_FRAMING_ALLOWANCE_BYTES = 16_384;
 
 const ACCEPTED_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
