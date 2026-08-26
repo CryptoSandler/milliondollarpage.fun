@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { formatUsdc } from "../lib/board/pricing";
 import { confirmOrder, createHold, releaseHold, type ClientOrder } from "../lib/board/purchase-client";
 import type { Selection } from "../lib/board/selection";
@@ -103,23 +103,22 @@ export default function PurchaseDialog({
   // while it is open is one this dialog itself created.
   const [holdIdsAtOpen] = useState(knownHoldIds);
 
-  const unmounted = useRef(false);
-  useEffect(() => {
-    return () => {
-      unmounted.current = true;
-    };
-  }, []);
-
   const hasLiveHold = order !== null && step !== "done" && fatalMessage === null;
 
   /**
    * Asks for the rectangle, and sorts the answer into the three things it can
    * be: a hold (fresh or resumed), a refusal the buyer can undo, or a refusal
    * they cannot.
+   *
+   * `isLive` says whether the caller still wants the answer. The mount effect
+   * below passes its own effect-local flag; an event handler passes nothing,
+   * because a handler that fired from a live DOM node was called by a mounted
+   * component and React 19 already makes a late `setState` on an unmounted one
+   * a no-op rather than a warning.
    */
-  const attemptHold = useCallback(async () => {
+  const attemptHold = useCallback(async (isLive: () => boolean = () => true) => {
     const result = await call.hold(selection.rect, ownerPubkey);
-    if (unmounted.current) return;
+    if (!isLive()) return;
 
     if (result.ok) {
       setResumed(holdIdsAtOpen.includes(result.order.id));
@@ -150,13 +149,33 @@ export default function PurchaseDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Runs exactly once: a dialog instance holds exactly one rectangle for its
-  // whole life (BoardView mounts a fresh one per purchase attempt). A retry
-  // after a release goes through `attemptHold` directly, not through here.
+  // Asks for the rectangle once: a dialog instance holds exactly one
+  // rectangle for its whole life (BoardView mounts a fresh one per purchase
+  // attempt). A retry after a release goes through `attemptHold` directly,
+  // not through here.
   useEffect(() => {
+    // `cancelled` is declared HERE, inside the effect, so it is FRESH on every
+    // run of it. That is the whole point, and it is the shape HoldTimer's
+    // cleanup already uses.
+    //
+    // React invokes an effect twice in development: mount, cleanup, mount. A
+    // flag kept in a `useRef` survives that cleanup, because a ref survives a
+    // remount — so the second run would start out already reading "gone", and
+    // would discard the answer it is itself waiting for. That is not a
+    // hypothetical: it is the bug this replaced, and it looked like a dialog
+    // stuck forever on "Holding these pixels for you…" with a dash where the
+    // countdown belongs, while the POST it was waiting on had come back 201
+    // and created a real hold.
+    //
+    // Both runs share one request — `singleFlight` sees to that — and only the
+    // run that is still live applies the result.
+    let cancelled = false;
     void (async () => {
-      await attemptHold();
+      await attemptHold(() => !cancelled);
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [attemptHold]);
 
   const requestClose = useCallback(
