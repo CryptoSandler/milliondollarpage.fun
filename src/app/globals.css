@@ -74,9 +74,25 @@ body {
 
 .board-bar--bottom {
   bottom: 0;
-  min-height: var(--bar-bottom-h);
+  /* Fixed, not min-height, and never flex-wrap: BoardView measures this
+     element's real height to keep the canvas viewport from running under it,
+     so a bar that can grow (wrapping to a second row) or shrink is a bar
+     that can drift out of sync with that measurement. Everything inside is
+     laid out to fit this one row down to a phone width instead — see
+     SelectionPanel and InteractionLegend for what gives way first. */
+  height: var(--bar-bottom-h);
   border-top-width: 1px;
-  flex-wrap: wrap;
-  padding-top: 0.5rem;
   padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  overflow: hidden;
+}
+
+/* A horizontally-scrolling row (the preset buttons on a narrow bottom bar)
+   without a scrollbar competing for the row's limited height. */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }

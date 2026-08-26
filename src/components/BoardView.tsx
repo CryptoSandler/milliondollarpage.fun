@@ -134,13 +134,14 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
     return () => clearTimeout(timeout);
   }, [notice]);
 
-  // --bar-top-h / --bar-bottom-h are only the *nominal* heights. The bottom
-  // bar is `flex-wrap`, and on a narrow screen its presets, selection summary
-  // and legend wrap to a second row — its real rendered height then exceeds
-  // the variable. Feeding the nominal number to initialViewport would reserve
-  // too little space and let the bar cover part of the board, so this
-  // measures the two bar elements directly instead of reading the CSS
-  // variables off the root.
+  // --bar-top-h / --bar-bottom-h are nominal heights, kept here as a
+  // matching JS constant for the very first paint. Both bars now have a
+  // fixed `height` rather than `min-height` and neither ever `flex-wrap`
+  // (see globals.css), specifically so this can never desync from them —
+  // but the actual box also depends on env(safe-area-inset-bottom) and rem
+  // sizing that a static JS number can't mirror, so this still measures the
+  // two bar elements directly rather than reading the CSS variables off the
+  // root.
   //
   // This cannot loop: the measured heights only flow into `bars` state, which
   // affects the canvas's viewport (a different element) and the hover card's
@@ -191,18 +192,21 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           onClear={clear}
           onBuy={handleBuy}
         />
-        <label className="flex items-center gap-2 text-xs text-neutral-400">
-          <span>
+        <label className="flex shrink-0 items-center gap-2 text-xs text-neutral-400">
+          <span className="hidden sm:inline">
             Wallet address{" "}
-            <span className="text-neutral-500">(temporary text field — a connected wallet replaces this later)</span>
+            <span className="hidden text-neutral-500 lg:inline">
+              (temporary text field — a connected wallet replaces this later)
+            </span>
           </span>
           <input
             type="text"
             value={buyerPubkey}
             onChange={(event) => setBuyerPubkey(event.target.value)}
-            placeholder="Your wallet address"
+            placeholder="Wallet address"
+            aria-label="Wallet address"
             disabled={purchaseSelection !== null}
-            className="w-40 rounded border border-neutral-700 bg-transparent px-2 py-1 text-xs disabled:opacity-50"
+            className="w-28 shrink-0 rounded border border-neutral-700 bg-transparent px-2 py-1 text-xs disabled:opacity-50 sm:w-40"
           />
         </label>
         <InteractionLegend />
