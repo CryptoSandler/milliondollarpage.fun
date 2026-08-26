@@ -75,30 +75,100 @@ export function clampToBoard(v: Viewport, board: Size): Viewport {
 }
 
 /**
- * The view the board opens on: the whole thing visible, centred in the space
- * the bars leave rather than in the viewport.
+ * COVER, not contain.
  *
- * The bars float over the canvas, so the canvas is the full viewport and the
- * board has to be placed inside a smaller region. `boardToScreen` maps the
- * board's centre to the screen's centre, so landing it in the free region's
- * centre means offsetting centreY by half the difference between the bars.
+ * The board is scaled by WIDTH alone: the rendered board is exactly as wide as
+ * the viewport, board pixels stay square, and whatever height that produces
+ * overflows the free region between the bars and is panned. A 1000×1000 board
+ * in a 1440px-wide window is 1440px tall, and that is correct — the alternative
+ * (fitting the whole thing between the bars) leaves cream margins down both
+ * sides of the artwork, which is the one thing the board must never do.
  *
- * The clamp on scale is not decoration: a viewport shorter than its own bars
- * yields a non-positive scale, and every screen-to-board conversion downstream
- * divides by it.
+ * The clamp on scale is not decoration: a zero-width viewport (the first paint,
+ * before layout has run) yields a scale of zero, and every screen-to-board
+ * conversion downstream divides by it.
  */
 const MIN_INITIAL_SCALE = 0.01;
 
+export function coverScale(screen: Size, board: Size): number {
+  return Math.max(MIN_INITIAL_SCALE, screen.width / board.width);
+}
+
+/**
+ * The range `centreY` may take while the board still covers the free region
+ * between the bars, expressed in board pixels.
+ *
+ * `min` puts the board's TOP edge on the free region's top edge; `max` puts its
+ * BOTTOM edge on the region's bottom edge. When the board is too short to span
+ * the region — a very tall, narrow window — the range inverts (`min > max`),
+ * which is the signal that there is nothing to pan and the board should simply
+ * sit in the middle of the region instead.
+ */
+function verticalPanRange(
+  screen: Size,
+  bars: { top: number; bottom: number },
+  board: Size,
+  scale: number,
+): { min: number; max: number } {
+  const half = screen.height / 2;
+  return {
+    min: (half - bars.top) / scale,
+    max: board.height - (screen.height - bars.bottom - half) / scale,
+  };
+}
+
+/** Where the board sits when it is shorter than the region: centred in it. */
+function centredInRegion(bars: { top: number; bottom: number }, board: Size, scale: number): number {
+  return board.height / 2 - (bars.top - bars.bottom) / (2 * scale);
+}
+
+/**
+ * The view the board opens on.
+ *
+ * Full-width, square pixels, and — when the board overflows the free region,
+ * which is the normal case — anchored to its TOP edge rather than centred.
+ * Top-aligned because the board's origin is (0, 0): a buyer landing mid-board
+ * has no way to tell how much is above them, whereas landing on the top edge
+ * makes the one visible boundary a fact about the artwork and turns every
+ * remaining pixel into a downward scroll. It also matches where the canvas
+ * fills in from, so the busiest part of the board is what greets a visitor.
+ *
+ * When the board is shorter than the region (a tall, narrow window) there is
+ * nothing to anchor to, and it is centred between the bars instead.
+ */
 export function initialViewport(screen: Size, bars: { top: number; bottom: number }, board: Size): Viewport {
-  const usableHeight = Math.max(1, screen.height - bars.top - bars.bottom);
-  const usableWidth = Math.max(1, screen.width);
-  const scale = Math.max(
-    MIN_INITIAL_SCALE,
-    Math.min(usableWidth / board.width, usableHeight / board.height),
-  );
+  const scale = coverScale(screen, board);
+  const { min, max } = verticalPanRange(screen, bars, board, scale);
   return {
     scale,
     centreX: board.width / 2,
-    centreY: board.height / 2 - (bars.top - bars.bottom) / (2 * scale),
+    centreY: min <= max ? min : centredInRegion(bars, board, scale),
   };
+}
+
+/**
+ * Keeps the board covering the viewport while it is panned or zoomed.
+ *
+ * `clampToBoard` above only keeps the centre somewhere on the board, which is
+ * enough to stop the canvas being lost but not enough to stop cream showing
+ * down one side. This is the cover version: pan until an edge of the board
+ * meets the corresponding edge of the free region and no further, in each axis
+ * independently, so no drag can open a margin the design forbids.
+ */
+export function clampToCover(
+  v: Viewport,
+  screen: Size,
+  bars: { top: number; bottom: number },
+  board: Size,
+): Viewport {
+  const halfWidthInBoard = screen.width / 2 / v.scale;
+  const centreX =
+    board.width >= halfWidthInBoard * 2
+      ? Math.min(board.width - halfWidthInBoard, Math.max(halfWidthInBoard, v.centreX))
+      : board.width / 2;
+
+  const { min, max } = verticalPanRange(screen, bars, board, v.scale);
+  const centreY = min <= max ? Math.min(max, Math.max(min, v.centreY)) : centredInRegion(bars, board, v.scale);
+
+  return { ...v, centreX, centreY };
 }
