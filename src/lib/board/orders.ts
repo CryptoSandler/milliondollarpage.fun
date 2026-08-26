@@ -1,4 +1,4 @@
-import { isUniqueViolation, queryOne, violatedConstraint } from "../db";
+import { execute, isUniqueViolation, queryOne, violatedConstraint } from "../db";
 import type { ValidatedContent } from "./content";
 import type { Rect } from "./geometry";
 
@@ -255,3 +255,57 @@ export async function markPaid(id: string, buyerPubkey: string, signature: strin
     throw error;
   }
 }
+
+const RELEASE_REFUSED =
+  "These pixels are paid for and permanently yours, so there is no hold left to let go of.";
+
+/**
+ * Give a held rectangle back before the thirty minutes are up.
+ *
+ * This is the only function in this file that DELETES, which makes it the
+ * most dangerous one here, so it is written to be safe twice over.
+ *
+ * The checks run in the same fixed order every other mutating function uses —
+ * OrderNotFound, then OrderNotYours, then the operation's own precondition —
+ * and for the same reason: a stranger poking at ids must not be able to tell
+ * "that order does not exist" from "that order exists, is somebody else's,
+ * and is already paid". They get 404 for the first and 403 for both of the
+ * others, and learn nothing either way.
+ *
+ * Then the DELETE repeats both preconditions in its own WHERE clause. The
+ * read above is not a lock: between it and this statement the order can be
+ * paid by the buyer's other tab, or swept for expiry. Without `status =
+ * 'reserved'` in the WHERE, that race would delete a PAID block — a sale,
+ * permanent, with money against it. The CHECK constraints in the orders
+ * migration cannot help here, because a DELETE violates none of them. So the
+ * statement itself refuses, and a paid order is undeletable rather than
+ * merely discouraged from being deleted.
+ *
+ * Expiry is deliberately NOT a refusal. `loadOwnedLiveRow` throws
+ * OrderExpired, which is right when a buyer is trying to *do* something with
+ * a hold; here they are trying to get rid of one, and an expired hold is
+ * already what they asked for. It is still deleted rather than left for the
+ * sweep.
+ */
+export async function releaseOwnReservation(id: string, buyerPubkey: string): Promise<void> {
+  const row = await loadRow(id);
+  if (!row) throw new OrderNotFound();
+  if (row.buyer_pubkey !== buyerPubkey) throw new OrderNotYours();
+  if (row.status !== "reserved") throw new OrderNotReady(RELEASE_REFUSED);
+
+  const deleted = await execute(
+    "DELETE FROM blocks WHERE id = $1 AND buyer_pubkey = $2 AND status = 'reserved'",
+    [id, buyerPubkey],
+  );
+  if (deleted === 1) return;
+
+  // Zero rows means the statement's own guard fired: something changed
+  // between the read and the delete. Only the real owner can get this far, so
+  // classifying it costs nothing — the row is either gone (a concurrent sweep
+  // or a second release, and the caller got what they wanted) or no longer a
+  // reservation (paid in another tab, and it must stay).
+  const after = await loadRow(id);
+  if (!after) throw new OrderNotFound();
+  throw new OrderNotReady(RELEASE_REFUSED);
+}
+

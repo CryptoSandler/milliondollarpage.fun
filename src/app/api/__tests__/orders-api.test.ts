@@ -3,7 +3,7 @@ import sharp from "sharp";
 import { execute } from "../../../lib/db";
 import { reserveRect } from "../../../lib/board/reserve";
 import { CONTENT_LIMITS, MULTIPART_FRAMING_ALLOWANCE_BYTES } from "../../../lib/board/content";
-import { GET } from "../orders/[id]/route";
+import { DELETE, GET } from "../orders/[id]/route";
 import { POST as POST_CONTENT } from "../orders/[id]/content/route";
 import { POST as POST_CONFIRM } from "../orders/[id]/confirm/route";
 
@@ -221,5 +221,88 @@ describe("POST /api/orders/:id/confirm", () => {
     } finally {
       if (previous !== undefined) process.env.ALLOW_STUB_PAYMENTS = previous;
     }
+  });
+});
+
+describe("DELETE /api/orders/:id", () => {
+  // Takes the WHOLE body rather than a pubkey, so "no buyerPubkey key at all"
+  // is expressible. A defaulted parameter could not say it: passing undefined
+  // would silently reinstate the default.
+  function releaseRequest(body: unknown = { buyerPubkey: BUYER }): Request {
+    return new Request("http://localhost/api/orders/x", {
+      method: "DELETE",
+      headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.9" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("answers 204 and the rectangle is reservable again immediately", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, BUYER, CALLER);
+
+    const response = await DELETE(releaseRequest(), ctx(held.id));
+    expect(response.status).toBe(204);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+
+    const gone = await GET(new Request("http://localhost/"), ctx(held.id));
+    expect(gone.status).toBe(404);
+
+    const again = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, BUYER, CALLER);
+    expect(again.rect).toEqual({ x: 0, y: 0, w: 20, h: 20 });
+  });
+
+  it("answers 403 to a different pubkey, AND the hold is still there afterwards", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, BUYER, CALLER);
+
+    const response = await DELETE(releaseRequest({ buyerPubkey: STRANGER }), ctx(held.id));
+    expect(response.status).toBe(403);
+
+    // The status code on its own would also be returned by a handler that
+    // deleted the row and then refused. Read the row back.
+    const still = await GET(new Request("http://localhost/"), ctx(held.id));
+    expect(still.status, "a stranger's 403 must not have cost the owner their hold").toBe(200);
+    expect((await still.json()).status).toBe("reserved");
+  });
+
+  it("answers 409 for a paid order, even to the buyer who paid for it", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    await POST_CONTENT(await contentRequest(), ctx(held.id));
+    const paid = await POST_CONFIRM(confirmRequest(), ctx(held.id));
+    expect(paid.status).toBe(200);
+
+    const response = await DELETE(releaseRequest(), ctx(held.id));
+    expect(response.status).toBe(409);
+
+    const survivor = await GET(new Request("http://localhost/"), ctx(held.id));
+    expect(survivor.status).toBe(200);
+    expect((await survivor.json()).status).toBe("paid");
+  });
+
+  it("answers 404 for an id that is not a uuid, rather than 500ing", async () => {
+    const response = await DELETE(releaseRequest(), ctx("not-a-uuid"));
+    expect(response.status).toBe(404);
+  });
+
+  it("answers 404 for a well-formed id that names nothing", async () => {
+    const response = await DELETE(releaseRequest(), ctx("00000000-0000-0000-0000-000000000000"));
+    expect(response.status).toBe(404);
+  });
+
+  it("answers 400 without a wallet address, before looking anything up", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, BUYER, CALLER);
+    for (const body of [{}, { buyerPubkey: "" }, { buyerPubkey: "   " }, { buyerPubkey: 42 }, null]) {
+      const response = await DELETE(releaseRequest(body), ctx(held.id));
+      expect(response.status, JSON.stringify(body)).toBe(400);
+    }
+    const still = await GET(new Request("http://localhost/"), ctx(held.id));
+    expect(still.status).toBe(200);
+  });
+
+  it("answers 400 for a body that is not JSON", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, BUYER, CALLER);
+    const response = await DELETE(
+      new Request("http://localhost/api/orders/x", { method: "DELETE", body: "not json" }),
+      ctx(held.id),
+    );
+    expect(response.status).toBe(400);
   });
 });

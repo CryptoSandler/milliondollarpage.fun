@@ -12,6 +12,7 @@ import {
   attachContent,
   getOrder,
   markPaid,
+  releaseOwnReservation,
 } from "../orders";
 import { reserveRect } from "../reserve";
 
@@ -262,5 +263,68 @@ describe("markPaid", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe("releaseOwnReservation", () => {
+  it("deletes the caller's own hold and puts the rectangle straight back on sale", async () => {
+    const held = await hold(0, 0, 20, 20);
+    await releaseOwnReservation(held.id, BUYER);
+
+    expect(await getOrder(held.id), "the released row must be gone, not merely marked").toBeNull();
+
+    // The point of the whole feature: those pixels are buyable again at once,
+    // not in thirty minutes when the sweep would have got to them.
+    const again = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, BUYER, CALLER);
+    expect(again.rect).toEqual({ x: 0, y: 0, w: 20, h: 20 });
+    expect(again.id).not.toBe(held.id);
+  });
+
+  it("REFUSES a different pubkey, AND leaves the row exactly where it was", async () => {
+    const held = await hold(0, 0, 20, 20);
+    await expect(releaseOwnReservation(held.id, STRANGER)).rejects.toBeInstanceOf(OrderNotYours);
+
+    // Asserting the status alone would pass against a handler that deleted the
+    // row and then threw. The row is what matters.
+    const survivor = await getOrder(held.id);
+    expect(survivor, "a stranger's refusal must not cost the owner their hold").not.toBeNull();
+    expect(survivor!.status).toBe("reserved");
+    expect(survivor!.buyerPubkey).toBe(BUYER);
+  });
+
+  it("refuses a PAID order to its own buyer, and the sale survives", async () => {
+    const held = await hold(0, 0, 20, 20);
+    await attachContent(held.id, BUYER, content());
+    await markPaid(held.id, BUYER, "sig-release-paid");
+
+    await expect(releaseOwnReservation(held.id, BUYER)).rejects.toBeInstanceOf(OrderNotReady);
+
+    const survivor = await getOrder(held.id);
+    expect(survivor, "a paid block is a sale; nothing may delete it").not.toBeNull();
+    expect(survivor!.status).toBe("paid");
+  });
+
+  it("refuses a PAID order to a stranger with the same error a reserved one gets", async () => {
+    // The status a stranger sees must not depend on what state the order is
+    // in, or the refusal itself becomes a way to read somebody else's board.
+    const held = await hold(0, 0, 20, 20);
+    await attachContent(held.id, BUYER, content());
+    await markPaid(held.id, BUYER, "sig-release-paid-stranger");
+
+    await expect(releaseOwnReservation(held.id, STRANGER)).rejects.toBeInstanceOf(OrderNotYours);
+    expect(await getOrder(held.id)).not.toBeNull();
+  });
+
+  it("refuses an id that names no order", async () => {
+    await expect(
+      releaseOwnReservation("00000000-0000-0000-0000-000000000000", BUYER),
+    ).rejects.toBeInstanceOf(OrderNotFound);
+  });
+
+  it("releases an expired hold rather than refusing it — letting go is what expiry does anyway", async () => {
+    const held = await hold(0, 0, 20, 20);
+    await expire(held.id);
+    await releaseOwnReservation(held.id, BUYER);
+    expect(await getOrder(held.id)).toBeNull();
   });
 });
