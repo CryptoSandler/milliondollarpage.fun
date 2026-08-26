@@ -94,7 +94,7 @@ export default function SelectionPanel({
               <span className="hidden sm:inline">Nothing selected yet</span>
             </p>
             <p className="hidden truncate text-[12.5px] text-body sm:block">
-              Drag out a rectangle, or start from one of the sizes.
+              Every sale is whole blocks, ten pixels to a side.
             </p>
           </>
         ) : (
