@@ -81,12 +81,23 @@ user loses a block, no block changes, and no money moves.
 
 ## Enforced conditions
 
-These are not policy, they are code, and they fail the deployment when violated.
+Three of these are conditions the code enforces today. The first is not yet:
+it is written here as the contract the key must arrive under, and it is called
+out as unbuilt so nobody reads this page and believes a guard is standing.
 
-1. **Zero balance.** `startup-check.ts` reads the authority's SOL and USDC
-   balances at boot and refuses to serve if either is non-zero. A funded
-   authority key is treated as a configuration error, because a key that can
-   hold value is a key somebody will eventually be tempted to use for value.
+1. **Zero balance — SPECIFIED, NOT YET BUILT.** There is no `startup-check.ts`
+   in this repository, nothing reads `COLLECTION_AUTHORITY_SECRET`, and no
+   balance is checked anywhere. There is also no key and no minting yet, so
+   there is nothing to check — writing the check now would be code with no
+   caller, which this project's own rules forbid.
+
+   The contract it must satisfy when the key lands: read the authority's SOL
+   and USDC balances at boot and refuse to serve if either is non-zero. A
+   funded authority key is a configuration error, because a key that can hold
+   value is a key somebody will eventually be tempted to use for value.
+
+   **This must ship in the same batch as the key itself.** A key introduced
+   without it is a key with no guard, and this paragraph is the reminder.
 2. **Environment only.** The secret is read from `process.env` and never written
    to disk, never logged, and never included in an error message or a response
    body. It must not appear in `.env.example` beyond its name.

@@ -12,8 +12,11 @@
  * WHAT IS NOT NEGOTIABLE HERE. The STORED payload still has to land under
  * `CONTENT_LIMITS.maxBytes` (100 KiB). That number is not a storage
  * preference: Irys uploads under 100 KiB are free, free uploads are what let
- * the signing key stay permanently unfunded, and the startup check refuses to
- * boot if that key ever holds a balance (SECURITY.md, "Enforced conditions").
+ * the signing key stay permanently unfunded. Note what is and is not true
+ * today: the key does not exist yet, and neither does the boot-time balance
+ * check SECURITY.md specifies for it — that check ships with the key, in the
+ * batch that adds minting. The cap below is what makes it possible to keep
+ * that promise later, so it holds now regardless.
  * So this module aims at `TARGET_STORED_BYTES`, comfortably below the cap,
  * and gives up resolution rather than asking for the cap to move.
  *
