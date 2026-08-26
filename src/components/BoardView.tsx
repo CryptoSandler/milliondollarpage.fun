@@ -290,7 +290,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
               aria-label="Wallet address"
               title="Where the block will be minted. A connected wallet replaces this field later."
               disabled={purchaseSelection !== null}
-              placeholder="Wallet"
+              placeholder="Solana address"
               className={`field-input w-20 shrink-0 py-1.5 text-[12.5px] sm:w-44 ${
                 walletNeeded ? "border-primary" : ""
               }`}
