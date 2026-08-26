@@ -1,7 +1,7 @@
 ---
 version: alpha
 name: milliondollarpage.fun
-description: "A warm cream workshop wall for a permanent pixel canvas on Solana. Ruled graph paper (#f3ede0) holds a 1000x1000 board where every sold block paints solid edge-to-edge and every free cell keeps its ruling, so availability never depends on what colour a buyer uploaded. Olive-brown ink (#2b241c) sets text on the cream instead of punching through it; a single terracotta (#dd4e22) carries every primary action and every selection, and appears nowhere else. Bricolage Grotesque sets display, Karla sets everything else. The board and its blocks have zero radius because they are literally pixels; only the chrome rounds. Two thin fixed bars float over the canvas and never grow to two rows. The system reads as a workshop wall: warm, plainly labelled, and entirely subordinate to the artwork pinned to it."
+description: "A warm cream workshop wall for a permanent pixel canvas on Solana. Ruled graph paper (#f3ede0) holds a 1000x1000 board where every sold block paints solid edge-to-edge and every free cell keeps its ruling, so availability never depends on what colour a buyer uploaded. The whole board is always visible and the page never scrolls; the wall around it is the same cream as the sheet. Olive-brown ink (#2b241c) sets text on the cream instead of punching through it; a single terracotta (#dd4e22) carries every primary action and every selection, and appears nowhere else. Bricolage Grotesque sets display, Karla sets everything else. The board and its blocks have zero radius because they are literally pixels; only the chrome rounds. A thin fixed top bar, and the rest of the controls in a side panel or a bottom bar depending on which shape of window they are in. The system reads as a workshop wall: warm, plainly labelled, and entirely subordinate to the artwork pinned to it."
 colors:
   primary: "#dd4e22"
   primary-pressed: "#b93e19"
@@ -30,7 +30,7 @@ typography:
   numeric:    { fontFamily: Karla, fontSize: 14px, fontWeight: 600, fontVariantNumeric: "tabular-nums" }
   numeric-lg: { fontFamily: "Bricolage Grotesque", fontSize: 20px, fontWeight: 700, fontVariantNumeric: "tabular-nums" }
 rounded: { none: 0, xs: 4px, sm: 8px, md: 12px, lg: 20px, pill: 999px }
-spacing: { bar-top: 52px, bar-bottom: 88px, gutter: 16px, card-padding: 16px }
+spacing: { bar-top: 52px, bar-bottom: 88px, panel-min: 280px, panel-max: 560px, gutter: 16px, card-padding: 16px }
 motion:
   ease: "cubic-bezier(.4,0,.2,1)"
   hover: "160ms"
@@ -64,26 +64,47 @@ the hue and we do not.
 
 ## The board
 
-- **Cover geometry.** The board fills the full viewport width, pixels stay square,
-  and vertical overflow is panned. Never letterboxed, never stretched, no dead
-  margins at the sides. A 1000×1000 board at 1440px wide is 1440px tall and
-  scrolls; that is correct.
+- **Contain, not cover. The whole board is always visible.** It is scaled by
+  its limiting dimension — whichever of the free region's width and height runs
+  out first — so all four corners are on screen at once and pixels stay square.
+  In a landscape window that means it fits by height; in portrait and on phones
+  it fits by width.
+- **The page never scrolls.** Not vertically, not horizontally, at any viewport
+  size. `overflow: hidden` on the document, and the fit maths behind it, so
+  there is nothing being hidden. The one box on the page allowed its own scroll
+  is a side panel too short for its own contents, and only so the Buy button is
+  never clipped.
+- **The wall is the same cream as the sheet.** There is always some background
+  beside the board now, and it is `#f3ede0` — the board's own paper — not a
+  darker ground. The board should read as a sheet pinned to a wall of the same
+  paper, never as a letterboxed image with bars round it. A hairline in the
+  coarse rule's tone draws the sheet's edge, because that is the only thing
+  left saying where the artwork stops.
+- **This reverses an earlier contract, deliberately.** The board used to fill
+  the viewport width and pan its vertical overflow. The owner used that and
+  changed their mind. The leftover width is no longer dead margin, because the
+  controls live in it.
 - **Sharp pixels, never interpolation.** Blocks are bitmaps, and a bitmap that
   has been smoothed is no longer the picture the buyer uploaded. The canvas
   allocates its backing store in real device pixels, draws with nearest-neighbour
   sampling, and the element itself renders pixelated. There is no scale at which
   the artwork is allowed to go soft.
-- **Zoom is a ladder, not a slider.** Every stop puts a board pixel on a whole
-  number of screen pixels. The bottom rung is the cover scale itself — whatever
-  irrational number the viewport width divided by 1000 produces — because
-  anything below it opens the margins the rule above forbids. Above it are the
-  powers of two greater than cover: at 1440px wide, 1.44 then 2, 4, 8, 16; at
-  900px wide, 0.9 then 1, 2, 4, 8, 16. Zooming out from the lowest integer rung
-  lands on cover and stops there. One honest limit: an integer scale is an
-  integer number of *device* pixels only when the device pixel ratio is itself
-  an integer, and on the fractional ratios Windows and some Android phones
-  report the ladder cannot fix that. Nearest-neighbour sampling is what makes
-  the remainder a hard edge instead of a blur.
+- **Zoom is a ladder, not a slider, and it is wheel and pinch only.** Every stop
+  puts a board pixel on a whole number of screen pixels, and every zoom is
+  centred on the pointer. The bottom rung is the **fit scale** — whatever
+  irrational number the free region divided by 1000 produces. **"Zoom 1" means
+  that rung, the whole board on screen, not one screen pixel per board pixel.**
+  Above it are the powers of two greater than fit: in an 848px-tall free region,
+  0.848 then 1, 2, 4, 8, 16; at 1400px, 1.4 then 2, 4, 8, 16. Zooming out from
+  the lowest integer rung lands on fit and stops there. One honest limit: an
+  integer scale is an integer number of *device* pixels only when the device
+  pixel ratio is itself an integer, and on the fractional ratios Windows and
+  some Android phones report the ladder cannot fix that. Nearest-neighbour
+  sampling is what makes the remainder a hard edge instead of a blur.
+- **Panning is something you earn by zooming in.** It is enabled exactly when
+  the scale is above the fit scale. At the bottom rung the whole board is on
+  screen, so a drag has nowhere to take it and a wheel must not move it — and
+  the wheel does not pan at all any more, it zooms.
 - **Two-tier graph paper.** A faint rule every 10 pixels — one block — and a
   stronger rule every 100. The fine tier says where a block would land; the coarse
   tier lets you navigate without counting.
@@ -115,16 +136,38 @@ countdowns — so digits do not jump as they tick.
 Hierarchy comes from size and weight, not from boxes and rules. If something needs
 a border to be found, the layout is wrong first.
 
-## The two bars
+## A bar, and either a panel or a second bar
 
-A thin fixed bar top and bottom, floating over the canvas. Both are **one row and
-one fixed height, always**. They never wrap, because the board's fit maths reads
-their measured height — a bar that can grow is a bar that can cover the board it
-was measured against.
+A thin fixed bar across the top, always: the wordmark and the counters. It is
+**one row and one fixed height**, and never wraps.
 
-What gives way as width shrinks, in order: the interaction legend first, then the
-exact rectangle readout, then the per-preset prices. **Never** the pixel count,
-the total, or the Buy button — those are what the bar is for.
+Everything else — the size presets, the selection readout and price, the wallet
+field, the Buy button, the legend — is one block of controls that the layout
+puts in one of two places. It is one set of controls either way; there is never
+a second Buy button or a second wallet field for a screen reader to find.
+
+**In a landscape window it is a side panel**, a column down the left, filling
+the width the square board does not need. There is **no bottom bar** in that
+layout. Its width is the genuine leftover — `100vw - (100dvh - bar-top)` —
+floored at 280px so the controls stay usable and capped at 560px so an
+ultrawide monitor does not hand five buttons half a screen. Past that cap the
+cream either side of the board is wall, not letterbox.
+
+**In portrait and on phones it is a bottom bar**, one row at one fixed height,
+never wrapping — because the board's fit maths reads its measured box, and a
+bar that can grow to two rows is a bar that can cover the board it was measured
+against.
+
+The crossover is 5:4 and 640px wide, not simply "landscape": the question is
+not which way the window is turned, it is which arrangement leaves a bigger
+board. At 1280×1024 a panel does; at 600×590 it does not.
+
+What gives way as room runs out, in order, in both layouts: **the interaction
+legend first**, then the exact rectangle readout, then the per-preset prices,
+then the wallet's own label, then the gaps. **Never** the pixel count, the
+total, or the Buy button — those are what the controls are for. The bottom bar
+runs out of width; the side panel runs out of height, and sheds the same things
+in the same order.
 
 ## States
 
