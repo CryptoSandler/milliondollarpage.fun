@@ -5,6 +5,7 @@ import { formatUsdc } from "../lib/board/pricing";
 import { confirmOrder, createHold, releaseHold, type ClientOrder } from "../lib/board/purchase-client";
 import type { Selection } from "../lib/board/selection";
 import { singleFlight } from "../lib/board/single-flight";
+import { STEP_CEILING_MS } from "../lib/board/timing";
 import { TimedOut, withTimeout } from "../lib/board/with-timeout";
 import ConfirmationStep from "./ConfirmationStep";
 import ContentForm, { EMPTY_DRAFT, type ContentDraft } from "./ContentForm";
@@ -14,17 +15,6 @@ type Step = "holding" | "describing" | "confirming" | "paying" | "done";
 
 /** Which request ran past its ceiling. Not a step — see `stalled` below. */
 type Stalled = "hold" | "confirm" | "release";
-
-/**
- * How long any one request in this dialog may keep the screen loading.
- *
- * Ten seconds is longer than every one of these calls takes when anything is
- * working at all — the slowest is a reserve, which the exclusion constraint
- * settles in under two — and short enough that a buyer has not yet decided the
- * site is broken and closed the tab. See `with-timeout.ts` for what happens at
- * the ceiling and why it is composed under `singleFlight` rather than over it.
- */
-const STEP_CEILING_MS = 10_000;
 
 /**
  * What the screen says when a request has run past the ceiling.

@@ -2,6 +2,9 @@
 
 import { useEffect, useId, useMemo, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
 import { submitContent, type ClientOrder } from "../lib/board/purchase-client";
+import { singleFlight } from "../lib/board/single-flight";
+import { STEP_CEILING_MS } from "../lib/board/timing";
+import { TimedOut, withTimeout } from "../lib/board/with-timeout";
 
 export type ImageFit = "contain" | "cover";
 
@@ -23,6 +26,21 @@ const IMAGE_MAX_BYTES = 102_400;
 const IMAGE_MAX_DIMENSION = 1000;
 
 type FieldErrors = Partial<Record<"image" | "link" | "caption" | "imageFit", string>>;
+
+/**
+ * What the screen says when the upload has run past `STEP_CEILING_MS`.
+ *
+ * Written the way `PurchaseDialog`'s own stalled messages are: say what
+ * happened, say what is genuinely unknown, and say what pressing the button
+ * will do about it. The thing that makes this request different from the
+ * other three is that the retry is not a special case here — see the
+ * `TimedOut` branch in `handleSubmit` below for why re-asking is always safe.
+ */
+const UPLOAD_STALLED_MESSAGE =
+  "Ten seconds, and the server has not said whether your image, link and caption made it. Ask " +
+  "again: if they already landed, this finds them already there and carries you straight to the " +
+  "next step, and if they did not, this sends them once more. Either way these pixels stay held " +
+  "until the clock above runs out.";
 
 /**
  * The three things a buyer supplies for their rectangle, plus the fit choice.
@@ -56,6 +74,21 @@ export default function ContentForm({
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [dropActive, setDropActive] = useState(false);
+  // The upload ran past its ceiling. Not folded into `formError`: that string
+  // is rendered in the danger styling reserved for an answer the server
+  // actually gave, and a ceiling firing is the one case where no answer came
+  // back at all — see the styling split at the bottom of this file.
+  const [stalled, setStalled] = useState(false);
+
+  // One wrapper per mounted form, built once by the lazy initialiser — the
+  // same identity guarantee `PurchaseDialog` keeps for its own three calls,
+  // and for the same reason: two wrappers here would mean two in-flight
+  // slots, and a double click on Continue would go straight through both.
+  //
+  // The ceiling goes inside the single-flight, not outside it, so the retry
+  // this component offers after a stall is a genuinely new request rather
+  // than the stalled one handed back unfinished. See with-timeout.ts.
+  const [call] = useState(() => singleFlight(withTimeout(submitContent, STEP_CEILING_MS)));
 
   const imageId = useId();
   const linkId = useId();
@@ -89,11 +122,27 @@ export default function ContentForm({
     if (file) onDraftChange({ file });
   }
 
+  /**
+   * Submits the form, and re-submits it exactly the same way on a retry after
+   * a stall — there is no separate retry path.
+   *
+   * That is safe, not just convenient. This is the one request in the whole
+   * purchase flow that ships a body the server cannot fail to accept a second
+   * time: attaching content overwrites whatever is already on the order for
+   * as long as it is still `reserved` (see `attachContent` in orders.ts),
+   * with no guard against doing that twice. So the timed-out attempt this is
+   * retrying is in one of two states — it never reached the server, or it did
+   * and already attached this same image, link and caption — and asking again
+   * lands on ordinary success either way: a fresh attach, or an overwrite by
+   * identical bytes that reads as one from the outside. There is no "already
+   * attached" failure to catch here, because the server does not have one.
+   */
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!draft.file || submitting) return;
 
     setSubmitting(true);
+    setStalled(false);
     setFormError(null);
     setFieldErrors({});
 
@@ -104,7 +153,15 @@ export default function ContentForm({
     form.set("caption", draft.caption);
     form.set("imageFit", draft.imageFit);
 
-    const result = await submitContent(order.id, form);
+    let result;
+    try {
+      result = await call(order.id, form);
+    } catch (error) {
+      if (!(error instanceof TimedOut)) throw error;
+      setSubmitting(false);
+      setStalled(true);
+      return;
+    }
     setSubmitting(false);
 
     if (result.ok) {
@@ -248,6 +305,14 @@ export default function ContentForm({
         <FieldError message={fieldErrors.imageFit} />
       </fieldset>
 
+      {/* Card-warm, like PurchaseDialog's own stalled screen — not the danger
+          styling below, because no answer is not the same as a bad one. */}
+      {stalled && (
+        <p className="rounded-xl border border-hairline-strong bg-card-warm px-4 py-3 text-[13.5px] leading-relaxed text-ink-soft">
+          {UPLOAD_STALLED_MESSAGE}
+        </p>
+      )}
+
       {formError && (
         <p className="rounded-lg border border-[#e2b6a4] bg-danger-soft px-3 py-2 text-[13px] text-ink-soft">
           {formError}
@@ -269,7 +334,7 @@ export default function ContentForm({
           disabled={!ready || submitting}
           className="btn-primary shrink-0 px-5 py-2.5 text-[14px]"
         >
-          {submitting ? "Checking…" : "Continue"}
+          {submitting ? "Checking…" : stalled ? "Ask again" : "Continue"}
         </button>
       </div>
     </form>
