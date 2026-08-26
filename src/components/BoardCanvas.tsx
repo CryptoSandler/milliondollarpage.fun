@@ -4,11 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { LiveBlock } from "../lib/board/blocks";
 import { BLOCK_PIXELS, BOARD_PIXELS, rectContains, type Point } from "../lib/board/geometry";
+import { formatUsdc } from "../lib/board/pricing";
 import { type Selection, selectionFromDrag, selectionFromPreset } from "../lib/board/selection";
 import {
   type Viewport,
   boardToScreen,
-  clampToBoard,
+  clampToCover,
+  coverScale,
   initialViewport,
   isTap,
   panBy,
@@ -16,17 +18,51 @@ import {
   zoomAt,
 } from "../lib/canvas/viewport";
 
-const ZOOM_LIMITS = { min: 0.2, max: 20 };
-const GRID_VISIBLE_ABOVE = 4;
+const MAX_ZOOM = 24;
 
-const COLOURS = {
-  ground: "#12121a",
-  gridLine: "#1f1f2b",
-  sold: "#3a3a4d",
-  soldEdge: "#4c4c63",
-  selection: "#4ade80",
-  collision: "#ef4444",
+/**
+ * The board's own palette, mirroring the tokens in globals.css.
+ *
+ * A canvas cannot read a CSS custom property without a `getComputedStyle` on
+ * every frame, so these are restated here. They are the DESIGN.md values and
+ * nothing else; if one changes there, it changes here.
+ *
+ * THE RULE THAT OUTRANKS THE REST: state never depends on the buyer's colour.
+ * A free cell keeps its ruling; a sold block paints solid and edge to edge and
+ * the ruling vanishes under it. Ruled means available, solid means taken —
+ * true whether the artwork is black, neon, or the same cream as the paper.
+ */
+const PAINT = {
+  ground: "#e9dfc9",
+  paper: "#f3ede0",
+  ruleFine: "rgba(43,36,28,0.10)",
+  ruleCoarse: "#c9baa0",
+  sold: "#443a2c",
+  soldEdge: "#2b241c",
+  chip: "#2b241c",
+  chipText: "#f3ede0",
+  lift: "rgba(255,252,245,0.16)",
+  selection: "#dd4e22",
+  selectionFill: "rgba(221,78,34,0.14)",
+  cream: "#fff8ef",
+  danger: "#a8371f",
+  dangerFill: "rgba(168,55,31,0.16)",
 };
+
+// A caption chip on the board itself needs room to be read; below this it is
+// noise over the artwork and the hover card carries it instead.
+const CHIP_MIN_BLOCK_PX = 96;
+const CHIP_HEIGHT = 18;
+
+// The fine tier is one block. Below roughly six screen pixels per block it
+// stops describing where a block would land and starts being a grey wash.
+const FINE_RULE_VISIBLE_ABOVE = 6 / BLOCK_PIXELS;
+
+// The marching ants: 12px of dash cycle every 600ms, per DESIGN.md. Advancing
+// one pixel every 50ms gets there without redrawing the board sixty times a
+// second for an animation that moves twenty pixels in one.
+const ANTS_INTERVAL_MS = 50;
+const ANTS_DASH = 6;
 
 type Props = {
   blocks: LiveBlock[];
@@ -35,13 +71,13 @@ type Props = {
   perPixel: number;
   bars: { top: number; bottom: number };
   onSelectionChange: (selection: Selection | null) => void;
-  onHoverChange: (block: LiveBlock | null) => void;
+  onHoverChange: (block: LiveBlock | null, at: Point | null) => void;
 };
 
 type Drag =
   | { kind: "none" }
   | { kind: "select"; from: Point; to: Point; movement: number }
-  | { kind: "pan"; last: Point; movement: number };
+  | { kind: "pan"; last: Point; movement: number; from: Point; touch: boolean };
 
 export default function BoardCanvas({
   blocks,
@@ -60,10 +96,20 @@ export default function BoardCanvas({
     initialViewport({ width: 0, height: 0 }, bars, { width: BOARD_PIXELS, height: BOARD_PIXELS }),
   );
   const [resizeTick, setResizeTick] = useState(0);
+  const [ants, setAnts] = useState(0);
+  // Kept here as well as reported upwards, because the lift is painted on the
+  // board and a hover must not depend on a round trip through the parent.
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const drag = useRef<Drag>({ kind: "none" });
   // Set on the first pointerdown or wheel; once the user has zoomed or
   // panned, a resize must not throw that away by re-fitting the board.
   const hasInteracted = useRef(false);
+  // Read by the wheel listener, which is registered once and must not be torn
+  // down and rebuilt every time a bar is re-measured.
+  const barsRef = useRef(bars);
+  useEffect(() => {
+    barsRef.current = bars;
+  }, [bars]);
 
   const publish = useCallback(
     (next: Selection | null) => {
@@ -79,30 +125,43 @@ export default function BoardCanvas({
   // hit-testing (which reads a live getBoundingClientRect) does not.
   //
   // While the user has not interacted yet, a resize also re-fits the board
-  // to the new size — this is what makes the initial fit correct once the
+  // to the new size — this is what makes the initial cover correct once the
   // canvas's real dimensions (and not the zero-size placeholder) are known.
-  // Once they have zoomed or panned, a resize must not discard that.
+  // Once they have zoomed or panned, a resize re-clamps instead: the board
+  // must still cover the new width, but where they had scrolled to stays.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const observer = new ResizeObserver(() => {
       setResizeTick((t) => t + 1);
+      const el = canvasRef.current;
+      if (!el) return;
+      const screen = { width: el.clientWidth, height: el.clientHeight };
+      const board = { width: BOARD_PIXELS, height: BOARD_PIXELS };
       if (!hasInteracted.current) {
-        const el = canvasRef.current;
-        if (el) {
-          setViewport(
-            initialViewport(
-              { width: el.clientWidth, height: el.clientHeight },
-              bars,
-              { width: BOARD_PIXELS, height: BOARD_PIXELS },
-            ),
-          );
-        }
+        setViewport(initialViewport(screen, barsRef.current, board));
+        return;
       }
+      setViewport((v) =>
+        clampToCover(
+          { ...v, scale: Math.max(coverScale(screen, board), v.scale) },
+          screen,
+          barsRef.current,
+          board,
+        ),
+      );
     });
     observer.observe(canvas);
     return () => observer.disconnect();
   }, [bars]);
+
+  // Continuous motion, and the only continuous motion on the page: a drag in
+  // progress is the one thing that genuinely differs from a thing at rest.
+  useEffect(() => {
+    if (!selection) return;
+    const interval = setInterval(() => setAnts((a) => (a + 1) % (ANTS_DASH * 2)), ANTS_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [selection]);
 
   // Draw. Everything here is a rectangle; nothing here decides anything.
   useEffect(() => {
@@ -118,53 +177,120 @@ export default function BoardCanvas({
     canvas.height = height * ratio;
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
 
+    const family = getComputedStyle(canvas).fontFamily || "system-ui, sans-serif";
     const screen = { width, height };
     const origin = boardToScreen(viewport, screen, { x: 0, y: 0 });
     const scale = viewport.scale;
+    const span = BOARD_PIXELS * scale;
 
-    context.fillStyle = COLOURS.ground;
+    context.fillStyle = PAINT.ground;
     context.fillRect(0, 0, width, height);
 
-    context.fillStyle = "#0b0b12";
-    context.fillRect(origin.x, origin.y, BOARD_PIXELS * scale, BOARD_PIXELS * scale);
+    context.fillStyle = PAINT.paper;
+    context.fillRect(origin.x, origin.y, span, span);
 
-    if (scale > GRID_VISIBLE_ABOVE / BLOCK_PIXELS) {
-      context.strokeStyle = COLOURS.gridLine;
-      context.lineWidth = 1;
-      context.beginPath();
-      for (let p = 0; p <= BOARD_PIXELS; p += BLOCK_PIXELS) {
-        const sx = origin.x + p * scale;
-        const sy = origin.y + p * scale;
-        context.moveTo(sx, origin.y);
-        context.lineTo(sx, origin.y + BOARD_PIXELS * scale);
-        context.moveTo(origin.x, sy);
-        context.lineTo(origin.x + BOARD_PIXELS * scale, sy);
-      }
-      context.stroke();
+    // Two-tier graph paper. The fine tier is one block — it says where a
+    // block would land. The coarse tier is a hundred pixels — it is how you
+    // navigate without counting.
+    context.save();
+    context.beginPath();
+    context.rect(origin.x, origin.y, span, span);
+    context.clip();
+
+    if (scale > FINE_RULE_VISIBLE_ABOVE) {
+      drawRules(context, origin, scale, BLOCK_PIXELS, PAINT.ruleFine, screen);
     }
+    drawRules(context, origin, scale, 100, PAINT.ruleCoarse, screen);
+    context.restore();
 
     const colliding = new Set(selection?.collidesWith ?? []);
     for (const block of blocks) {
       const x = origin.x + block.x * scale;
       const y = origin.y + block.y * scale;
-      context.fillStyle = colliding.has(block.id) ? COLOURS.collision : COLOURS.sold;
-      context.fillRect(x, y, block.w * scale, block.h * scale);
-      context.strokeStyle = COLOURS.soldEdge;
+      const w = block.w * scale;
+      const h = block.h * scale;
+      if (x + w < 0 || y + h < 0 || x > width || y > height) continue;
+
+      // Solid, opaque, edge to edge: the ruling disappears underneath, and
+      // that disappearance — not any hue — is what reads as taken.
+      context.fillStyle = PAINT.sold;
+      context.fillRect(x, y, w, h);
+
+      // A hairline ink edge, so two adjacent sold blocks stay separate even
+      // when their artwork is identical.
+      context.strokeStyle = PAINT.soldEdge;
       context.lineWidth = 1;
-      context.strokeRect(x + 0.5, y + 0.5, block.w * scale - 1, block.h * scale - 1);
+      context.strokeRect(x + 0.5, y + 0.5, Math.max(0, w - 1), Math.max(0, h - 1));
+
+      if (colliding.has(block.id)) {
+        context.strokeStyle = PAINT.danger;
+        context.lineWidth = 2;
+        context.strokeRect(x + 1, y + 1, Math.max(0, w - 2), Math.max(0, h - 2));
+        context.fillStyle = PAINT.dangerFill;
+        context.fillRect(x, y, w, h);
+      }
+
+      // Hovered: a soft cream lift and nothing else. No hue changes hands,
+      // because the hue belongs to the buyer.
+      if (block.id === hoveredId) {
+        context.fillStyle = PAINT.lift;
+        context.fillRect(x, y, w, h);
+        context.strokeStyle = PAINT.cream;
+        context.lineWidth = 2;
+        context.strokeRect(x + 1, y + 1, Math.max(0, w - 2), Math.max(0, h - 2));
+      }
+
+      if (block.caption && w >= CHIP_MIN_BLOCK_PX && h >= CHIP_HEIGHT + 8) {
+        drawCaptionChip(context, block.caption, x + 4, y + h - 4 - CHIP_HEIGHT, w - 8, family);
+      }
     }
 
     if (selection) {
       const { rect } = selection;
       const x = origin.x + rect.x * scale;
       const y = origin.y + rect.y * scale;
-      context.strokeStyle = selection.buyable ? COLOURS.selection : COLOURS.collision;
+      const w = rect.w * scale;
+      const h = rect.h * scale;
+      const accent = selection.buyable ? PAINT.selection : PAINT.danger;
+
+      context.fillStyle = selection.buyable ? PAINT.selectionFill : PAINT.dangerFill;
+      context.fillRect(x, y, w, h);
+
+      // Terracotta over an ink core with a cream ring around it, in that
+      // order. Three tones means the outline survives any artwork underneath
+      // without depending on contrast with it — including artwork the same
+      // cream as the paper.
+      context.strokeStyle = PAINT.cream;
+      context.lineWidth = 1;
+      context.strokeRect(x - 4.5, y - 4.5, w + 9, h + 9);
+      context.strokeStyle = PAINT.soldEdge;
+      context.lineWidth = 4;
+      context.strokeRect(x - 2, y - 2, w + 4, h + 4);
+      context.strokeStyle = accent;
       context.lineWidth = 2;
-      context.strokeRect(x, y, rect.w * scale, rect.h * scale);
-      context.fillStyle = selection.buyable ? "rgba(74,222,128,0.18)" : "rgba(239,68,68,0.18)";
-      context.fillRect(x, y, rect.w * scale, rect.h * scale);
+      context.strokeRect(x - 2, y - 2, w + 4, h + 4);
+
+      if (selection.buyable) {
+        context.save();
+        context.strokeStyle = PAINT.cream;
+        context.lineWidth = 2;
+        context.setLineDash([ANTS_DASH, ANTS_DASH]);
+        context.lineDashOffset = -ants;
+        context.strokeRect(x - 2, y - 2, w + 4, h + 4);
+        context.restore();
+      }
+
+      drawSelectionTag(
+        context,
+        `${rect.w} × ${rect.h} · ${formatUsdc(selection.totalBaseUnits)}`,
+        x - 2,
+        y - 2,
+        accent,
+        bars.top,
+        family,
+      );
     }
-  }, [blocks, selection, viewport, resizeTick]);
+  }, [blocks, selection, viewport, resizeTick, ants, hoveredId, bars.top]);
 
   function pointerBoard(event: ReactPointerEvent<HTMLCanvasElement>): Point {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -179,10 +305,19 @@ export default function BoardCanvas({
     hasInteracted.current = true;
     event.currentTarget.setPointerCapture(event.pointerId);
     const at = pointerBoard(event);
+    const touch = event.pointerType === "touch";
 
-    // Shift-drag pans, plain drag selects. The legend says so on screen.
-    if (event.shiftKey || event.button === 1) {
-      drag.current = { kind: "pan", last: { x: event.clientX, y: event.clientY }, movement: 0 };
+    // Shift-drag pans and plain drag selects on a pointer; on a touchscreen,
+    // where there is no shift key and no wheel, a drag pans and a tap places
+    // the selection. The legend in the bottom bar says both.
+    if (event.shiftKey || event.button === 1 || touch) {
+      drag.current = {
+        kind: "pan",
+        last: { x: event.clientX, y: event.clientY },
+        movement: 0,
+        from: at,
+        touch,
+      };
       return;
     }
 
@@ -202,7 +337,9 @@ export default function BoardCanvas({
 
     if (current.kind === "none") {
       const hovered = blocks.find((b) => rectContains(b, at));
-      onHoverChange(hovered ?? null);
+      setHoveredId(hovered?.id ?? null);
+      const rect = event.currentTarget.getBoundingClientRect();
+      onHoverChange(hovered ?? null, hovered ? { x: event.clientX - rect.left, y: event.clientY - rect.top } : null);
       if (activePreset !== null) {
         publish(selectionFromPreset(at, activePreset, blocks, perPixel));
       }
@@ -213,15 +350,18 @@ export default function BoardCanvas({
       const dx = event.clientX - current.last.x;
       const dy = event.clientY - current.last.y;
       drag.current = {
-        kind: "pan",
+        ...current,
         last: { x: event.clientX, y: event.clientY },
         movement: current.movement + Math.abs(dx) + Math.abs(dy),
       };
+      const rect = event.currentTarget.getBoundingClientRect();
       setViewport((v) =>
-        clampToBoard(panBy(v, -dx / v.scale, -dy / v.scale), {
-          width: BOARD_PIXELS,
-          height: BOARD_PIXELS,
-        }),
+        clampToCover(
+          panBy(v, -dx / v.scale, -dy / v.scale),
+          { width: rect.width, height: rect.height },
+          barsRef.current,
+          { width: BOARD_PIXELS, height: BOARD_PIXELS },
+        ),
       );
       return;
     }
@@ -238,11 +378,19 @@ export default function BoardCanvas({
   function onPointerUp(event: ReactPointerEvent<HTMLCanvasElement>) {
     const current = drag.current;
     drag.current = { kind: "none" };
-
-    // A pan that barely moved was a tap on the canvas, not a drag; clear the
-    // selection so tapping empty space deselects rather than doing nothing.
-    if (current.kind === "pan" && isTap(current.movement)) publish(null);
     event.currentTarget.releasePointerCapture(event.pointerId);
+
+    if (current.kind !== "pan" || !isTap(current.movement)) return;
+
+    // A pan that barely moved was a tap. On a touchscreen that is how a
+    // selection gets placed at all, so it selects the block under the finger
+    // (or the active preset around it); with a mouse, shift-clicking empty
+    // board is a deliberate way to clear.
+    if (current.touch) {
+      publish(selectionFromPreset(current.from, activePreset ?? BLOCK_PIXELS, blocks, perPixel));
+      return;
+    }
+    publish(null);
   }
 
   function onPointerCancel(event: ReactPointerEvent<HTMLCanvasElement>) {
@@ -256,9 +404,13 @@ export default function BoardCanvas({
   }
 
   // React 19 registers onWheel as a passive listener, so it can never call
-  // preventDefault(). Without that, scrolling over the board zooms it AND
-  // scrolls the page, carrying the board out of view. A native listener
-  // registered as non-passive is the only way to stop that.
+  // preventDefault(). Without that, scrolling over the board would also scroll
+  // the page. A native listener registered as non-passive is the only way to
+  // stop that.
+  //
+  // The board covers the viewport width and overflows downwards, so a plain
+  // wheel PANS — that is what a scroll means on a page taller than its window.
+  // Zoom is ctrl/cmd-wheel, which is also what a trackpad pinch sends.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -267,10 +419,30 @@ export default function BoardCanvas({
       hasInteracted.current = true;
       event.preventDefault();
       const rect = canvas!.getBoundingClientRect();
-      const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-      const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15;
+      const screen = { width: rect.width, height: rect.height };
+      const board = { width: BOARD_PIXELS, height: BOARD_PIXELS };
+
+      if (event.ctrlKey || event.metaKey) {
+        const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+        const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15;
+        setViewport((v) =>
+          clampToCover(
+            zoomAt(v, screen, point, factor, { min: coverScale(screen, board), max: MAX_ZOOM }),
+            screen,
+            barsRef.current,
+            board,
+          ),
+        );
+        return;
+      }
+
       setViewport((v) =>
-        zoomAt(v, { width: rect.width, height: rect.height }, point, factor, ZOOM_LIMITS),
+        clampToCover(
+          panBy(v, event.deltaX / v.scale, event.deltaY / v.scale),
+          screen,
+          barsRef.current,
+          board,
+        ),
       );
     }
 
@@ -294,7 +466,97 @@ export default function BoardCanvas({
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
-      onPointerLeave={() => onHoverChange(null)}
+      onPointerLeave={() => {
+        setHoveredId(null);
+        onHoverChange(null, null);
+      }}
     />
   );
+}
+
+/** One tier of the graph paper, drawn only across the part of it on screen. */
+function drawRules(
+  context: CanvasRenderingContext2D,
+  origin: Point,
+  scale: number,
+  step: number,
+  colour: string,
+  screen: { width: number; height: number },
+) {
+  context.strokeStyle = colour;
+  context.lineWidth = 1;
+  context.beginPath();
+
+  const startX = Math.max(0, Math.floor(-origin.x / scale / step) * step);
+  for (let p = startX; p <= BOARD_PIXELS; p += step) {
+    const sx = Math.round(origin.x + p * scale) + 0.5;
+    if (sx > screen.width) break;
+    context.moveTo(sx, Math.max(0, origin.y));
+    context.lineTo(sx, Math.min(screen.height, origin.y + BOARD_PIXELS * scale));
+  }
+
+  const startY = Math.max(0, Math.floor((0 - origin.y) / scale / step) * step);
+  for (let p = startY; p <= BOARD_PIXELS; p += step) {
+    const sy = Math.round(origin.y + p * scale) + 0.5;
+    if (sy > screen.height) break;
+    context.moveTo(Math.max(0, origin.x), sy);
+    context.lineTo(Math.min(screen.width, origin.x + BOARD_PIXELS * scale), sy);
+  }
+
+  context.stroke();
+}
+
+/** A caption on its own opaque chip, never as free text over the artwork. */
+function drawCaptionChip(
+  context: CanvasRenderingContext2D,
+  caption: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  family: string,
+) {
+  context.save();
+  context.font = `600 11px ${family}`;
+  const text = truncate(context, caption, maxWidth - 14);
+  const width = Math.min(maxWidth, context.measureText(text).width + 14);
+  context.fillStyle = PAINT.chip;
+  context.fillRect(x, y, width, CHIP_HEIGHT);
+  context.fillStyle = PAINT.chipText;
+  context.textBaseline = "middle";
+  context.fillText(text, x + 7, y + CHIP_HEIGHT / 2 + 0.5);
+  context.restore();
+}
+
+/** The live selection's own tag: what is selected and what it costs, in place. */
+function drawSelectionTag(
+  context: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  colour: string,
+  barTop: number,
+  family: string,
+) {
+  context.save();
+  context.font = `700 11px ${family}`;
+  const width = context.measureText(text).width + 16;
+  const height = 20;
+  // Flips below the selection rather than hiding under the top bar.
+  const above = y - height - 6;
+  const top = above < barTop + 6 ? y + 6 : above;
+  context.fillStyle = colour;
+  context.fillRect(x, top, width, height);
+  context.fillStyle = PAINT.cream;
+  context.textBaseline = "middle";
+  context.fillText(text, x + 8, top + height / 2 + 0.5);
+  context.restore();
+}
+
+function truncate(context: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  if (context.measureText(text).width <= maxWidth) return text;
+  let cut = text;
+  while (cut.length > 1 && context.measureText(`${cut}…`).width > maxWidth) {
+    cut = cut.slice(0, -1);
+  }
+  return `${cut}…`;
 }

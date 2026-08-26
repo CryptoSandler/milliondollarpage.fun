@@ -4,26 +4,27 @@ import { PRESETS, type Selection } from "../lib/board/selection";
 import { formatUsdc } from "../lib/board/pricing";
 
 /**
- * The running total, and the presets beside it.
+ * What you are selecting, what it costs, and the one button that buys it.
  *
  * This has to fit one fixed-height row all the way down to a phone width —
- * see .board-bar--bottom in globals.css, which no longer wraps. Three things
- * never give way, no matter how little room is left: the pixel count, the
- * total price, and the Buy button. Everything else yields first, in order:
- * the preset buttons keep their per-pixel price but move it to a hover
- * tooltip instead of printing it inline, and if they still don't fit they
- * scroll horizontally rather than wrap; the exact rectangle (size and
- * position) and the collision warning hide below `lg`; and the Buy button's
- * own label shortens to just "Buy" below `sm`.
+ * see .board-bar--bottom in globals.css, which never wraps. Three things never
+ * give way, no matter how little room is left: the pixel count, the total
+ * price, and the Buy button. Everything else yields first, in the order
+ * DESIGN.md sets out: the legend (its own component), then the exact rectangle
+ * readout, then the per-preset prices, which move into a tooltip and then
+ * scroll horizontally rather than wrap.
  *
- * The Buy button is disabled rather than hidden when the selection collides:
- * the canvas has already painted the offending blocks red, and this only has
- * to agree with it.
+ * The Buy button is disabled rather than hidden when the rectangle cannot be
+ * bought, and `hint` underneath it always says why — or, when it can be
+ * bought, exactly what pressing it will do.
  */
 export default function SelectionPanel({
   selection,
   perPixel,
   activePreset,
+  canBuy,
+  hint,
+  hintTone,
   onPresetChange,
   onClear,
   onBuy,
@@ -31,70 +32,88 @@ export default function SelectionPanel({
   selection: Selection | null;
   perPixel: number;
   activePreset: number | null;
+  canBuy: boolean;
+  hint: string;
+  /** "refused" paints the hint in danger; the board has painted the offending blocks to match. */
+  hintTone: "info" | "refused";
   onPresetChange: (size: number | null) => void;
   onClear: () => void;
   onBuy: () => void;
 }) {
   return (
-    <section className="flex min-w-0 flex-1 items-center gap-x-3 overflow-hidden">
-      <div className="scrollbar-none flex min-w-0 items-center gap-2 overflow-x-auto">
-        {PRESETS.map((preset) => (
-          <button
-            key={preset.size}
-            type="button"
-            onClick={() => onPresetChange(activePreset === preset.size ? null : preset.size)}
-            title={`${(preset.size * preset.size).toLocaleString("en-US")} px · ${formatUsdc(
-              preset.size * preset.size * perPixel,
-            )}`}
-            className={`shrink-0 rounded border px-2 py-1 text-xs font-medium ${
-              activePreset === preset.size
-                ? "border-emerald-400 bg-emerald-400/10"
-                : "border-neutral-700 hover:border-neutral-500"
-            }`}
-          >
-            {preset.label}
-          </button>
-        ))}
+    <section className="flex min-w-0 flex-1 items-center gap-x-4">
+      <div className="scrollbar-none flex min-w-0 shrink items-center gap-1.5 overflow-x-auto">
         <button
           type="button"
+          aria-pressed={activePreset === null}
           onClick={() => {
             onPresetChange(null);
             onClear();
           }}
-          className="shrink-0 rounded border border-neutral-700 px-2 py-1 text-xs hover:border-neutral-500"
+          className="btn-quiet shrink-0 px-2.5 py-1.5 text-[12.5px]"
         >
           Freehand
         </button>
+        {PRESETS.map((preset) => (
+          <button
+            key={preset.size}
+            type="button"
+            aria-pressed={activePreset === preset.size}
+            onClick={() => onPresetChange(activePreset === preset.size ? null : preset.size)}
+            title={`${(preset.size * preset.size).toLocaleString("en-US")} pixels · ${formatUsdc(
+              preset.size * preset.size * perPixel,
+            )}`}
+            className="btn-quiet tabular shrink-0 px-2.5 py-1.5 text-[12.5px]"
+          >
+            {preset.label}
+          </button>
+        ))}
       </div>
 
-      {selection === null ? (
-        <p className="min-w-0 flex-1 truncate text-xs text-neutral-400">
-          Click a block to select it, or drag to outline a bigger one.
-        </p>
-      ) : (
-        <div className="flex min-w-0 flex-1 items-center gap-x-3">
-          <p className="hidden min-w-0 shrink truncate text-xs text-neutral-500 lg:block">
-            {selection.rect.w} × {selection.rect.h} at ({selection.rect.x}, {selection.rect.y})
-          </p>
-          <p className="shrink-0 whitespace-nowrap text-xs tabular-nums sm:text-sm">
-            {selection.pixels.toLocaleString("en-US")} px ·{" "}
-            <span className="font-semibold">{formatUsdc(selection.totalBaseUnits)}</span>
-          </p>
-          {selection.collidesWith.length > 0 && (
-            <p className="hidden min-w-0 shrink truncate text-xs text-red-400 lg:block">
-              Already taken — the blocks in red are not for sale.
+      <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5">
+        {selection === null ? (
+          <>
+            <p className="truncate font-display text-[17px] font-semibold text-ink">
+              Nothing selected yet
             </p>
-          )}
-          <button
-            type="button"
-            onClick={onBuy}
-            disabled={!selection.buyable}
-            className="shrink-0 whitespace-nowrap rounded bg-emerald-500 px-2 py-1 text-xs font-medium text-black disabled:cursor-not-allowed disabled:bg-neutral-700 disabled:text-neutral-400 sm:px-3 sm:text-sm"
-          >
-            Buy<span className="hidden sm:inline"> these pixels</span>
-          </button>
-        </div>
-      )}
+            <p className="truncate text-[12.5px] text-body">
+              Drag or tap the board to outline a block, or pick a size on the left.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="tabular truncate font-display text-[20px] font-bold leading-tight text-ink">
+              {selection.pixels.toLocaleString("en-US")} pixels
+              <span className="text-hairline-strong"> · </span>
+              {formatUsdc(selection.totalBaseUnits)}
+            </p>
+            <p className="tabular hidden truncate text-[12.5px] text-body lg:block">
+              {selection.rect.w} × {selection.rect.h} at ({selection.rect.x}, {selection.rect.y}) ·{" "}
+              {formatUsdc(perPixel)} per pixel
+            </p>
+          </>
+        )}
+      </div>
+
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        <button
+          type="button"
+          onClick={onBuy}
+          disabled={!canBuy}
+          className="btn-primary shrink-0 whitespace-nowrap px-4 py-2.5 text-[14.5px] sm:px-6"
+        >
+          Buy<span className="hidden sm:inline"> these pixels</span>
+          {selection && canBuy && <span className="tabular"> — {formatUsdc(selection.totalBaseUnits)}</span>}
+        </button>
+        <p
+          className={`max-w-[15rem] truncate text-right text-[11.5px] ${
+            hintTone === "refused" ? "font-semibold text-danger" : "text-body"
+          }`}
+          title={hint}
+        >
+          {hint}
+        </p>
+      </div>
     </section>
   );
 }

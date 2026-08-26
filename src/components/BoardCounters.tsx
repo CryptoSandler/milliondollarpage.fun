@@ -8,6 +8,10 @@ import { formatPercentSold, formatUsdc } from "../lib/board/pricing";
  * Early on, "0.03%" is a more motivating number than "300 sold", and the
  * block count says something neither of the others does: how many separate
  * people are on the board.
+ *
+ * The top bar is one fixed row, so this gives way from the right as the
+ * window narrows: the price goes first, then the block count, then the
+ * percentage. The pixels-sold figure is the one that never leaves.
  */
 export default function BoardCounters({
   stats,
@@ -17,18 +21,23 @@ export default function BoardCounters({
   perPixel: number;
 }) {
   return (
-    <div className="flex min-w-0 items-baseline gap-x-4 overflow-hidden whitespace-nowrap text-sm">
-      <p className="font-semibold tabular-nums">
-        {stats.pixelsSold.toLocaleString("en-US")}
-        <span className="text-neutral-500"> / {TOTAL_PIXELS.toLocaleString("en-US")} pixels sold</span>
+    <div className="flex min-w-0 items-center gap-x-3 overflow-hidden whitespace-nowrap text-[13px] text-body">
+      <p className="tabular">
+        <span className="font-semibold text-ink">{stats.pixelsSold.toLocaleString("en-US")}</span>
+        <span className="text-body"> / {TOTAL_PIXELS.toLocaleString("en-US")} pixels sold</span>
       </p>
-      <p className="tabular-nums text-neutral-400">{formatPercentSold(stats.percentSold)}</p>
-      <p className="hidden tabular-nums text-neutral-400 sm:inline">
-        {stats.blocksSold.toLocaleString("en-US")} blocks
+      <span
+        className="tabular shrink-0 rounded-full bg-primary-soft px-2 py-0.5 text-[12px] font-bold text-primary-pressed"
+        title="Share of the board sold so far"
+      >
+        {formatPercentSold(stats.percentSold)}
+      </span>
+      <span className="hidden text-hairline-strong sm:inline">·</span>
+      <p className="tabular hidden sm:inline">
+        <span className="font-semibold text-ink">{stats.blocksSold.toLocaleString("en-US")}</span> blocks
       </p>
-      <p className="hidden tabular-nums text-neutral-400 sm:inline">
-        Current price {formatUsdc(perPixel)} per pixel
-      </p>
+      <span className="hidden text-hairline-strong md:inline">·</span>
+      <p className="tabular hidden md:inline">{formatUsdc(perPixel)} per pixel</p>
     </div>
   );
 }

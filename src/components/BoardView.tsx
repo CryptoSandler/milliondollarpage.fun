@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BoardStats, LiveBlock } from "../lib/board/blocks";
+import type { Point } from "../lib/board/geometry";
 import type { Selection } from "../lib/board/selection";
 import BoardCanvas from "./BoardCanvas";
 import BoardCounters from "./BoardCounters";
@@ -32,7 +33,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
   const [board, setBoard] = useState(initial);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [activePreset, setActivePreset] = useState<number | null>(null);
-  const [hovered, setHovered] = useState<LiveBlock | null>(null);
+  const [hovered, setHovered] = useState<{ block: LiveBlock; at: Point } | null>(null);
   const [bars, setBars] = useState(FALLBACK_BARS);
   // A plain text field until a real wallet arrives in a later batch: there is
   // no connection and no signature yet, only an address the buyer types in.
@@ -55,6 +56,10 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
     setSelection(null);
   }, []);
 
+  const handleHover = useCallback((block: LiveBlock | null, at: Point | null) => {
+    setHovered(block && at ? { block, at } : null);
+  }, []);
+
   // Re-fetches the same payload the page loaded with. Best-effort: a failed
   // refresh just leaves the board as it was, and the next reservation sweep
   // or page reload catches up.
@@ -68,14 +73,80 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
     }
   }, []);
 
-  const handleBuy = useCallback(() => {
-    if (!selection) return;
-    if (buyerPubkey.trim() === "") {
-      setNotice("Enter a wallet address before buying.");
-      return;
+  const walletMissing = buyerPubkey.trim() === "";
+
+  /**
+   * The one sentence under the Buy button, and whether the button works.
+   *
+   * Every state a buyer can be in gets a specific answer to "why can't I press
+   * this", or — when they can — to "what happens if I do". Nothing here says
+   * WHO holds a rectangle, only that it is held and that holds end.
+   */
+  const buyState = useMemo((): { canBuy: boolean; hint: string; tone: "info" | "refused" } => {
+    if (!selection) {
+      return {
+        canBuy: false,
+        hint: "Pick a size or drag the board to start.",
+        tone: "info",
+      };
     }
+
+    if (selection.collidesWith.length > 0) {
+      const taken = new Set(selection.collidesWith);
+      const hit = board.blocks.filter((block) => taken.has(block.id));
+      const held = hit.filter((block) => block.status === "reserved").length;
+      const sold = hit.length - held;
+
+      if (sold > 0 && held > 0) {
+        return {
+          canBuy: false,
+          hint: `${hit.length} blocks here are sold or on hold — move your selection off the outlined ones.`,
+          tone: "refused",
+        };
+      }
+      if (sold > 0) {
+        return {
+          canBuy: false,
+          hint: `${sold === 1 ? "A block" : `${sold} blocks`} here ${
+            sold === 1 ? "is" : "are"
+          } already sold — move or resize your selection.`,
+          tone: "refused",
+        };
+      }
+      return {
+        canBuy: false,
+        hint: "Part of this is on hold mid-purchase. It reopens within 30 minutes if that purchase is not finished.",
+        tone: "refused",
+      };
+    }
+
+    if (!selection.buyable) {
+      return {
+        canBuy: false,
+        hint: "That rectangle runs off the board. Drag one that sits inside it.",
+        tone: "refused",
+      };
+    }
+
+    if (walletMissing) {
+      return {
+        canBuy: false,
+        hint: "Add your wallet address to buy — the field is on the left.",
+        tone: "info",
+      };
+    }
+
+    return {
+      canBuy: true,
+      hint: "Holds these pixels for 30 minutes while you upload.",
+      tone: "info",
+    };
+  }, [selection, board.blocks, walletMissing]);
+
+  const handleBuy = useCallback(() => {
+    if (!selection || !buyState.canBuy) return;
     setPurchaseSelection(selection);
-  }, [selection, buyerPubkey]);
+  }, [selection, buyState.canBuy]);
 
   // Reservation holds sweep expired rows as a side effect of being created,
   // and a purchase turns a block from reserved to paid — either way the
@@ -130,7 +201,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
 
   useEffect(() => {
     if (!notice) return;
-    const timeout = setTimeout(() => setNotice(null), 6000);
+    const timeout = setTimeout(() => setNotice(null), 8000);
     return () => clearTimeout(timeout);
   }, [notice]);
 
@@ -166,6 +237,8 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
     return () => observer.disconnect();
   }, []);
 
+  const walletNeeded = selection?.buyable === true && walletMissing;
+
   return (
     <div className="board-shell">
       <BoardCanvas
@@ -175,12 +248,20 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
         perPixel={board.pricePerPixelBaseUnits}
         bars={bars}
         onSelectionChange={setSelection}
-        onHoverChange={setHovered}
+        onHoverChange={handleHover}
       />
 
       <header ref={topBarRef} className="board-bar board-bar--top">
-        <h1 className="shrink-0 text-sm font-semibold tracking-tight">milliondollarpage.fun</h1>
-        <BoardCounters stats={board.stats} perPixel={board.pricePerPixelBaseUnits} />
+        <h1 className="flex shrink-0 items-center gap-2 font-display text-[17px] font-bold tracking-tight">
+          <span
+            aria-hidden
+            className="size-2.5 rounded-full bg-primary ring-3 ring-primary-soft"
+          />
+          milliondollarpage.fun
+        </h1>
+        <div className="ml-auto min-w-0">
+          <BoardCounters stats={board.stats} perPixel={board.pricePerPixelBaseUnits} />
+        </div>
       </header>
 
       <div ref={bottomBarRef} className="board-bar board-bar--bottom">
@@ -188,44 +269,69 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           selection={selection}
           perPixel={board.pricePerPixelBaseUnits}
           activePreset={activePreset}
+          canBuy={buyState.canBuy}
+          hint={buyState.hint}
+          hintTone={buyState.tone}
           onPresetChange={changePreset}
           onClear={clear}
           onBuy={handleBuy}
         />
-        <label className="flex shrink-0 items-center gap-2 text-xs text-neutral-400">
-          <span className="hidden sm:inline">
-            Wallet address{" "}
-            <span className="hidden text-neutral-500 lg:inline">
-              (temporary text field — a connected wallet replaces this later)
-            </span>
+
+        <label className="flex shrink-0 flex-col justify-center gap-1">
+          <span className="label-caps flex items-center gap-1.5">
+            Wallet
+            {walletNeeded && <span className="font-bold text-primary-pressed">needed</span>}
           </span>
           <input
             type="text"
             value={buyerPubkey}
             onChange={(event) => setBuyerPubkey(event.target.value)}
-            placeholder="Wallet address"
+            placeholder="Paste your Solana address"
             aria-label="Wallet address"
+            title="Where the block will be minted. A connected wallet replaces this field later."
             disabled={purchaseSelection !== null}
-            className="w-28 shrink-0 rounded border border-neutral-700 bg-transparent px-2 py-1 text-xs disabled:opacity-50 sm:w-40"
+            className={`field-input w-32 shrink-0 py-1.5 text-[12.5px] sm:w-52 ${
+              walletNeeded ? "border-primary" : ""
+            }`}
           />
         </label>
+
         <InteractionLegend />
       </div>
 
       {hovered && (
         <div
-          className="pointer-events-none fixed left-2 rounded bg-black/80 px-3 py-2 text-sm"
-          style={{ bottom: `calc(${bars.bottom}px + 0.5rem)` }}
+          className="floating-card pointer-events-none fixed z-20 w-52 p-3"
+          style={{
+            left: Math.min(hovered.at.x + 14, (typeof window === "undefined" ? 1200 : window.innerWidth) - 224),
+            top: Math.max(bars.top + 8, hovered.at.y - 88),
+          }}
         >
-          <p className="font-medium">{hovered.caption ?? "Untitled block"}</p>
-          <p className="text-neutral-400">{hovered.link}</p>
+          <p className="truncate font-display text-[14.5px] font-bold text-ink">
+            {hovered.block.caption ?? "No caption"}
+          </p>
+          {hovered.block.link && (
+            <p className="truncate text-[12.5px] font-semibold text-primary-pressed">
+              {hovered.block.link}
+            </p>
+          )}
+          <p className="tabular mt-1 text-[11px] text-mute">
+            {hovered.block.w} × {hovered.block.h} at ({hovered.block.x}, {hovered.block.y}) ·{" "}
+            {(hovered.block.w * hovered.block.h).toLocaleString("en-US")} px
+          </p>
+          <p className="mt-1 text-[11px] font-semibold text-body">
+            {hovered.block.status === "reserved"
+              ? "On hold mid-purchase — not for sale right now"
+              : "Sold — not for sale"}
+          </p>
         </div>
       )}
 
       {notice && (
         <div
-          className="pointer-events-none fixed left-1/2 z-30 -translate-x-1/2 rounded bg-black/80 px-4 py-2 text-sm"
-          style={{ top: `calc(${bars.top}px + 0.5rem)` }}
+          className="floating-card fixed left-1/2 z-30 max-w-md -translate-x-1/2 px-4 py-3 text-[13px] text-ink-soft"
+          role="status"
+          style={{ top: `calc(${bars.top}px + 12px)` }}
         >
           {notice}
         </div>
