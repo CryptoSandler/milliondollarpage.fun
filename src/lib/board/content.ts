@@ -52,8 +52,31 @@ const ACCEPTED_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "i
 const IMAGE_FIT_VALUES = new Set(["contain", "cover"]);
 type ImageFit = "contain" | "cover";
 
+/**
+ * Why one field was refused, in two halves.
+ *
+ * `code` is the machine-readable half and it is what the CLIENT reads: the
+ * browser maps a code to a sentence WE wrote, in the dialog's own voice (see
+ * upload-errors.ts). `reason` is the human half, and it is for a developer
+ * reading a response by hand or a log line — it is deliberately never what a
+ * buyer is shown, because a validator's sentence and a buyer's sentence are
+ * written for different readers.
+ */
+export type RejectionCode =
+  | "image_empty"
+  | "image_too_heavy"
+  | "image_unreadable"
+  | "image_wrong_type"
+  | "image_too_large"
+  | "link_too_long"
+  | "link_not_https"
+  | "link_invalid"
+  | "caption_too_long"
+  | "fit_unknown";
+
 export type ContentRejection = {
   field: "image" | "link" | "caption" | "imageFit";
+  code: RejectionCode;
   reason: string;
 };
 
@@ -96,7 +119,7 @@ type ImageValidation =
 
 async function validateImage(bytes: Buffer): Promise<ImageValidation> {
   if (bytes.length === 0) {
-    return { ok: false, rejection: { field: "image", reason: "The image file is empty." } };
+    return { ok: false, rejection: { field: "image", code: "image_empty", reason: "The image file is empty." } };
   }
 
   // Enforced before decoding: a hostile file must never reach sharp.
@@ -105,6 +128,7 @@ async function validateImage(bytes: Buffer): Promise<ImageValidation> {
       ok: false,
       rejection: {
         field: "image",
+        code: "image_too_heavy",
         reason: `The image must be ${CONTENT_LIMITS.maxBytes} bytes or smaller.`,
       },
     };
@@ -114,17 +138,20 @@ async function validateImage(bytes: Buffer): Promise<ImageValidation> {
   try {
     metadata = await sharp(bytes).metadata();
   } catch {
-    return { ok: false, rejection: { field: "image", reason: "That file is not a recognizable image." } };
+    return { ok: false, rejection: { field: "image", code: "image_unreadable", reason: "That file is not a recognizable image." } };
   }
 
   const mime = metadata.format ? `image/${metadata.format}` : undefined;
   if (!mime || !ACCEPTED_MIME_TYPES.has(mime)) {
-    return { ok: false, rejection: { field: "image", reason: "The image must be PNG, JPEG, WebP, or GIF." } };
+    return { ok: false, rejection: { field: "image", code: "image_wrong_type", reason: "The image must be PNG, JPEG, WebP, or GIF." } };
   }
 
   const { width, height } = metadata;
   if (!width || !height) {
-    return { ok: false, rejection: { field: "image", reason: "That file is not a recognizable image." } };
+    return {
+      ok: false,
+      rejection: { field: "image", code: "image_unreadable", reason: "That file is not a recognizable image." },
+    };
   }
 
   if (width > CONTENT_LIMITS.maxDimension || height > CONTENT_LIMITS.maxDimension) {
@@ -132,6 +159,7 @@ async function validateImage(bytes: Buffer): Promise<ImageValidation> {
       ok: false,
       rejection: {
         field: "image",
+        code: "image_too_large",
         reason: `The image must be ${CONTENT_LIMITS.maxDimension}px or smaller on each side.`,
       },
     };
@@ -156,7 +184,7 @@ function validateImageFit(imageFit: string): ImageFitValidation {
   }
   return {
     ok: false,
-    rejection: { field: "imageFit", reason: 'imageFit must be "contain" or "cover".' },
+    rejection: { field: "imageFit", code: "fit_unknown", reason: 'imageFit must be "contain" or "cover".' },
   };
 }
 
@@ -169,6 +197,7 @@ function validateLink(link: string): { rejection: ContentRejection | null; trimm
     return {
       rejection: {
         field: "link",
+        code: "link_too_long",
         reason: `The link must be ${CONTENT_LIMITS.linkMaxLength} characters or fewer.`,
       },
       trimmed,
@@ -178,11 +207,11 @@ function validateLink(link: string): { rejection: ContentRejection | null; trimm
   try {
     const url = new URL(trimmed);
     if (url.protocol !== "https:") {
-      return { rejection: { field: "link", reason: "The link must use https." }, trimmed };
+      return { rejection: { field: "link", code: "link_not_https", reason: "The link must use https." }, trimmed };
     }
     return { rejection: null, trimmed };
   } catch {
-    return { rejection: { field: "link", reason: "That is not a valid link." }, trimmed };
+    return { rejection: { field: "link", code: "link_invalid", reason: "That is not a valid link." }, trimmed };
   }
 }
 
@@ -205,6 +234,7 @@ function validateCaption(caption: string): { rejection: ContentRejection | null;
     return {
       rejection: {
         field: "caption",
+        code: "caption_too_long",
         reason: `The caption must be ${CONTENT_LIMITS.captionMaxLength} characters or fewer.`,
       },
       trimmed,
