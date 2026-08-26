@@ -54,10 +54,11 @@ pictures.
 
 **A block's state must never depend on the colour a buyer uploaded.**
 
-Free cells keep their ruling. Sold blocks paint solid, opaque, edge to edge, and
-the ruling vanishes underneath them. Ruled means available; unruled-and-solid
-means taken; and ruled *back over* a solid block means held rather than sold.
-That holds whether the upload is black, neon, or the same cream as the canvas.
+Free cells keep their ruling. Sold blocks are covered opaquely, edge to edge —
+by the buyer's own bitmap, or by solid ink until it loads — and the ruling
+vanishes underneath them. Ruled means available; unruled means taken; and ruled
+*back over* a covered block means held rather than sold. That holds whether the
+upload is black, neon, transparent, or the same cream as the canvas.
 
 Anything that signals state through hue alone is wrong, because the buyer chooses
 the hue and we do not.
@@ -190,8 +191,9 @@ in the same order.
 | Hovered | A soft cream lift and the caption card, no colour change |
 | Selecting | Terracotta outline with marching ants, so a drag never looks like a placed block |
 | Refused | The offending block outlined in danger, the selection outlined in danger, Buy disabled |
-| Held | Solid like a sale, then ruled back over: a cream hatch at 45° — the one angle neither tier of the graph paper uses — and a broken edge where a sale carries an unbroken ink one. Pencilled in, not inked. A hold **you** started adds the terracotta ring, because it is still your selection and the only held rectangle you can act on. The countdown stays live in the control it gates |
-| Sold | Solid, edge to edge, 1px ink border |
+| Held | Solid like a sale, then ruled back over: a cream hatch at 45° — the one angle neither tier of the graph paper uses — and a broken edge where a sale carries an unbroken ink one. Pencilled in, not inked. A hold **you** started adds the terracotta ring, because it is still your selection and the only held rectangle you can act on. The countdown stays live in the control it gates. A hold never shows its upload: those pixels are unpaid and may never be bought, so there is nothing public to draw |
+| Sold | **The buyer's bitmap, edge to edge, nearest-neighbour at every zoom**, with a 1px ink border. The artwork is the treatment — this is the whole product, and the block is the frame |
+| Sold, loading or missing | Solid, edge to edge, 1px ink border. This is the **fallback**, not the sold treatment: what the rectangle shows in the moment before its bitmap arrives, and what it keeps if the bitmap never does. It goes down under every sold block on every frame, so a sale reads as taken from the first paint. An upload with an alpha channel is composited onto the paper cream rather than onto this, and never onto the ruling — a sold block is never ruled |
 
 ## Motion
 
