@@ -24,8 +24,12 @@ const karla = Karla({
 
 export const metadata: Metadata = {
   title: "milliondollarpage.fun",
+  // The strapline is where a dollar a pixel belongs: it says what the board
+  // IS. What it is not is an offer, so the unit of sale — a 10×10 block at a
+  // hundred dollars — is said in the same breath, and nowhere in the app does
+  // a price stand next to a control implying a single pixel can be bought.
   description:
-    "A 1000×1000 canvas sold ten pixels at a time. Pick a rectangle, pay in USDC on Solana, and the block is yours to keep or resell.",
+    "A million pixels at a dollar each, sold in 10×10 blocks at $100 a block. Pick a rectangle, pay in USDC on Solana, and the block is yours to keep or resell.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

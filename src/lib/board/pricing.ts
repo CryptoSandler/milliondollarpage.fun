@@ -6,6 +6,8 @@
  * number the buyer is asked to send has to be the number we compute.
  */
 
+import { BLOCK_PIXELS } from "./geometry";
+
 export const USDC_DECIMALS = 6;
 
 export function totalBaseUnits(pixels: number, perPixel: number): number {
@@ -55,4 +57,29 @@ export function formatPercentSold(percent: number): string {
   if (rounded === 0) return "<0.01%";
 
   return `${Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(2)}%`;
+}
+
+/**
+ * What one block costs, which is the smallest thing anybody can actually buy.
+ *
+ * A dollar a pixel is the shape of the idea and it is not the shape of the
+ * transaction: pixels are sold ten to a side, so the real unit is a 10×10
+ * block at a hundred dollars. Derived from the per-pixel price rather than
+ * stated, so the two can never drift.
+ */
+export function blockPriceBaseUnits(perPixel: number): number {
+  return totalBaseUnits(BLOCK_PIXELS * BLOCK_PIXELS, perPixel);
+}
+
+/**
+ * The unit of sale, in one sentence, said identically wherever it appears.
+ *
+ * The top bar and the controls both carry it, because a buyer arriving at
+ * either one should not have to work out what they are being offered. It lives
+ * here rather than in a component so there is exactly one wording, and so
+ * "$1 per pixel" cannot creep back into a place where it would read as a
+ * promise that a single pixel is for sale. It is not.
+ */
+export function unitOfSale(perPixel: number): string {
+  return `Sold in ${BLOCK_PIXELS}×${BLOCK_PIXELS} blocks · ${formatUsdc(blockPriceBaseUnits(perPixel))} each`;
 }

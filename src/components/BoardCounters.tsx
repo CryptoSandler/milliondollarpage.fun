@@ -1,6 +1,6 @@
 import { TOTAL_PIXELS } from "../lib/board/geometry";
 import type { BoardStats } from "../lib/board/blocks";
-import { formatPercentSold, formatUsdc } from "../lib/board/pricing";
+import { formatPercentSold, unitOfSale } from "../lib/board/pricing";
 
 /**
  * Three numbers, not one.
@@ -10,8 +10,13 @@ import { formatPercentSold, formatUsdc } from "../lib/board/pricing";
  * people are on the board.
  *
  * The top bar is one fixed row, so this gives way from the right as the
- * window narrows: the price goes first, then the block count, then the
+ * window narrows: the unit of sale goes first, then the block count, then the
  * percentage. The pixels-sold figure is the one that never leaves.
+ *
+ * What the header says about price is the UNIT — "Sold in 10×10 blocks · $100
+ * each" — and never "$1 per pixel". A dollar a pixel is the strapline for what
+ * this board is; it is not an offer, because a single pixel cannot be bought,
+ * and a price beside a counter reads as an offer.
  */
 export default function BoardCounters({
   stats,
@@ -45,7 +50,7 @@ export default function BoardCounters({
         <span className="font-semibold text-ink">{stats.blocksSold.toLocaleString("en-US")}</span> blocks
       </p>
       <span className="hidden text-hairline-strong md:inline">·</span>
-      <p className="tabular hidden md:inline">{formatUsdc(perPixel)} per pixel</p>
+      <p className="tabular hidden md:inline">{unitOfSale(perPixel)}</p>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { PRESETS, type Selection } from "../lib/board/selection";
-import { formatUsdc } from "../lib/board/pricing";
+import { blockPriceBaseUnits, formatUsdc, unitOfSale } from "../lib/board/pricing";
 import type { ZoomState } from "./BoardCanvas";
 
 /**
@@ -94,9 +94,9 @@ export default function SelectionPanel({
             type="button"
             aria-pressed={activePreset === preset.size}
             onClick={() => onPresetChange(activePreset === preset.size ? null : preset.size)}
-            title={`${(preset.size * preset.size).toLocaleString("en-US")} pixels · ${formatUsdc(
-              preset.size * preset.size * perPixel,
-            )}`}
+            title={`${(preset.size * preset.size).toLocaleString("en-US")} pixels — ${(
+              (preset.size * preset.size) / 100
+            ).toLocaleString("en-US")} blocks · ${formatUsdc(preset.size * preset.size * perPixel)}`}
             className="btn-quiet tabular shrink-0 px-2.5 py-1.5 text-[12.5px]"
           >
             {preset.label}
@@ -144,9 +144,10 @@ export default function SelectionPanel({
               <span className="sm:hidden">Nothing yet</span>
               <span className="hidden sm:inline">Nothing selected yet</span>
             </p>
-            <p className="hidden truncate text-[12.5px] text-body sm:block">
-              Every sale is whole blocks, ten pixels to a side.
-            </p>
+            {/* The unit, said the same way the header says it. A buyer who
+                looks here first and a buyer who looks up there first are told
+                the same thing about what is actually for sale. */}
+            <p className="hidden truncate text-[12.5px] text-body sm:block">{unitOfSale(perPixel)}</p>
           </>
         ) : (
           <>
@@ -159,7 +160,7 @@ export default function SelectionPanel({
             </p>
             <p className="tabular hidden truncate text-[12.5px] text-body lg:block">
               {selection.rect.w} × {selection.rect.h} at ({selection.rect.x}, {selection.rect.y}) ·{" "}
-              {formatUsdc(perPixel)} per pixel
+              {formatUsdc(blockPriceBaseUnits(perPixel))} a block
             </p>
           </>
         )}

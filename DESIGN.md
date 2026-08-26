@@ -41,8 +41,10 @@ motion:
 
 # milliondollarpage.fun
 
-A 1000×1000 canvas. One million pixels at a dollar each, sold in 10×10 blocks,
-paid in USDC on Solana. A buyer picks a rectangle, holds it for thirty minutes,
+A 1000×1000 canvas. One million pixels at a dollar each — that is the
+strapline, and it is never the offer, because **the unit of sale is a 10×10
+block at $100** and a single pixel cannot be bought. The header and the
+controls both say so in the same words. Paid in USDC on Solana. A buyer picks a rectangle, holds it for thirty minutes,
 uploads an image with a link and a caption, and the block is theirs — permanently,
 and as an NFT they can resell.
 

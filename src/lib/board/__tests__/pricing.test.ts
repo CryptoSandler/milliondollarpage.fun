@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { formatPercentSold, formatUsdc, totalBaseUnits, USDC_DECIMALS } from "../pricing";
+import {
+  blockPriceBaseUnits,
+  formatPercentSold,
+  formatUsdc,
+  totalBaseUnits,
+  unitOfSale,
+  USDC_DECIMALS,
+} from "../pricing";
 
 describe("totalBaseUnits", () => {
   it("multiplies in base units, never in dollars", () => {
@@ -65,5 +72,32 @@ describe("formatPercentSold", () => {
 
   it("floors a nonzero value too small for two decimals, rather than lying that it is zero", () => {
     expect(formatPercentSold(0.001)).toBe("<0.01%");
+  });
+});
+
+describe("the unit of sale", () => {
+  const DOLLAR = 1_000_000;
+
+  it("prices one block at a hundred dollars when a pixel is a dollar", () => {
+    expect(blockPriceBaseUnits(DOLLAR)).toBe(100_000_000);
+    expect(formatUsdc(blockPriceBaseUnits(DOLLAR))).toBe("$100");
+  });
+
+  it("follows the per-pixel price rather than restating a hundred", () => {
+    expect(blockPriceBaseUnits(2_500_000)).toBe(250_000_000);
+    expect(blockPriceBaseUnits(0)).toBe(0);
+  });
+
+  it("says the unit plainly, and says blocks rather than pixels", () => {
+    expect(unitOfSale(DOLLAR)).toBe("Sold in 10×10 blocks · $100 each");
+  });
+
+  it("never offers a single pixel at a price", () => {
+    // The one sentence the header and the panel both carry. "$1 per pixel"
+    // beside a control reads as an offer, and a single pixel is not for sale.
+    for (const perPixel of [DOLLAR, 2_500_000, 500_000]) {
+      expect(unitOfSale(perPixel)).not.toContain("per pixel");
+      expect(unitOfSale(perPixel)).toContain("10×10 blocks");
+    }
   });
 });
