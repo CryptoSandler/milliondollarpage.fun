@@ -21,6 +21,8 @@
  * what this decides.
  */
 
+import { centredCrop, type Box, type Fit, type Rect } from "./image-fit";
+
 /** A block pixel is stored at four device pixels, so a zoomed block is sharp. */
 export const BLOCK_PIXEL_SCALE = 4;
 
@@ -57,10 +59,12 @@ export const MAX_INPUT_BYTES = 10 * 1024 * 1024;
  */
 export const TARGET_STORED_BYTES = 92_160;
 
-export type Fit = "contain" | "cover";
-
-export type Box = { width: number; height: number };
-export type Rect = { x: number; y: number; width: number; height: number };
+/**
+ * Re-exported from `./image-fit.ts`, which owns them: the fit a buyer picks
+ * decides both what gets STORED (here) and what gets DRAWN (there), and one
+ * vocabulary for both is what keeps those two answers the same answer.
+ */
+export type { Box, Fit, Rect } from "./image-fit";
 
 export type EncodePlan = {
   /** The stored image's own size: the canvas the browser draws into. */
@@ -98,9 +102,14 @@ export function targetBox(block: Box, maxLongEdge = STORED_MAX_LONG_EDGE): Box {
  * the target box. `contain` keeps the whole source and lets the stored image
  * keep the SOURCE's aspect ratio inside the box — it does not paint bars.
  * Baked-in letterboxing would spend the byte budget on background and would
- * hand the board a picture that is not the one the buyer chose; the board
- * already places a contained image inside the block itself. So the
- * letterboxing is real, it just happens where it can still be undone.
+ * hand the board a picture that is not the one the buyer chose.
+ *
+ * THE BARS ARE THE BOARD'S JOB, and this comment used to claim they already
+ * were before anything did them: `BoardCanvas` stretched every bitmap to the
+ * block's shape, so a contained upload stored at its own aspect ratio came
+ * out squashed. `placeImage` in `./image-fit.ts` is what actually keeps that
+ * promise now, and the crop below is `centredCrop` from the same module, so
+ * the shape this stores and the shape the board draws cannot drift apart.
  *
  * Neither fit ever ENLARGES. A source smaller than the box is stored at its
  * own size: upscaling invents detail that is not there and pays bytes for it,
@@ -128,14 +137,6 @@ export function plannedEncode(
 
 function whole(width: number, height: number): Rect {
   return { x: 0, y: 0, width, height };
-}
-
-/** The largest centred rectangle of `box`'s shape that fits in the source. */
-function centredCrop(sourceWidth: number, sourceHeight: number, box: Box): Rect {
-  const aspect = box.width / box.height;
-  const width = Math.min(sourceWidth, sourceHeight * aspect);
-  const height = Math.min(sourceHeight, sourceWidth / aspect);
-  return { x: (sourceWidth - width) / 2, y: (sourceHeight - height) / 2, width, height };
 }
 
 /**

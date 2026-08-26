@@ -5,6 +5,7 @@ import type { PointerEvent as ReactPointerEvent, RefObject } from "react";
 import { blockImageUrl } from "../lib/board/block-image";
 import type { LiveBlock } from "../lib/board/blocks";
 import { BLOCK_PIXELS, BOARD_PIXELS, rectContains, type Point } from "../lib/board/geometry";
+import { placeImage } from "../lib/board/image-fit";
 import { formatUsdc } from "../lib/board/pricing";
 import {
   type Selection,
@@ -473,7 +474,36 @@ export default function BoardCanvas({
         // the one thing this board must never do, and it costs nothing to
         // say so at the only place it could happen.
         context.imageSmoothingEnabled = false;
-        context.drawImage(image, x, y, w, h);
+        // WHERE the bitmap lands is `image-fit.ts`, not this line, and the
+        // nine-argument form is the whole point: the five-argument one this
+        // replaced stretched every image to the block's shape, so a buyer who
+        // chose "Fit inside" for a wide photograph on a square block approved
+        // a letterboxed preview and got a squashed block — permanently, since
+        // the content is immutable once paid. `placeImage` reproduces exactly
+        // what the confirmation preview's CSS `object-fit` does.
+        //
+        // A contained image leaves bars, and the cream fill above has already
+        // covered the whole rectangle, so they are the sheet's own colour and
+        // never the graph ruling — ruled means available.
+        //
+        // `imageFit` is null only for a row from before the board asked, and
+        // "contain" is what the form has always defaulted to.
+        const { source, dest } = placeImage(
+          { width: image.naturalWidth, height: image.naturalHeight },
+          { x, y, width: w, height: h },
+          block.imageFit ?? "contain",
+        );
+        context.drawImage(
+          image,
+          source.x,
+          source.y,
+          source.width,
+          source.height,
+          dest.x,
+          dest.y,
+          dest.width,
+          dest.height,
+        );
       }
 
       // A hairline ink edge, so two adjacent sold blocks stay separate even

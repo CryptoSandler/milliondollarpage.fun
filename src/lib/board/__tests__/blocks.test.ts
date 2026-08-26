@@ -77,8 +77,22 @@ describe("listLiveBlocks", () => {
     await execute(`UPDATE blocks SET buyer_pubkey = 'AWalletNobodyMayLearn'`);
     const [block] = await listLiveBlocks();
     expect(Object.keys(block).sort()).toEqual(
-      ["caption", "h", "hasImage", "id", "link", "status", "w", "x", "y"],
+      ["caption", "h", "hasImage", "id", "imageFit", "link", "status", "w", "x", "y"],
     );
+  });
+
+  /**
+   * The canvas cannot draw an image correctly without knowing which fit its
+   * buyer chose. It used to stretch every bitmap to the block's shape; now it
+   * letterboxes or crops, and this is the column that tells it which.
+   */
+  it("tells the canvas the fit a sold block's buyer chose", async () => {
+    await insert(0, 0, 10, 10, "paid");
+    await execute(`UPDATE blocks SET image_fit = 'contain'`);
+    expect((await listLiveBlocks())[0].imageFit).toBe("contain");
+
+    await execute(`UPDATE blocks SET image_fit = 'cover'`);
+    expect((await listLiveBlocks())[0].imageFit).toBe("cover");
   });
 });
 

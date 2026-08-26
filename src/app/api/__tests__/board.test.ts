@@ -53,6 +53,15 @@ describe("GET /api/board", () => {
     expect(withImage[0]).toMatchObject({ x: 260, y: 490 });
   });
 
+  it("tells the canvas which fit a sold block chose, so it stops squashing people's photographs", async () => {
+    await execute(
+      `INSERT INTO blocks (x, y, w, h, status, image_fit, price_per_pixel_usdc, total_usdc)
+       VALUES (260, 490, 10, 10, 'paid', 'contain', 1000000, 100000000)`,
+    );
+    const body = await (await GET()).json();
+    expect(body.blocks[0].imageFit).toBe("contain");
+  });
+
   it("keeps a held block's upload to itself, however far along it is", async () => {
     await execute(
       `INSERT INTO blocks (x, y, w, h, status, expires_at, price_per_pixel_usdc, total_usdc,

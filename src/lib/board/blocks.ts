@@ -2,6 +2,7 @@ import type { PoolClient } from "pg";
 import { execute, query, queryOne } from "../db";
 import { IMAGE_BEARING_STATUSES, hasPublicImageSql } from "./block-image";
 import { TOTAL_PIXELS } from "./geometry";
+import type { Fit } from "./image-fit";
 
 /**
  * Reading the board.
@@ -27,6 +28,14 @@ export type LiveBlock = {
   status: LiveStatus;
   caption: string | null;
   link: string | null;
+  /**
+   * How the buyer asked their bitmap to meet the block's edges.
+   *
+   * Null for a block with no upload behind it. The canvas needs this to draw
+   * at all: without it, it stretched every image to the block's shape and a
+   * contained one came out squashed for good. See `image-fit.ts`.
+   */
+  imageFit: Fit | null;
   /**
    * Whether `/api/blocks/{id}/image` will answer with a bitmap.
    *
@@ -61,6 +70,7 @@ export const LIVE = `status IN ('reserved', 'paid', 'minted')
 export async function listLiveBlocks(): Promise<LiveBlock[]> {
   return query<LiveBlock>(
     `SELECT id, x, y, w, h, status, caption, link,
+            image_fit AS "imageFit",
             ${hasPublicImageSql(1)} AS "hasImage"
        FROM blocks
       WHERE ${LIVE}

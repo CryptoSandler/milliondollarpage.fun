@@ -58,8 +58,13 @@ export default function ConfirmationStep({
     <div className="mt-3 flex flex-col gap-4">
       <div className="flex gap-4">
         {/* Zero radius, like every block on the board: this is a preview of a
-            rectangle of pixels, not a card. */}
-        <div className="size-28 shrink-0 overflow-hidden border border-ink bg-canvas-deep">
+            rectangle of pixels, not a card. And it is the BLOCK's shape, not a
+            square — a 200×50 rectangle previewed in a square box would show a
+            buyer a letterboxing they are not going to get. */}
+        <div
+          className="shrink-0 overflow-hidden border border-ink bg-canvas-deep"
+          style={previewBox(order.rect)}
+        >
           {previewUrl && (
             // eslint-disable-next-line @next/next/no-img-element -- a local blob: URL.
             <img
@@ -145,6 +150,20 @@ export default function ConfirmationStep({
       </div>
     </div>
   );
+}
+
+/**
+ * The preview's own box: the block's aspect ratio, longest edge seven rem.
+ *
+ * This is half of the promise the board keeps with `placeImage` in
+ * `src/lib/board/image-fit.ts`. The other half is that `object-fit` above and
+ * `placeImage` compute the same rectangle — they do, deliberately — but that
+ * only means anything if both are asked about the same shape. A square box
+ * here would have shown every buyer a square block whatever they bought.
+ */
+function previewBox(rect: { w: number; h: number }): { width: string; height: string } {
+  const longest = Math.max(rect.w, rect.h);
+  return { width: `${(7 * rect.w) / longest}rem`, height: `${(7 * rect.h) / longest}rem` };
 }
 
 function Row({
