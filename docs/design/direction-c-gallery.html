@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>milliondollarpage.fun — Direction C: Gallery grid</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,450;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<!--
+  DIRECTION C — "Gallery grid" — mockup for milliondollarpage.fun
+  Base: Pinterest DESIGN.md (MIT licensed, VoltAgent 2026). The analysis is reused;
+  Pinterest's trade dress is not.
+
+  FOUR DELIBERATE DELTAS FROM PINTEREST
+  1. Accent — not Pinterest Red. #ff6a1a, a warm marigold-orange: unmistakable as
+     the Buy CTA against this cream chrome, and — paired with a white halo ring —
+     stays legible as a selection outline laid over any arbitrary artwork color.
+  2. Typography — not Pin Sans/Inter. Display: Fraunces, a warm humanist serif,
+     carries the wordmark and dialog headings. Text: Inter runs numbers, labels,
+     body. A genuine serif/sans split, which Pinterest's one-family system has not.
+  3. Radii — not a uniform 16px/32px vocabulary. The BOARD is 0px everywhere:
+     blocks are literal pixel rectangles at fixed coordinates, and rounding a
+     coordinate-locked commodity would misrepresent its true shape. CHROME
+     (buttons, inputs, the dialog, caption chips, the hover card) keeps soft radii
+     — 10–20px, pill for buttons — for warmth. Sharp board, soft chrome: the split
+     is deliberate, not an oversight.
+  4. Motion — Pinterest documents none. The Buy button breathes with a slow 2.2s
+     ambient pulse so it reads as alive before anyone touches it, lifts 2px with a
+     shadow bloom on hover, and snaps down on press. The live selection's hatch
+     fill drifts on a 0.6s loop — a cheap "marching ants" read — so an in-progress
+     drag is unmistakably different from a static sold block at a glance.
+
+  REFUSED FROM PINTEREST: Pinterest Red itself; Pin Sans; fully-rounded 16px
+  content cards; masonry (this board is a FIXED grid — coordinates cannot
+  reflow); the "almost no shadow anywhere" rule — here shadow is reserved for
+  things that truly float above the page (the hover card, the purchase dialog)
+  and never touches the board or its blocks.
+
+  THE HARD PROBLEM — empty grid as inventory, not damage: empty cells sit on a
+  warm cream field threaded with a faint two-tier grid (a 10px hairline, a 100px
+  stronger line) — the same graph-paper language a shelf map or seating chart
+  uses for open slots, not the "something's missing" read of plain white. Sold
+  blocks paint clean over that grid with a flat, opaque, edge-to-edge fill — the
+  grid line simply stops existing under them. So "textured, gridded, cream" always
+  reads as available, "solid, edge-to-edge, colored" always reads as taken, and
+  the read never depends on which color a given buyer happened to upload.
+-->
+
+<style>
+  :root{
+    --font-display:'Fraunces', ui-serif, Georgia, serif;
+    --font-text:'Inter', -apple-system, 'Segoe UI', sans-serif;
+
+    --accent:#ff6a1a;
+    --accent-pressed:#e4590f;
+    --accent-soft:#ffe4d1;
+
+    --ink:#211a14;
+    --body:#4c4038;
+    --mute:#8c7f72;
+    --ash:#b7a99a;
+    --hairline:#e9ded0;
+
+    --canvas:#fffaf3;
+    --surface:#fbf5ea;
+    --surface-card:#f5ecdd;
+    --surface-elevated:#ffffff;
+
+    --grid-fine:rgba(33,26,20,0.055);
+    --grid-strong:rgba(33,26,20,0.11);
+
+    --error:#b23a24;
+    --error-soft:#f8e2da;
+    --success:#2f7a52;
+
+    --r-sm:10px;
+    --r-md:16px;
+    --r-lg:22px;
+    --r-pill:999px;
+    --r-board:0px;
+
+    --shadow-float:0 14px 34px rgba(33,26,20,0.18);
+    --shadow-soft:0 4px 14px rgba(33,26,20,0.10);
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; background:var(--surface); color:var(--ink); font-family:var(--font-text); }
+  h1,h2,h3{ margin:0; font-family:var(--font-display); }
+  button{ font-family:inherit; }
+  input{ font-family:inherit; }
+
+  /* ================= SCREEN 1 — the app ================= */
+  .app{
+    height:100vh;
+    min-height:640px;
+    display:flex;
+    flex-direction:column;
+    background:var(--canvas);
+    border-bottom:1px solid var(--hairline);
+  }
+
+  /* ---- top bar ---- */
+  .topbar{
+    flex:0 0 auto;
+    height:60px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:24px;
+    padding:0 22px;
+    background:var(--canvas);
+    border-bottom:1px solid var(--hairline);
+    white-space:nowrap;
+  }
+  .wordmark{
+    font-family:var(--font-display);
+    font-weight:600;
+    font-size:19px;
+    letter-spacing:-0.2px;
+    color:var(--ink);
+    flex:0 0 auto;
+  }
+  .wordmark .dot{ color:var(--accent); }
+  .counters{
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+    font-size:13.5px;
+    color:var(--mute);
+    overflow:hidden;
+  }
+  .counters strong{ color:var(--ink); font-weight:700; }
+  .counters .sep{ color:var(--ash); }
+  .counters .pct{
+    font-weight:700;
+    color:var(--accent-pressed);
+  }
+
+  /* ---- board ---- */
+  .board-viewport{
+    position:relative;
+    flex:1 1 auto;
+    min-height:0;
+    overflow-y:auto;
+    overflow-x:hidden;
+    background:var(--surface);
+  }
+  .board{
+    position:relative;
+    width:100%;
+    aspect-ratio:1/1;
+    background-color:var(--surface);
+    background-image:
+      repeating-linear-gradient(to right, var(--grid-strong) 0 1px, transparent 1px 10%),
+      repeating-linear-gradient(to bottom, var(--grid-strong) 0 1px, transparent 1px 10%),
+      repeating-linear-gradient(to right, var(--grid-fine) 0 1px, transparent 1px 1%),
+      repeating-linear-gradient(to bottom, var(--grid-fine) 0 1px, transparent 1px 1%);
+  }
+  .block{
+    position:absolute;
+    border-radius:var(--r-board);
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,0.16);
+    overflow:hidden;
+    display:flex;
+    align-items:flex-end;
+    z-index:2;
+  }
+  .block-caption{
+    margin:4px;
+    max-width:calc(100% - 8px);
+    padding:3px 7px;
+    border-radius:6px;
+    background:rgba(20,14,8,0.42);
+    color:#fff;
+    font-size:11px;
+    font-weight:600;
+    line-height:1.3;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    backdrop-filter:blur(1px);
+  }
+  .block.tiny .block-caption{ display:none; }
+
+  .selection{
+    position:absolute;
+    z-index:5;
+    border:2px solid var(--accent);
+    box-shadow:0 0 0 2px #fff, 0 0 0 4px var(--accent);
+    background-image:repeating-linear-gradient(45deg, rgba(255,106,26,0.30) 0 6px, rgba(255,106,26,0.06) 6px 12px);
+    background-size:17px 17px;
+    animation:ants 0.6s linear infinite;
+  }
+  @keyframes ants{ from{ background-position:0 0; } to{ background-position:17px 17px; } }
+  .handle{
+    position:absolute;
+    width:9px; height:9px;
+    background:#fff;
+    border:2px solid var(--accent);
+    border-radius:2px;
+  }
+  .handle.tl{ top:-6px; left:-6px; } .handle.tr{ top:-6px; right:-6px; }
+  .handle.bl{ bottom:-6px; left:-6px; } .handle.br{ bottom:-6px; right:-6px; }
+
+  .hover-card{
+    position:absolute;
+    z-index:8;
+    background:var(--surface-elevated);
+    border-radius:var(--r-sm);
+    box-shadow:var(--shadow-float);
+    padding:10px 13px;
+    min-width:180px;
+    pointer-events:none;
+  }
+  .hover-caption{ font-weight:700; font-size:13.5px; color:var(--ink); margin-bottom:2px; }
+  .hover-link{ font-size:12.5px; color:var(--accent-pressed); font-weight:600; }
+  .hover-card::after{
+    content:"";
+    position:absolute; left:22px; bottom:-7px;
+    width:12px; height:12px;
+    background:var(--surface-elevated);
+    transform:rotate(45deg);
+    box-shadow:3px 3px 6px rgba(33,26,20,0.06);
+  }
+
+  .scroll-hint{
+    position:absolute;
+    right:18px; bottom:18px;
+    z-index:9;
+    background:rgba(33,26,20,0.78);
+    color:#fff;
+    font-size:12px;
+    font-weight:600;
+    padding:7px 12px;
+    border-radius:var(--r-pill);
+    display:flex;
+    align-items:center;
+    gap:6px;
+    box-shadow:var(--shadow-soft);
+    transition:opacity 180ms ease;
+  }
+  .scroll-hint.hidden{ opacity:0; pointer-events:none; }
+
+  /* ---- bottom bar ---- */
+  .bottombar{
+    flex:0 0 auto;
+    height:74px;
+    display:flex;
+    align-items:center;
+    gap:18px;
+    padding:0 20px;
+    background:var(--canvas);
+    border-top:1px solid var(--hairline);
+    white-space:nowrap;
+    overflow-x:auto;
+  }
+  .presets{ display:flex; gap:6px; flex:0 0 auto; }
+  .chip{
+    border:1px solid var(--hairline);
+    background:var(--surface-card);
+    color:var(--body);
+    font-size:13px;
+    font-weight:600;
+    padding:8px 13px;
+    border-radius:var(--r-pill);
+    cursor:pointer;
+    transition:background 120ms ease, color 120ms ease, border-color 120ms ease;
+  }
+  .chip:hover{ border-color:var(--ash); }
+  .chip.active{ background:var(--ink); color:#fff; border-color:var(--ink); }
+
+  .legend{
+    flex:1 1 auto;
+    color:var(--mute);
+    font-size:12.5px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .legend b{ color:var(--body); font-weight:600; }
+
+  .total{
+    flex:0 0 auto;
+    text-align:right;
+    font-size:13px;
+    color:var(--mute);
+    line-height:1.25;
+  }
+  .total strong{ display:block; font-size:15px; color:var(--ink); font-weight:800; }
+
+  .buy-btn{
+    flex:0 0 auto;
+    background:var(--accent);
+    color:#fff;
+    border:none;
+    font-size:15px;
+    font-weight:800;
+    letter-spacing:0.1px;
+    padding:15px 24px;
+    border-radius:var(--r-pill);
+    cursor:pointer;
+    box-shadow:0 0 0 0 rgba(255,106,26,0.45);
+    animation:buyPulse 2.2s ease-in-out infinite;
+    transition:transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+  }
+  .buy-btn:hover{ transform:translateY(-2px); box-shadow:0 10px 22px rgba(255,106,26,0.38); }
+  .buy-btn:active{ transform:translateY(0) scale(0.97); }
+  @keyframes buyPulse{
+    0%,100%{ box-shadow:0 0 0 0 rgba(255,106,26,0.45); }
+    50%{ box-shadow:0 0 0 9px rgba(255,106,26,0); }
+  }
+  .buy-btn.disabled{
+    background:var(--ash);
+    color:#fff;
+    animation:none;
+    box-shadow:none;
+    cursor:not-allowed;
+    opacity:0.85;
+  }
+  .buy-btn.disabled:hover{ transform:none; box-shadow:none; }
+
+  /* ================= framed states below ================= */
+  .states{
+    padding:56px 5vw 90px;
+    display:flex;
+    flex-direction:column;
+    gap:56px;
+    max-width:1200px;
+    margin:0 auto;
+  }
+  .state-heading{
+    font-family:var(--font-text);
+    font-size:12.5px;
+    font-weight:800;
+    text-transform:uppercase;
+    letter-spacing:1.2px;
+    color:var(--accent-pressed);
+    margin-bottom:14px;
+  }
+  .state-frame{
+    background:var(--canvas);
+    border:1px solid var(--hairline);
+    border-radius:var(--r-lg);
+    padding:26px;
+  }
+
+  /* refused selection */
+  .refused-layout{ display:flex; gap:28px; align-items:flex-start; }
+  .mini-board-frame{
+    flex:0 0 340px;
+    aspect-ratio:1/1;
+    border-radius:var(--r-md);
+    overflow:hidden;
+    border:1px solid var(--hairline);
+    position:relative;
+    background:var(--surface);
+    background-image:
+      repeating-linear-gradient(to right, var(--grid-strong) 0 1px, transparent 1px 20%),
+      repeating-linear-gradient(to bottom, var(--grid-strong) 0 1px, transparent 1px 20%),
+      repeating-linear-gradient(to right, var(--grid-fine) 0 1px, transparent 1px 5%),
+      repeating-linear-gradient(to bottom, var(--grid-fine) 0 1px, transparent 1px 5%);
+  }
+  .mini-block{ position:absolute; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.16); }
+  .mini-block.offending{
+    outline:3px solid var(--error);
+    outline-offset:-3px;
+    box-shadow:0 0 0 3px rgba(178,58,36,0.18);
+  }
+  .mini-badge{
+    position:absolute;
+    top:-11px; left:8px;
+    background:var(--error);
+    color:#fff;
+    font-size:10.5px;
+    font-weight:800;
+    letter-spacing:0.3px;
+    text-transform:uppercase;
+    padding:3px 8px;
+    border-radius:var(--r-pill);
+  }
+  .mini-selection{
+    position:absolute;
+    z-index:4;
+    border:2px solid var(--error);
+    box-shadow:0 0 0 2px #fff, 0 0 0 4px var(--error);
+    background-image:repeating-linear-gradient(45deg, rgba(178,58,36,0.28) 0 6px, rgba(178,58,36,0.05) 6px 12px);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .mini-selection .no-icon{
+    width:26px; height:26px;
+    border-radius:50%;
+    border:2.5px solid var(--error);
+    position:relative;
+    background:rgba(255,255,255,0.85);
+  }
+  .mini-selection .no-icon::after{
+    content:"";
+    position:absolute; left:3px; top:11px; width:20px; height:2.5px;
+    background:var(--error); transform:rotate(45deg);
+  }
+
+  .refused-right{ flex:1 1 auto; display:flex; flex-direction:column; gap:16px; padding-top:4px; }
+  .refusal-message{
+    background:var(--error-soft);
+    border:1px solid #e6bfae;
+    color:#7a2c17;
+    border-radius:var(--r-md);
+    padding:16px 18px;
+    font-size:14px;
+    line-height:1.55;
+  }
+  .refusal-message b{ display:block; font-size:12px; text-transform:uppercase; letter-spacing:0.6px; color:var(--error); margin-bottom:6px; }
+  .refused-row{ display:flex; align-items:center; gap:16px; }
+  .refused-total{ font-size:13px; color:var(--mute); }
+  .refused-total strong{ display:block; font-size:15px; color:var(--ink); font-weight:800; }
+
+  /* purchase dialog */
+  .dialog-frame{ display:flex; justify-content:center; }
+  .dialog-card{
+    width:100%;
+    max-width:460px;
+    background:var(--surface-elevated);
+    border-radius:var(--r-lg);
+    box-shadow:var(--shadow-float);
+    padding:26px 26px 22px;
+  }
+  .dialog-header{ display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:14px; }
+  .dialog-title{ font-family:var(--font-display); font-size:22px; font-weight:600; color:var(--ink); }
+  .dialog-sub{ font-size:13px; color:var(--mute); margin-top:3px; }
+  .dialog-countdown{ text-align:right; flex:0 0 auto; }
+  .dialog-countdown span{
+    display:block;
+    font-family:var(--font-text);
+    font-variant-numeric:tabular-nums;
+    font-size:20px;
+    font-weight:800;
+    color:var(--accent-pressed);
+  }
+  .dialog-countdown label{ font-size:10.5px; color:var(--mute); text-transform:uppercase; letter-spacing:0.6px; }
+
+  .dialog-confirm-note{
+    background:var(--surface-card);
+    border-radius:var(--r-sm);
+    padding:11px 13px;
+    font-size:12.5px;
+    line-height:1.5;
+    color:var(--body);
+    margin-bottom:16px;
+  }
+  .dialog-confirm-note strong{ color:var(--ink); }
+
+  .dialog-progress{ display:flex; gap:8px; margin-bottom:18px; }
+  .progress-pill{
+    font-size:11px; font-weight:700;
+    padding:5px 10px;
+    border-radius:var(--r-pill);
+    background:var(--surface-card);
+    color:var(--mute);
+    border:1px solid var(--hairline);
+    display:flex; align-items:center; gap:5px;
+  }
+  .progress-pill::before{ content:""; width:6px; height:6px; border-radius:50%; background:var(--ash); }
+  .progress-pill.done{ background:#e5f3ea; color:var(--success); border-color:#bfe3cc; }
+  .progress-pill.done::before{ background:var(--success); }
+  .progress-pill.pending::before{ background:var(--error); }
+  .progress-pill.pending{ color:var(--error); background:var(--error-soft); border-color:#e6bfae; }
+
+  .field{ margin-bottom:16px; }
+  .field label{
+    display:flex; justify-content:space-between; align-items:baseline;
+    font-size:12.5px; font-weight:700; color:var(--ink); margin-bottom:6px;
+  }
+  .field .req{ font-size:10.5px; font-weight:700; color:var(--error); text-transform:uppercase; letter-spacing:0.4px; }
+  .field .counter{ font-size:11px; font-weight:600; color:var(--ash); }
+  .field input{
+    width:100%;
+    border:1px solid var(--hairline);
+    background:var(--surface);
+    border-radius:var(--r-sm);
+    padding:11px 13px;
+    font-size:14px;
+    color:var(--ink);
+    outline:none;
+    transition:border-color 120ms ease, box-shadow 120ms ease;
+  }
+  .field input:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+  .field-warning{ font-size:11.5px; color:var(--mute); margin-top:6px; line-height:1.4; }
+
+  .dropzone{
+    border:1.5px dashed var(--ash);
+    border-radius:var(--r-md);
+    background:var(--surface);
+    padding:22px 14px;
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+    color:var(--mute);
+    cursor:pointer;
+    transition:border-color 120ms ease, background 120ms ease;
+  }
+  .dropzone:hover{ border-color:var(--accent); background:var(--accent-soft); }
+  .dropzone-icon{ font-size:20px; color:var(--accent-pressed); }
+  .dropzone-text{ font-size:12.5px; font-weight:600; }
+
+  .fit-toggle{ display:flex; gap:8px; }
+  .fit-option{
+    flex:1;
+    border:1px solid var(--hairline);
+    background:var(--surface);
+    color:var(--body);
+    font-size:13px; font-weight:600;
+    padding:9px 0;
+    border-radius:var(--r-sm);
+    cursor:pointer;
+  }
+  .fit-option.active{ background:var(--ink); color:#fff; border-color:var(--ink); }
+
+  .dialog-actions{ display:flex; align-items:center; justify-content:space-between; gap:14px; margin-top:6px; }
+  .dialog-cancel{
+    background:none; border:none;
+    color:var(--mute);
+    font-size:13px; font-weight:600;
+    cursor:pointer;
+    text-decoration:underline;
+    text-underline-offset:2px;
+  }
+  .dialog-actions .buy-btn{ padding:13px 20px; font-size:14px; }
+
+  @media (max-width:900px){
+    .refused-layout{ flex-direction:column; }
+    .mini-board-frame{ flex:0 0 auto; width:100%; max-width:340px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= SCREEN 1 : main app ================= -->
+<div class="app">
+
+  <header class="topbar">
+    <div class="wordmark">milliondollarpage<span class="dot">.</span>fun</div>
+    <div class="counters">
+      <span><strong>108,100</strong> / 1,000,000 pixels sold</span>
+      <span class="sep">·</span>
+      <span class="pct">10.81%</span>
+      <span class="sep">·</span>
+      <span>7 blocks</span>
+      <span class="sep">·</span>
+      <span>$1 per pixel</span>
+    </div>
+  </header>
+
+  <div class="board-viewport" id="boardViewport">
+    <div class="board" id="board">
+
+      <div class="block" style="left:0%; top:0%; width:10%; height:10%; background:#c9524f;">
+        <div class="block-caption">Top left corner</div>
+      </div>
+
+      <div class="block" style="left:10%; top:0%; width:10%; height:10%; background:#3d5a70;">
+        <div class="block-caption">Right beside it</div>
+      </div>
+
+      <div class="block" id="wideBanner" style="left:30%; top:12%; width:20%; height:5%; background:#e0a458;">
+        <div class="block-caption">A wide banner</div>
+      </div>
+
+      <div class="block" style="left:64%; top:30%; width:6%; height:6%; background:#6b9080;">
+        <div class="block-caption">A small square</div>
+      </div>
+
+      <div class="block tiny" style="left:20%; top:40%; width:1%; height:1%; background:#a1683a;"></div>
+
+      <div class="block" style="left:80%; top:70%; width:20%; height:30%; background:#4f6d7a;">
+        <div class="block-caption">Bottom right</div>
+      </div>
+
+      <div class="block" style="left:45%; top:60%; width:12%; height:12%; background:#b5657d;">
+        <div class="block-caption">Middle of nowhere</div>
+      </div>
+
+      <div class="selection" style="left:30%; top:30%; width:5%; height:5%;">
+        <span class="handle tl"></span><span class="handle tr"></span>
+        <span class="handle bl"></span><span class="handle br"></span>
+      </div>
+
+      <div class="hover-card" style="left:30%; top:18.4%;">
+        <div class="hover-caption">A wide banner</div>
+        <div class="hover-link">wideformat.studio ↗</div>
+      </div>
+
+    </div>
+    <div class="scroll-hint" id="scrollHint">Scroll to pan ↓</div>
+  </div>
+
+  <footer class="bottombar">
+    <div class="presets">
+      <button class="chip">10×10</button>
+      <button class="chip">20×20</button>
+      <button class="chip">50×50</button>
+      <button class="chip active">100×100</button>
+    </div>
+    <div class="legend"><b>Drag</b> to select · <b>Scroll</b> to pan · <b>Click</b> a block to inspect</div>
+    <div class="total">2,500 pixels<strong>$2,500</strong></div>
+    <button class="buy-btn">Buy this block — $2,500</button>
+  </footer>
+
+</div>
+
+<!-- ================= framed states ================= -->
+<div class="states">
+
+  <section class="state-frame">
+    <div class="state-heading">State — Refused selection</div>
+    <div class="refused-layout">
+      <div class="mini-board-frame">
+        <div class="mini-block offending" style="left:44%; top:20%; width:24%; height:24%; background:#6b9080;">
+          <span class="mini-badge">Sold</span>
+        </div>
+        <div class="mini-block" style="left:0%; top:60%; width:20%; height:40%; background:#4f6d7a;"></div>
+        <div class="mini-selection" style="left:25%; top:8%; width:40%; height:40%;">
+          <span class="no-icon"></span>
+        </div>
+      </div>
+      <div class="refused-right">
+        <div class="refusal-message">
+          <b>Selection unavailable</b>
+          Someone is currently holding part of this rectangle while they finish buying it. It frees up at 10:20 PM if they don't complete the purchase.
+        </div>
+        <div class="refused-row">
+          <div class="refused-total">2,500 pixels<strong>$2,500</strong></div>
+          <button class="buy-btn disabled" disabled>Buy this block — $2,500</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="state-frame">
+    <div class="state-heading">State — Purchase dialog, describe step</div>
+    <div class="dialog-frame">
+      <div class="dialog-card">
+        <div class="dialog-header">
+          <div>
+            <div class="dialog-title">Claim this block</div>
+            <div class="dialog-sub">(300, 300) → 50×50 · 2,500 pixels · $2,500</div>
+          </div>
+          <div class="dialog-countdown">
+            <span id="countdown">24:13</span>
+            <label>hold expires</label>
+          </div>
+        </div>
+
+        <div class="dialog-confirm-note">
+          Confirming charges <strong>$2,500</strong> in SOL, mints this rectangle as an NFT straight to your wallet, and locks in everything below — permanently.
+        </div>
+
+        <div class="dialog-progress">
+          <span class="progress-pill pending">Image missing</span>
+          <span class="progress-pill pending">Link missing</span>
+          <span class="progress-pill done">Fit set</span>
+        </div>
+
+        <div class="field">
+          <label>Image <span class="req">Required</span></label>
+          <div class="dropzone">
+            <div class="dropzone-icon">⤒</div>
+            <div class="dropzone-text">Drop an image, or click to upload</div>
+          </div>
+          <div class="field-warning">Baked into this NFT's metadata forever — this is the final version.</div>
+        </div>
+
+        <div class="field">
+          <label>Link <span class="req">Required</span></label>
+          <input type="text" placeholder="https://your-site.com">
+          <div class="field-warning">Whoever owns this block later inherits this link too.</div>
+        </div>
+
+        <div class="field">
+          <label>Caption <span class="counter" id="capCounter">0 / 32</span></label>
+          <input type="text" id="captionInput" maxlength="32" placeholder="A short line about this block">
+          <div class="field-warning">Permanent once minted — there are no edits after this step.</div>
+        </div>
+
+        <div class="field">
+          <label>Fit</label>
+          <div class="fit-toggle" id="fitToggle">
+            <button class="fit-option active" data-fit="contain">Contain</button>
+            <button class="fit-option" data-fit="cover">Cover</button>
+          </div>
+          <div class="field-warning">Fixed at mint — decide how the image sits inside the rectangle.</div>
+        </div>
+
+        <div class="dialog-actions">
+          <button class="dialog-cancel">Cancel and release the hold</button>
+          <button class="buy-btn disabled dialog-confirm" disabled>Mint this block — $2,500</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  // preset chips toggle
+  document.querySelectorAll('.presets .chip').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      document.querySelectorAll('.presets .chip').forEach(c=>c.classList.remove('active'));
+      chip.classList.add('active');
+    });
+  });
+
+  // fit toggle
+  document.querySelectorAll('#fitToggle .fit-option').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('#fitToggle .fit-option').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  // caption counter
+  const capInput = document.getElementById('captionInput');
+  const capCounter = document.getElementById('capCounter');
+  if (capInput) {
+    capInput.addEventListener('input', ()=>{
+      capCounter.textContent = capInput.value.length + ' / 32';
+    });
+  }
+
+  // countdown ticker (purchase dialog) — starts at 24:13
+  (function(){
+    let remaining = 24*60 + 13;
+    const el = document.getElementById('countdown');
+    setInterval(()=>{
+      if (remaining <= 0) return;
+      remaining--;
+      const m = Math.floor(remaining/60);
+      const s = remaining % 60;
+      el.textContent = m + ':' + String(s).padStart(2,'0');
+    }, 1000);
+  })();
+
+  // scroll hint fades once user has panned near the bottom of the board
+  const viewport = document.getElementById('boardViewport');
+  const hint = document.getElementById('scrollHint');
+  viewport.addEventListener('scroll', ()=>{
+    const atBottom = viewport.scrollTop + viewport.clientHeight >= viewport.scrollHeight - 8;
+    hint.classList.toggle('hidden', atBottom);
+  });
+</script>
+
+</body>
+</html>
