@@ -195,30 +195,36 @@ export function confirmOrder(orderId: string, buyerPubkey: string): Promise<Clie
 export type ReleaseResult = { ok: true } | ClientFailure;
 
 /**
- * Hands a hold back before its thirty minutes are up.
+ * Shows the buyer a sentence and hands back what their wallet signed.
  *
- * Its own function rather than another `send` call: the endpoint answers 204
- * with no body, and `send` exists to turn a body into a `ClientOrder`. Forcing
- * this through it would mean inventing an order that no longer exists.
- *
- * Like everything else here, a network failure comes back as `ok: false`
- * rather than a rejected promise, so a caller never has to wrap it in a
- * try/catch to keep a button from getting stuck.
+ * The message is built by the server (see `src/lib/wallet/signature.ts`) and
+ * passed through untouched: a client that reassembled the format would be a
+ * second copy of it, free to drift from the one the verifier uses.
  */
-export async function releaseHold(orderId: string, buyerPubkey: string): Promise<ReleaseResult> {
-  let response: Response;
-  try {
-    response = await fetch(`/api/orders/${orderId}`, {
-      method: "DELETE",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ buyerPubkey }),
-    });
-  } catch {
-    return { ok: false, status: 0, message: NETWORK_FAILURE_MESSAGE };
-  }
+export type ReleaseSigner = (message: string) => Promise<{ publicKey: string; signature: string }>;
 
-  if (response.ok) return { ok: true };
+/**
+ * The wallet that would sign a release. There isn't one.
+ *
+ * A function rather than a constant so nothing narrows it to `null` at the
+ * point of use, and so wiring a real adapter in later is an edit to one
+ * return statement rather than a hunt through the dialog.
+ *
+ * `buyerPubkey` in this app is a string somebody typed into a field. Nothing
+ * in the browser holds the key behind it, so nothing in the browser can sign
+ * anything, and `releaseHold` says so rather than sending a request the
+ * server will rightly refuse. See DESIGN.md for what the buyer is told.
+ */
+export function releaseSigner(): ReleaseSigner | null {
+  return null;
+}
 
+const NO_WALLET_MESSAGE =
+  "Letting a hold go has to be signed by the wallet that started it, and there is no wallet " +
+  "connected to this page yet.";
+
+/** Reads `problem()`'s body off a failed response, falling back to `fallback`. */
+async function failureFrom(response: Response, fallback: string): Promise<ClientFailure> {
   let body: unknown = null;
   try {
     body = await response.json();
@@ -229,6 +235,78 @@ export async function releaseHold(orderId: string, buyerPubkey: string): Promise
   return {
     ok: false,
     status: response.status,
-    message: typeof record.message === "string" ? record.message : "That hold could not be released.",
+    message: typeof record.message === "string" ? record.message : fallback,
   };
+}
+
+const RELEASE_FALLBACK = "That hold could not be let go.";
+
+type IssuedChallenge = { nonce: string; message: string };
+
+/**
+ * Hands a hold back before its thirty minutes are up.
+ *
+ * Two requests, because releasing is now something you prove rather than
+ * something you claim: ask `/release-challenge` for a single-use sentence,
+ * have the wallet sign it, and present nonce + address + signature to the
+ * DELETE. The address used to travel on its own, which authenticated nobody —
+ * a wallet address is public, so anyone who could read the board could
+ * release anyone's rectangle.
+ *
+ * Its own function rather than another `send` call: the endpoint answers 204
+ * with no body, and `send` exists to turn a body into a `ClientOrder`. Forcing
+ * this through it would mean inventing an order that no longer exists.
+ *
+ * Like everything else here, every failure comes back as `ok: false` rather
+ * than a rejected promise — a network error, a refused signature, and no
+ * wallet at all included — so a caller never has to wrap it in a try/catch to
+ * keep a button from getting stuck. `release-outcome.ts` turns what comes
+ * back into what the buyer is told.
+ */
+export async function releaseHold(
+  orderId: string,
+  sign: ReleaseSigner | null,
+): Promise<ReleaseResult> {
+  if (!sign) return { ok: false, status: 0, message: NO_WALLET_MESSAGE };
+
+  let issued: Response;
+  try {
+    issued = await fetch(`/api/orders/${orderId}/release-challenge`, { method: "POST" });
+  } catch {
+    return { ok: false, status: 0, message: NETWORK_FAILURE_MESSAGE };
+  }
+  if (!issued.ok) return failureFrom(issued, RELEASE_FALLBACK);
+
+  let challenge: IssuedChallenge;
+  try {
+    challenge = (await issued.json()) as IssuedChallenge;
+  } catch {
+    return { ok: false, status: 0, message: RELEASE_FALLBACK };
+  }
+
+  let signed: { publicKey: string; signature: string };
+  try {
+    signed = await sign(challenge.message);
+  } catch {
+    // A wallet throws when the person says no. That is an answer, not a fault.
+    return {
+      ok: false,
+      status: 0,
+      message: "That signature was not given, so the hold was left exactly as it was.",
+    };
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`/api/orders/${orderId}`, {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ nonce: challenge.nonce, ...signed }),
+    });
+  } catch {
+    return { ok: false, status: 0, message: NETWORK_FAILURE_MESSAGE };
+  }
+
+  if (response.ok) return { ok: true };
+  return failureFrom(response, RELEASE_FALLBACK);
 }

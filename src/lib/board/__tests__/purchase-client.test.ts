@@ -284,30 +284,91 @@ describe("createHold, on a 409 carrying your own blocking holds", () => {
 });
 
 describe("releaseHold", () => {
-  it("turns a 204 with no body into ok:true", async () => {
-    const stub = stubFetchOnce(new Response(null, { status: 204 }));
-    const result = await releaseHold("33333333-3333-3333-3333-333333333333", "buyer-pubkey-1");
+  const ORDER = "33333333-3333-3333-3333-333333333333";
+
+  /** Answers each call in turn, so a two-request release can be scripted. */
+  function stubFetchSequence(...responses: Response[]): ReturnType<typeof vi.fn> {
+    const stub = vi.fn();
+    for (const response of responses) stub.mockResolvedValueOnce(response);
+    globalThis.fetch = stub as unknown as typeof fetch;
+    return stub;
+  }
+
+  const challenge = () =>
+    jsonResponse(200, {
+      nonce: "a".repeat(64),
+      message: "milliondollarpage.fun needs to know this wallet is yours.",
+      expiresAt: "2026-08-25T12:02:00.000Z",
+    });
+
+  const signer = vi.fn(async (message: string) => ({
+    publicKey: "OwnerAddress",
+    signature: `signed:${message}`,
+  }));
+
+  it("asks for a challenge, signs it, and presents nonce, address and signature", async () => {
+    const stub = stubFetchSequence(challenge(), new Response(null, { status: 204 }));
+    const result = await releaseHold(ORDER, signer);
     expect(result).toEqual({ ok: true });
 
-    const [url, init] = stub.mock.calls[0];
-    expect(url).toBe("/api/orders/33333333-3333-3333-3333-333333333333");
-    expect(init.method).toBe("DELETE");
-    expect(JSON.parse(init.body as string)).toEqual({ buyerPubkey: "buyer-pubkey-1" });
+    const [challengeUrl, challengeInit] = stub.mock.calls[0];
+    expect(challengeUrl).toBe(`/api/orders/${ORDER}/release-challenge`);
+    expect(challengeInit.method).toBe("POST");
+
+    const [deleteUrl, deleteInit] = stub.mock.calls[1];
+    expect(deleteUrl).toBe(`/api/orders/${ORDER}`);
+    expect(deleteInit.method).toBe("DELETE");
+    expect(JSON.parse(deleteInit.body as string)).toEqual({
+      nonce: "a".repeat(64),
+      publicKey: "OwnerAddress",
+      signature: "signed:milliondollarpage.fun needs to know this wallet is yours.",
+    });
+    // The address alone never travels any more: that was the whole hole.
+    expect(deleteInit.body as string).not.toContain("buyerPubkey");
+  });
+
+  it("refuses without ever calling the network when there is no wallet to sign with", async () => {
+    const stub = stubFetchSequence();
+    const result = await releaseHold(ORDER, null);
+    expect(result.ok).toBe(false);
+    expect((result as { status: number }).status).toBe(0);
+    expect((result as { message: string }).message).toContain("no wallet");
+    expect(stub).not.toHaveBeenCalled();
   });
 
   it("keeps the server's message on a 403", async () => {
-    stubFetchOnce(jsonResponse(403, { message: "That order does not belong to you." }));
-    const result = await releaseHold("33333333-3333-3333-3333-333333333333", "someone-else");
-    expect(result).toEqual({
-      ok: false,
-      status: 403,
-      message: "That order does not belong to you.",
+    stubFetchSequence(challenge(), jsonResponse(403, { message: "That was not signed by the wallet." }));
+    const result = await releaseHold(ORDER, signer);
+    expect(result).toEqual({ ok: false, status: 403, message: "That was not signed by the wallet." });
+  });
+
+  it("keeps the server's message and status on a 409, which is how a paid order answers", async () => {
+    stubFetchSequence(challenge(), jsonResponse(409, { message: "These pixels are paid for." }));
+    const result = await releaseHold(ORDER, signer);
+    expect(result).toEqual({ ok: false, status: 409, message: "These pixels are paid for." });
+  });
+
+  it("passes a refused challenge straight back, without asking for a signature", async () => {
+    stubFetchSequence(jsonResponse(404, { message: "That order does not exist." }));
+    const refusing = vi.fn();
+    const result = await releaseHold(ORDER, refusing);
+    expect(result).toEqual({ ok: false, status: 404, message: "That order does not exist." });
+    expect(refusing).not.toHaveBeenCalled();
+  });
+
+  it("sends no DELETE when the person refuses to sign", async () => {
+    const stub = stubFetchSequence(challenge());
+    const result = await releaseHold(ORDER, async () => {
+      throw new Error("User rejected the request.");
     });
+    expect(result.ok).toBe(false);
+    expect((result as { status: number }).status).toBe(0);
+    expect(stub).toHaveBeenCalledTimes(1);
   });
 
   it("becomes ok:false, not a rejected promise, when the network throws", async () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new TypeError("Failed to fetch")) as unknown as typeof fetch;
-    const result = await releaseHold("33333333-3333-3333-3333-333333333333", "buyer-pubkey-1");
+    const result = await releaseHold(ORDER, signer);
     expect(result.ok).toBe(false);
     expect((result as { status: number }).status).toBe(0);
   });

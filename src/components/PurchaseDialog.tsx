@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { formatUsdc } from "../lib/board/pricing";
-import { confirmOrder, createHold, releaseHold, type ClientOrder } from "../lib/board/purchase-client";
+import {
+  confirmOrder,
+  createHold,
+  releaseHold,
+  releaseSigner,
+  type ClientOrder,
+} from "../lib/board/purchase-client";
+import { tellRelease } from "../lib/board/release-outcome";
 import type { Selection } from "../lib/board/selection";
 import { singleFlight } from "../lib/board/single-flight";
 import { STEP_CEILING_MS } from "../lib/board/timing";
@@ -43,6 +50,26 @@ const STALLED_MESSAGE: Record<Stalled, string> = {
 
 /** One label, because the answer to all three is the same: ask the server again. */
 const RETRY_LABEL = "Ask again";
+
+/**
+ * Why the button that hands a hold back is greyed out.
+ *
+ * Releasing a rectangle is signed by the wallet that holds it now, because
+ * the address on its own proved nothing — it is public, and anyone reading
+ * the board could have used it to let go of somebody else's pixels. This page
+ * has a wallet ADDRESS, typed into a field, and no wallet: there is no key
+ * here and nothing that can sign. So the button is off, and says why, rather
+ * than looking live and failing when it is pressed.
+ *
+ * Temporary, and it costs the buyer nothing they cannot get back: an
+ * abandoned hold expires by itself, and a hold they still want is theirs to
+ * carry on with straight off the board.
+ */
+const NO_WALLET_TO_SIGN =
+  "Handing a hold back is signed by the wallet that started it, and there is no wallet connected " +
+  "here yet — only an address typed into a field, which proves nothing. These pixels go back on " +
+  "the board by themselves when the thirty minutes are up, and until then you can pick the hold " +
+  "up again from the board and carry on with it.";
 
 /**
  * The step machine a buyer walks through: holding -> describing -> confirming
@@ -154,6 +181,12 @@ export default function PurchaseDialog({
 
   const hasLiveHold = order !== null && step !== "done" && fatalMessage === null;
 
+  // Whether anything on this page can sign a release challenge at all. False
+  // for the whole of batch 3 — see NO_WALLET_TO_SIGN above — and read at
+  // render time so the day a wallet adapter lands, the button turns itself
+  // back on and the explanation beside it disappears.
+  const canSign = releaseSigner() !== null;
+
   /**
    * Asks for the rectangle, and sorts the answer into the three things it can
    * be: a hold (fresh or resumed), a refusal the buyer can undo, or a refusal
@@ -253,19 +286,30 @@ export default function PurchaseDialog({
     };
   }, [attemptHold]);
 
+  /**
+   * Closes the dialog, letting the hold go on the way out — and then says what
+   * actually happened to it.
+   *
+   * The prompt is written for a buyer who does not yet know which of the two
+   * situations they are in, because neither do we until the server answers.
+   * From the stalled confirmation screen the payment may well have landed, so
+   * a prompt that flatly promised the pixels were coming back and the words
+   * were being discarded would be a lie roughly half the time it was shown.
+   * It says what is certain — this is where the buying stops — and leaves the
+   * outcome to `tellRelease`, which reads the release's real answer and hands
+   * back the sentence that goes with it.
+   */
   const requestClose = useCallback(
     async (notice?: string) => {
       if (hasLiveHold && order) {
         const abandon = window.confirm(
-          "Close and this hold ends: these pixels go straight back on the board for anyone to buy, " +
-            "and nothing you have typed here is kept. Close anyway?",
+          "Close and you stop buying these pixels here. If they are still only held, the hold goes " +
+            "back and the picture, link and caption you typed are not kept. Close anyway?",
         );
         if (!abandon) return;
-        // The sentence above promises the pixels come back now, so they do.
-        // Leaving the row to expire would have made it a thirty-minute lie —
-        // and the buyer's own next attempt the thing it blocked.
+        let result;
         try {
-          await call.release(order.id, ownerPubkey);
+          result = await call.release(order.id, releaseSigner());
         } catch (error) {
           if (!(error instanceof TimedOut)) throw error;
           // A close that has already been agreed to must close. The hold is
@@ -278,11 +322,17 @@ export default function PurchaseDialog({
           );
           return;
         }
-        onHoldEnded(order.id);
+        const told = tellRelease(result);
+        if (told.holdEnded) onHoldEnded(order.id);
+        // A 409 means it is a sale, not a hold. The board is showing a held
+        // rectangle that is really somebody's block now, so repaint it.
+        if (told.purchased) onPurchased();
+        onClose(told.notice);
+        return;
       }
       onClose(notice);
     },
-    [hasLiveHold, order, ownerPubkey, call, onHoldEnded, onClose],
+    [hasLiveHold, order, call, onHoldEnded, onPurchased, onClose],
   );
 
   // Reports to BoardView whether its background poll should hold off right
@@ -318,7 +368,7 @@ export default function PurchaseDialog({
     for (const id of releasable) {
       let result;
       try {
-        result = await call.release(id, ownerPubkey);
+        result = await call.release(id, releaseSigner());
       } catch (error) {
         if (!(error instanceof TimedOut)) throw error;
         setReleasing(false);
@@ -510,6 +560,17 @@ export default function PurchaseDialog({
               </p>
             )}
 
+            {/* Said beside the greyed-out button, not instead of it: a button
+                that is off with no reason given reads as broken. */}
+            {releasable.length > 0 && !canSign && (
+              <p
+                id="release-unavailable"
+                className="rounded-lg border border-hairline-strong bg-canvas px-3 py-2 text-[15px] leading-relaxed text-ink-soft"
+              >
+                {NO_WALLET_TO_SIGN}
+              </p>
+            )}
+
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
@@ -523,7 +584,8 @@ export default function PurchaseDialog({
                 <button
                   type="button"
                   onClick={() => void handleRelease()}
-                  disabled={releasing}
+                  disabled={releasing || !canSign}
+                  aria-describedby={canSign ? undefined : "release-unavailable"}
                   className="btn-primary px-5 py-2.5 text-[15px]"
                 >
                   {releasing

@@ -207,6 +207,35 @@ in the same order.
 | Sold | **The buyer's bitmap, edge to edge, nearest-neighbour at every zoom**, with a 1px ink border. The artwork is the treatment — this is the whole product, and the block is the frame |
 | Sold, loading or missing | Solid, edge to edge, 1px ink border. This is the **fallback**, not the sold treatment: what the rectangle shows in the moment before its bitmap arrives, and what it keeps if the bitmap never does. It goes down under every sold block on every frame, so a sale reads as taken from the first paint. An upload with an alpha channel is composited onto the paper cream rather than onto this, and never onto the ruling — a sold block is never ruled |
 
+## Letting a hold go
+
+Handing a rectangle back is the one thing on this page that has to be **signed
+by the wallet holding it**. The address on its own proved nothing: the board
+publishes every live block's id, and a wallet address is public wherever it
+exists, so anything that trusted the address alone let a stranger let go of
+somebody else's pixels.
+
+**Right now nothing here can sign.** The wallet field takes an address a buyer
+types in; there is no wallet connected, no key in the browser, and so no
+signature to give. The button that hands a hold back is therefore **off, and
+says why** — greyed, with the reason in plain words beside it, rather than
+looking ready and refusing when it is pressed. A control that looks live and
+then fails costs more trust than one that was honest about being unavailable.
+
+Nothing is lost while it is off, and the sentence beside the button says so: a
+hold ends by itself after thirty minutes and the pixels go back on the board,
+and a hold the buyer still wants is theirs to pick up again straight off the
+board, ring and countdown intact. This is temporary, and it undoes itself the
+day a wallet is connected — the button reads whether anything can sign rather
+than a flag somebody has to remember to flip.
+
+When a release *is* attempted, what the buyer is told afterwards is whatever
+actually happened, never what was assumed beforehand: the hold is gone and the
+pixels are back, or the payment turned out to have landed and the block is
+bought and theirs, or nothing is certain and the clock is still running.
+Closing this dialog does not get to announce that a purchase was thrown away
+at the moment it succeeded.
+
 ## Motion
 
 Functional, never announced. 160ms on hover, 90ms on press, 220ms on entrance,
