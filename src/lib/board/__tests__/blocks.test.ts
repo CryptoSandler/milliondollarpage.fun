@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { execute } from "../../db";
+import sharp from "sharp";
+import { execute, query } from "../../db";
 import { boardStats, listLiveBlocks, sweepExpiredReservations } from "../blocks";
+import { validateContent } from "../content";
+import { attachContent } from "../orders";
+import { reserveRect } from "../reserve";
 import { pricePerPixelBaseUnits } from "../settings";
 
 async function insert(
@@ -91,6 +95,55 @@ describe("sweepExpiredReservations", () => {
     await sweepExpiredReservations();
     await insert(0, 0, 10, 10, "minted");
     expect(await listLiveBlocks()).toHaveLength(1);
+  });
+
+  /**
+   * A hold that ends takes the buyer's image, link and caption with it.
+   *
+   * That is true by construction — the sweep DELETEs the whole row, so there
+   * is nothing left to hold anything — and it was asserted nowhere, which
+   * means the day somebody turns this into a soft delete (a status change, a
+   * `deleted_at`, a row kept "for analytics") the promise would break in
+   * silence. This test is what breaks instead: it fails the moment an
+   * abandoned upload survives the hold it was attached to.
+   */
+  it("takes the image, the link and the caption with it, because it deletes the whole row", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, "BuyerPubkey1111", "f".repeat(64));
+    const image = await sharp({
+      create: { width: 40, height: 40, channels: 3, background: { r: 9, g: 9, b: 9 } },
+    })
+      .png()
+      .toBuffer();
+    const validated = await validateContent({
+      bytes: image,
+      declaredMime: "image/png",
+      link: "https://example.com/secret",
+      caption: "Their caption",
+      imageFit: "contain",
+    });
+    if (!validated.ok) throw new Error("the fixture content should validate");
+    await attachContent(held.id, "BuyerPubkey1111", validated.content);
+
+    // It really was stored before the sweep, or the assertion after it would
+    // pass against a row that never had content in the first place.
+    const before = await query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM blocks
+        WHERE id = $1 AND pending_image IS NOT NULL AND link IS NOT NULL AND caption IS NOT NULL`,
+      [held.id],
+    );
+    expect(before[0].n).toBe("1");
+
+    await execute("UPDATE blocks SET expires_at = now() - interval '1 minute' WHERE id = $1", [held.id]);
+    expect(await sweepExpiredReservations()).toBe(1);
+
+    // Not "the row is no longer live" — the row, and every byte of what the
+    // buyer put in it, is gone from the table.
+    const after = await query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM blocks
+        WHERE id = $1 OR pending_image IS NOT NULL OR link IS NOT NULL OR caption IS NOT NULL`,
+      [held.id],
+    );
+    expect(after[0].n).toBe("0");
   });
 });
 
