@@ -332,6 +332,25 @@ recognises an order id it created itself, and the server puts nobody else's id,
 key or count on the wire. "Someone is holding this" stays the only thing anyone
 ever learns about anyone else.
 
+## Settled colour decisions
+
+Decisions already taken, recorded so a later contrast pass does not spend its
+time reopening them.
+
+**`--danger-line` stays as it is** — 1.31:1 against its own fill and 1.79:1
+against the card. It encloses error *prose*, not a control, so WCAG 1.4.11 does
+not reach it: that rule governs boundaries that tell you where an interactive
+area is, and this boundary tells you nothing the words inside it do not already
+say. The error is communicated by the text. A saturated rule around every error
+message would shout a second time and buy no legibility.
+
+If a future pass measures it and finds it failing, the finding is correct and
+the rule still does not apply. Leave it.
+
+**`--hairline-strong` stays as it is** for decorative rules, and control
+borders use `--control-line` instead. Do not solve a control's contrast by
+darkening decoration.
+
 ## Attribution
 
 This document's structure and part of its colour and voice thinking derive from
