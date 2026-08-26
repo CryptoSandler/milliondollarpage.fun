@@ -6,7 +6,12 @@ import { blockImageUrl } from "../lib/board/block-image";
 import type { LiveBlock } from "../lib/board/blocks";
 import { BLOCK_PIXELS, BOARD_PIXELS, rectContains, type Point } from "../lib/board/geometry";
 import { formatUsdc } from "../lib/board/pricing";
-import { type Selection, selectionFromDrag, selectionFromPreset } from "../lib/board/selection";
+import {
+  type Selection,
+  presetSelectionForMove,
+  selectionFromDrag,
+  selectionFromPreset,
+} from "../lib/board/selection";
 import {
   type Chrome,
   type Viewport,
@@ -215,6 +220,19 @@ export default function BoardCanvas({
   // Set on the first pointerdown or wheel; once the user has zoomed or
   // panned, a resize must not throw that away by re-fitting the board.
   const hasInteracted = useRef(false);
+  /**
+   * Whether the active preset has been PUT DOWN by a click.
+   *
+   * A preset tracks the pointer as a preview until then, so a buyer can see
+   * where a 100×100 would land before committing to it. A click ends the
+   * preview: the rectangle stays on the cell it was clicked on, and moving
+   * the mouse afterwards only hovers. Without this a preset click placed
+   * nothing — the next mouse move picked the rectangle straight back up.
+   *
+   * Cleared whenever the selection goes away (a different preset, Escape, the
+   * panel's own clear), which is what hands the preview back for the next one.
+   */
+  const presetPlaced = useRef(false);
   // Read by the wheel listener, which is registered once and must not be torn
   // down and rebuilt every time a bar is re-measured.
   const chromeRef = useRef(chrome);
@@ -264,6 +282,10 @@ export default function BoardCanvas({
       image.src = blockImageUrl(block.id);
     }
   }, [blocks]);
+
+  useEffect(() => {
+    if (selection === null) presetPlaced.current = false;
+  }, [selection, activePreset]);
 
   const publish = useCallback(
     (next: Selection | null) => {
@@ -580,7 +602,10 @@ export default function BoardCanvas({
       return;
     }
 
+    // A preset is one click, not a drag: it lands on the clicked cell, snapped
+    // and clamped by presetRect, and it stays there.
     if (activePreset !== null) {
+      presetPlaced.current = true;
       publish(selectionFromPreset(at, activePreset, blocks, perPixel));
       drag.current = { kind: "none" };
       return;
@@ -608,9 +633,14 @@ export default function BoardCanvas({
       setHoveredId(hovered?.id ?? null);
       const rect = event.currentTarget.getBoundingClientRect();
       onHoverChange(hovered ?? null, hovered ? { x: event.clientX - rect.left, y: event.clientY - rect.top } : null);
-      if (activePreset !== null) {
-        publish(selectionFromPreset(at, activePreset, blocks, perPixel));
-      }
+      const preview = presetSelectionForMove(
+        at,
+        activePreset,
+        presetPlaced.current,
+        blocks,
+        perPixel,
+      );
+      if (preview) publish(preview);
       return;
     }
 
@@ -678,6 +708,7 @@ export default function BoardCanvas({
     // (or the active preset around it); with a mouse, shift-clicking empty
     // board is a deliberate way to clear.
     if (current.touch) {
+      presetPlaced.current = true;
       publish(selectionFromPreset(current.from, activePreset ?? BLOCK_PIXELS, blocks, perPixel));
       return;
     }

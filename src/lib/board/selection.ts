@@ -68,3 +68,30 @@ export function selectionFromPreset(
 ): Selection {
   return describeSelection(presetRect(at, size), blocks, perPixel);
 }
+
+/**
+ * What a plain pointer MOVE over the board should select, which is the other
+ * half of the same decision `selectionFromPreset` makes for a click.
+ *
+ * A preset follows the pointer as a preview until a click puts it down, and
+ * after that it stays exactly where the click put it — `null` here means
+ * "leave the selection alone". Without that distinction a preset click cannot
+ * place anything at all: the very next mouse move would pick the rectangle
+ * back up and carry it off, which is precisely the bug this exists to close.
+ * Only Freehand needs a drag; every preset is one click.
+ *
+ * `placed` goes back to false when the buyer switches preset or clears, so the
+ * preview comes back for the next placement.
+ *
+ * Called by BoardCanvas's onPointerMove (src/components/BoardCanvas.tsx).
+ */
+export function presetSelectionForMove(
+  at: Point,
+  size: number | null,
+  placed: boolean,
+  blocks: LiveBlock[],
+  perPixel: number,
+): Selection | null {
+  if (size === null || placed) return null;
+  return selectionFromPreset(at, size, blocks, perPixel);
+}

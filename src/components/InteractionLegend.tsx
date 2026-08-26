@@ -15,11 +15,11 @@ export default function InteractionLegend() {
   return (
     <div className="interaction-legend hidden shrink-0 flex-col gap-0.5 text-[11.5px] leading-tight text-mute lg:flex">
       <p>
-        <span className="font-semibold text-body">Drag</span> to outline ·{" "}
-        <span className="font-semibold text-body">tap</span> on a touchscreen
+        <span className="font-semibold text-body">Click</span> to place a size ·{" "}
+        <span className="font-semibold text-body">drag</span> to outline freehand
       </p>
       <p>
-        <span className="font-semibold text-body">Scroll or pinch</span> to zoom ·{" "}
+        <span className="font-semibold text-body">Scroll, pinch or the buttons</span> to zoom ·{" "}
         <span className="font-semibold text-body">shift-drag</span> to move once zoomed in ·{" "}
         <span className="font-semibold text-body">esc</span> to clear
       </p>
