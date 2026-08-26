@@ -136,6 +136,19 @@ countdowns — so digits do not jump as they tick.
 Hierarchy comes from size and weight, not from boxes and rules. If something needs
 a border to be found, the layout is wrong first.
 
+**Anywhere a buyer types, the text is 16px, and that is a layout rule rather
+than a taste one.** iOS Safari zooms the whole page when a field under 16px
+takes focus, and a buyer cannot zoom back out by hand. On a page that must
+never scroll, that would push the board off screen — so 16px on every input is
+what keeps the no-scroll contract standing on a phone.
+
+**Nothing beside those fields is fine print.** In the purchase dialog, help,
+hints, counters and error lines are 14px at the smallest and prose is 15px:
+the ramp's `body-sm` belongs to the dense chrome around the board, not to the
+one screen where somebody is being asked to part with money. The all-caps
+`label` is the exception, because a label is read as a marker rather than as a
+sentence.
+
 ## A bar, and either a panel or a second bar
 
 A thin fixed bar across the top, always: the wordmark and the counters. It is

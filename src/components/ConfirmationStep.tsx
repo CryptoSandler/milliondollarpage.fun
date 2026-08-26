@@ -59,7 +59,7 @@ export default function ConfirmationStep({
             />
           )}
         </div>
-        <dl className="flex flex-1 flex-col justify-center gap-1.5 text-[13px]">
+        <dl className="flex flex-1 flex-col justify-center gap-1.5 text-[15px]">
           <Row term="Rectangle">
             {order.rect.w} × {order.rect.h} at ({order.rect.x}, {order.rect.y})
           </Row>
@@ -71,7 +71,7 @@ export default function ConfirmationStep({
         </dl>
       </div>
 
-      <dl className="flex flex-col gap-2 rounded-xl border border-hairline-strong bg-card-warm px-4 py-3 text-[13px]">
+      <dl className="flex flex-col gap-2 rounded-xl border border-hairline-strong bg-card-warm px-4 py-3 text-[15px]">
         <div>
           <dt className="label-caps">Link</dt>
           <dd className="break-all text-ink">{draft.link}</dd>
@@ -86,21 +86,21 @@ export default function ConfirmationStep({
         </div>
       </dl>
 
-      <p className="text-[12.5px] leading-relaxed text-body">
+      <p className="text-[14px] leading-relaxed text-body">
         Paying claims these {pixels.toLocaleString("en-US")} pixels for good and charges{" "}
         <span className="font-bold text-ink">{formatUsdc(order.totalBaseUnits)}</span>. The image, the
         link, the caption and the fit above are locked to the block together — none of them can be
         edited, replaced or taken back afterwards.
       </p>
 
-      <p className="rounded-lg border border-hairline-strong bg-canvas px-3 py-2 text-[12px] leading-relaxed text-body">
+      <p className="rounded-lg border border-hairline-strong bg-canvas px-3 py-2 text-[14px] leading-relaxed text-body">
         Nothing is charged in this preview build: no wallet is connected, no signature is asked for,
         and no funds move. Confirm marks the order paid on the spot, standing in for the payment step
         that arrives later.
       </p>
 
       {confirmError && (
-        <p className="rounded-lg border border-[#e2b6a4] bg-danger-soft px-3 py-2 text-[13px] text-ink-soft">
+        <p className="rounded-lg border border-[#e2b6a4] bg-danger-soft px-3 py-2 text-[15px] text-ink-soft">
           {confirmError}
         </p>
       )}
@@ -110,7 +110,7 @@ export default function ConfirmationStep({
           type="button"
           onClick={onBack}
           disabled={confirming}
-          className="btn-quiet px-4 py-2 text-[13px]"
+          className="btn-quiet px-4 py-2 text-[15px]"
         >
           Back to edit
         </button>
@@ -118,7 +118,7 @@ export default function ConfirmationStep({
           type="button"
           onClick={onConfirm}
           disabled={confirming}
-          className="btn-primary px-5 py-2.5 text-[14px]"
+          className="btn-primary px-5 py-2.5 text-[15px]"
         >
           {confirming ? "Paying…" : `Pay ${formatUsdc(order.totalBaseUnits)} and claim it`}
         </button>

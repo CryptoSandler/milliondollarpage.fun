@@ -259,8 +259,8 @@ export default function ContentForm({
     <form onSubmit={handleSubmit} className="mt-3 flex flex-col gap-5">
       <div>
         <div className="flex items-baseline justify-between gap-2">
-          <span className="text-[13px] font-bold text-ink">Image</span>
-          <span className="text-[11.5px] text-mute">Any picture, up to {MAX_INPUT_MB} MB</span>
+          <span className="text-[15px] font-bold text-ink">Image</span>
+          <span className="text-[14px] text-mute">Any picture, up to {MAX_INPUT_MB} MB</span>
         </div>
         <label
           htmlFor={imageId}
@@ -286,7 +286,7 @@ export default function ContentForm({
               </svg>
             )}
           </span>
-          <span className="min-w-0 text-[13px] text-body">
+          <span className="min-w-0 text-[15px] text-body">
             {draft.file ? (
               <>
                 <span className="block truncate font-bold text-ink">{draft.file.name}</span>
@@ -316,7 +316,7 @@ export default function ContentForm({
       </div>
 
       <div>
-        <label htmlFor={linkId} className="text-[13px] font-bold text-ink">
+        <label htmlFor={linkId} className="text-[15px] font-bold text-ink">
           Link
         </label>
         <input
@@ -336,10 +336,10 @@ export default function ContentForm({
 
       <div>
         <div className="flex items-baseline justify-between gap-2">
-          <label htmlFor={captionId} className="text-[13px] font-bold text-ink">
+          <label htmlFor={captionId} className="text-[15px] font-bold text-ink">
             Caption <span className="font-normal text-body">— optional</span>
           </label>
-          <span className="tabular text-[12px] text-mute">
+          <span className="tabular text-[14px] text-mute">
             {draft.caption.length} / {CAPTION_MAX_LENGTH}
           </span>
         </div>
@@ -360,7 +360,7 @@ export default function ContentForm({
       </div>
 
       <fieldset>
-        <legend className="text-[13px] font-bold text-ink">How the image fills the rectangle</legend>
+        <legend className="text-[15px] font-bold text-ink">How the image fills the rectangle</legend>
         <div className="mt-1.5 flex gap-2">
           <FitOption
             checked={draft.imageFit === "contain"}
@@ -382,19 +382,19 @@ export default function ContentForm({
       {/* Card-warm, like PurchaseDialog's own stalled screen — not the danger
           styling below, because no answer is not the same as a bad one. */}
       {messages.stalled && messages.form && (
-        <p className="rounded-xl border border-hairline-strong bg-card-warm px-4 py-3 text-[13.5px] leading-relaxed text-ink-soft">
+        <p className="rounded-xl border border-hairline-strong bg-card-warm px-4 py-3 text-[15px] leading-relaxed text-ink-soft">
           {messages.form}
         </p>
       )}
 
       {!messages.stalled && messages.form && (
-        <p className="rounded-lg border border-[#e2b6a4] bg-danger-soft px-3 py-2 text-[13px] text-ink-soft">
+        <p className="rounded-lg border border-[#e2b6a4] bg-danger-soft px-3 py-2 text-[15px] text-ink-soft">
           {messages.form}
         </p>
       )}
 
       <div className="flex items-center justify-between gap-4 border-t border-hairline pt-4">
-        <p className="text-[12.5px] text-body">
+        <p className="text-[14px] text-body">
           {ready ? (
             "Nothing is charged yet — you get one more screen to check it all."
           ) : (
@@ -406,7 +406,7 @@ export default function ContentForm({
         <button
           type="submit"
           disabled={!ready || busy}
-          className="btn-primary shrink-0 px-5 py-2.5 text-[14px]"
+          className="btn-primary shrink-0 px-5 py-2.5 text-[15px]"
         >
           {stage === "preparing"
             ? "Resizing…"
@@ -429,7 +429,7 @@ function listMissing(missing: string[]): string {
 /** What this field costs you once the order is paid, said under that field. */
 function Permanence({ children }: { children: ReactNode }) {
   return (
-    <p className="mt-1.5 flex gap-1.5 text-[11.5px] leading-snug text-mute">
+    <p className="mt-1.5 flex gap-1.5 text-[14px] leading-snug text-mute">
       <svg aria-hidden viewBox="0 0 8 8" className="mt-1 size-2 shrink-0 text-primary-pressed" fill="currentColor">
         <path d="M4 0 8 4 4 8 0 4Z" />
       </svg>
@@ -440,7 +440,7 @@ function Permanence({ children }: { children: ReactNode }) {
 
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
-  return <p className="mt-1.5 text-[12.5px] font-semibold text-danger">{message}</p>;
+  return <p className="mt-1.5 text-[14px] font-semibold text-danger">{message}</p>;
 }
 
 function FitOption({
@@ -463,8 +463,8 @@ function FitOption({
       }`}
     >
       <input type="radio" name="imageFit" checked={checked} onChange={onChange} className="sr-only" />
-      <span className="text-[13px] font-bold">{label}</span>
-      <span className={`text-[11px] ${checked ? "text-canvas-deep" : "text-mute"}`}>{detail}</span>
+      <span className="text-[15px] font-bold">{label}</span>
+      <span className={`text-[14px] ${checked ? "text-canvas-deep" : "text-mute"}`}>{detail}</span>
     </label>
   );
 }

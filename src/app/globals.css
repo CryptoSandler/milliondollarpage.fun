@@ -357,10 +357,21 @@ h3 {
     color: var(--canvas);
   }
 
+  /*
+   * 16px, and that is not a stylistic choice.
+   *
+   * iOS Safari zooms the whole page when a text field smaller than 16px takes
+   * focus, and there is no zooming out of it by hand afterwards. On this
+   * layout that would push the board off a viewport that is not allowed to
+   * scroll — so the one number that keeps the no-scroll contract standing on
+   * a phone is this one. Every other size in a form follows from it: help and
+   * hint text no smaller than 14px, so nothing beside a 16px field reads as
+   * fine print.
+   */
   .field-input {
     width: 100%;
     font-family: var(--font-ui);
-    font-size: 14px;
+    font-size: 16px;
     padding: 9px 11px;
     border: 1px solid var(--hairline-strong);
     border-radius: var(--radius-sm);

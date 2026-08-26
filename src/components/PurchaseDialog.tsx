@@ -410,7 +410,7 @@ export default function PurchaseDialog({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h2 className="font-display text-[21px] font-bold">Buy this block</h2>
-            <p className="tabular mt-0.5 truncate text-[13.5px] text-body">
+            <p className="tabular mt-0.5 truncate text-[15px] text-body">
               {rect.w} × {rect.h} at ({rect.x}, {rect.y}) · {pixels.toLocaleString("en-US")} pixels
             </p>
           </div>
@@ -448,7 +448,7 @@ export default function PurchaseDialog({
         {/* Why the clock reads less than thirty minutes: this is the hold that
             was already open on these pixels, not a new one. */}
         {resumed && fatalMessage === null && step !== "done" && (
-          <p className="mt-3 rounded-lg border border-hairline-strong bg-canvas px-3 py-2 text-[12.5px] leading-relaxed text-ink-soft">
+          <p className="mt-3 rounded-lg border border-hairline-strong bg-canvas px-3 py-2 text-[14px] leading-relaxed text-ink-soft">
             Carrying on with the hold you already had here — same pixels, same price, and the clock
             has been running since you first pressed Buy.
           </p>
@@ -461,21 +461,21 @@ export default function PurchaseDialog({
             <h3 className="font-display text-[17px] font-semibold text-ink">
               No answer from the server yet
             </h3>
-            <p className="rounded-xl border border-hairline-strong bg-card-warm px-4 py-3 text-[13.5px] leading-relaxed text-ink-soft">
+            <p className="rounded-xl border border-hairline-strong bg-card-warm px-4 py-3 text-[15px] leading-relaxed text-ink-soft">
               {STALLED_MESSAGE[stalled]}
             </p>
             <div className="flex items-center justify-end gap-3">
               <button
                 type="button"
                 onClick={() => void requestClose()}
-                className="btn-quiet px-4 py-2 text-[13.5px]"
+                className="btn-quiet px-4 py-2 text-[15px]"
               >
                 Back to the board
               </button>
               <button
                 type="button"
                 onClick={() => void retryStalled()}
-                className="btn-primary px-5 py-2.5 text-[14px]"
+                className="btn-primary px-5 py-2.5 text-[15px]"
               >
                 {RETRY_LABEL}
               </button>
@@ -491,7 +491,7 @@ export default function PurchaseDialog({
               {releasable.length > 0 ? "You are already holding these" : "This purchase stopped here"}
             </h3>
             <p
-              className={`rounded-xl px-4 py-3 text-[13.5px] leading-relaxed text-ink-soft ${
+              className={`rounded-xl px-4 py-3 text-[15px] leading-relaxed text-ink-soft ${
                 releasable.length > 0
                   ? "border border-hairline-strong bg-card-warm"
                   : "border border-[#e2b6a4] bg-danger-soft"
@@ -501,7 +501,7 @@ export default function PurchaseDialog({
             </p>
 
             {releaseError && (
-              <p className="rounded-lg border border-[#e2b6a4] bg-danger-soft px-3 py-2 text-[13px] text-ink-soft">
+              <p className="rounded-lg border border-[#e2b6a4] bg-danger-soft px-3 py-2 text-[15px] text-ink-soft">
                 {releaseError}
               </p>
             )}
@@ -511,7 +511,7 @@ export default function PurchaseDialog({
                 type="button"
                 onClick={() => onClose(releasable.length > 0 ? undefined : fatalMessage)}
                 disabled={releasing}
-                className="btn-quiet px-4 py-2 text-[13.5px]"
+                className="btn-quiet px-4 py-2 text-[15px]"
               >
                 {releasable.length > 0 ? "Leave it held" : "Back to the board"}
               </button>
@@ -520,7 +520,7 @@ export default function PurchaseDialog({
                   type="button"
                   onClick={() => void handleRelease()}
                   disabled={releasing}
-                  className="btn-primary px-5 py-2.5 text-[14px]"
+                  className="btn-primary px-5 py-2.5 text-[15px]"
                 >
                   {releasing
                     ? "Letting them go…"
@@ -532,7 +532,7 @@ export default function PurchaseDialog({
             </div>
           </div>
         ) : step === "holding" ? (
-          <p className="mt-6 text-[13.5px] text-body">
+          <p className="mt-6 text-[15px] text-body">
             Holding these pixels for you — nobody else can buy them while this is open…
           </p>
         ) : step === "describing" && order ? (
@@ -567,7 +567,7 @@ export default function PurchaseDialog({
             <h3 className="font-display text-[17px] font-semibold text-ink">
               Done — {pixels.toLocaleString("en-US")} pixels are yours
             </h3>
-            <p className="text-[13.5px] leading-relaxed text-body">
+            <p className="text-[15px] leading-relaxed text-body">
               {formatUsdc(order.totalBaseUnits)} paid for {rect.w} × {rect.h} at ({rect.x}, {rect.y}),
               registered to {shortenAddress(ownerPubkey)}. Your image, link and caption are locked to it
               exactly as you confirmed them. Close this and the block is on the board.
@@ -575,7 +575,7 @@ export default function PurchaseDialog({
             <button
               type="button"
               onClick={() => onClose()}
-              className="btn-primary self-end px-5 py-2.5 text-[14px]"
+              className="btn-primary self-end px-5 py-2.5 text-[15px]"
             >
               See it on the board
             </button>
