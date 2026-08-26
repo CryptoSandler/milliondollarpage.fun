@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { confirmOrder, createHold, fetchOrder, releaseHold, submitContent } from "../purchase-client";
+import {
+  BUYER_PUBKEY_HEADER,
+  confirmOrder,
+  createHold,
+  fetchOrder,
+  releaseHold,
+  submitContent,
+} from "../purchase-client";
 
 /**
  * `purchase-client.ts` does exactly one thing: turn a `fetch` response into
@@ -146,6 +153,27 @@ describe("fetchOrder", () => {
     const result = await fetchOrder("does-not-exist");
 
     expect(result).toEqual({ ok: false, status: 404, message: "That order does not exist." });
+  });
+
+  it("sends no wallet at all when none is offered, so polling stays anonymous", async () => {
+    const fetchMock = stubFetchOnce(jsonResponse(404, { message: "no" }));
+    await fetchOrder("11111111-1111-1111-1111-111111111111");
+    const init = fetchMock.mock.calls[0][1] as RequestInit | undefined;
+    expect(init?.headers).toBeUndefined();
+  });
+
+  /**
+   * A hold publishes no caption and no link to anyone but its buyer, so the
+   * buyer has to be able to say who they are — in a header, never in the URL,
+   * because the pubkey is the only credential this site has and a query
+   * string ends up in access logs.
+   */
+  it("offers the buyer's wallet in a header, not in the path", async () => {
+    const fetchMock = stubFetchOnce(jsonResponse(404, { message: "no" }));
+    await fetchOrder("11111111-1111-1111-1111-111111111111", "MyWallet1111");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/orders/11111111-1111-1111-1111-111111111111");
+    expect(init.headers).toEqual({ [BUYER_PUBKEY_HEADER]: "MyWallet1111" });
   });
 });
 

@@ -1,6 +1,6 @@
 import type { PoolClient } from "pg";
 import { execute, query, queryOne } from "../db";
-import { IMAGE_BEARING_STATUSES, hasPublicImageSql } from "./block-image";
+import { IMAGE_BEARING_STATUSES, hasPublicImageSql, publishesTextSql } from "./block-image";
 import { TOTAL_PIXELS } from "./geometry";
 import type { Fit } from "./image-fit";
 
@@ -26,14 +26,25 @@ export type LiveBlock = {
   w: number;
   h: number;
   status: LiveStatus;
+  /**
+   * The buyer's caption and link — or null, for a block nobody has paid for.
+   *
+   * A `reserved` row can carry both in the database and publishes neither
+   * here. That is the same rule `hasImage` applies to the bytes, applied to
+   * the words: a hold is thirty free minutes, and without this it was thirty
+   * free minutes of serving a stranger's link to every visitor. The owner of
+   * the hold still gets their own text back from `GET /api/orders/{id}` —
+   * this payload is one shared response with no reader to be owner OF.
+   */
   caption: string | null;
   link: string | null;
   /**
    * How the buyer asked their bitmap to meet the block's edges.
    *
-   * Null for a block with no upload behind it. The canvas needs this to draw
-   * at all: without it, it stretched every image to the block's shape and a
-   * contained one came out squashed for good. See `image-fit.ts`.
+   * Null for a block with no upload behind it, and null for a hold, which
+   * publishes nothing about an upload it has not paid for. The canvas needs
+   * this to draw at all: without it, it stretched every image to the block's
+   * shape and a contained one came out squashed for good. See `image-fit.ts`.
    */
   imageFit: Fit | null;
   /**
@@ -66,11 +77,19 @@ export const LIVE = `status IN ('reserved', 'paid', 'minted')
  * endpoint trust. Adding it would hand every visitor the keys to every open
  * hold. `pending_image` must never join it either — the bytes go out one
  * block at a time, on their own route.
+ *
+ * `caption` and `link` are on the whitelist but pass through
+ * `publishesTextSql` first, which is the same "somebody paid" test
+ * `hasPublicImageSql` applies to the bytes. A held block is still returned —
+ * the board has to draw it, and it draws it as a hold — with both columns
+ * null.
  */
 export async function listLiveBlocks(): Promise<LiveBlock[]> {
   return query<LiveBlock>(
-    `SELECT id, x, y, w, h, status, caption, link,
-            image_fit AS "imageFit",
+    `SELECT id, x, y, w, h, status,
+            CASE WHEN ${publishesTextSql(1)} THEN caption END AS caption,
+            CASE WHEN ${publishesTextSql(1)} THEN link END AS link,
+            CASE WHEN ${publishesTextSql(1)} THEN image_fit END AS "imageFit",
             ${hasPublicImageSql(1)} AS "hasImage"
        FROM blocks
       WHERE ${LIVE}

@@ -1,4 +1,5 @@
 import { execute, isUniqueViolation, queryOne, violatedConstraint } from "../db";
+import { publishesText } from "./block-image";
 import type { ValidatedContent } from "./content";
 import type { Rect } from "./geometry";
 
@@ -153,8 +154,8 @@ export async function getOrder(id: string): Promise<Order | null> {
 export type PublicOrder = Omit<Order, "buyerPubkey">;
 
 /**
- * Strips `buyerPubkey` before an `Order` leaves this module for an HTTP
- * response.
+ * Strips `buyerPubkey` — and anyone else's unpaid words — before an `Order`
+ * leaves this module for an HTTP response.
  *
  * `buyerPubkey` is the one thing every ownership check in this file compares
  * against — the whole reason `/content` and `/confirm` can trust a caller is
@@ -163,8 +164,24 @@ export type PublicOrder = Omit<Order, "buyerPubkey">;
  * would let anyone chain "read the board" -> "GET this order" -> "POST
  * content as its buyer" and overwrite a stranger's hold. Every route that
  * returns an `Order` must send this, never the `Order` itself.
+ *
+ * `viewer` is the pubkey the caller proved, or null for a caller who proved
+ * nothing — and it is REQUIRED rather than defaulted, so a new route has to
+ * say which it is instead of quietly getting the wrong one. It decides only
+ * the caption and the link: `publishesText` says a hold's words are not
+ * public (see block-image.ts — a reservation is free, and a free phishing
+ * link served to every visitor is what that rule exists to stop), and the
+ * buyer of that hold is the one person it does not apply to. They wrote the
+ * text and they need it back to finish the purchase.
+ *
+ * The comparison is the same `!==` on the same column every mutating
+ * function here uses. Nothing else on an order is hidden: a stranger polling
+ * a hold's status still learns its rectangle, its price and its clock, which
+ * `/board` publishes anyway.
  */
-export function toPublicOrder(order: Order): PublicOrder {
+export function toPublicOrder(order: Order, viewer: string | null): PublicOrder {
+  const yours = viewer !== null && viewer === order.buyerPubkey;
+  const showText = yours || publishesText(order.status);
   return {
     id: order.id,
     rect: order.rect,
@@ -174,8 +191,8 @@ export function toPublicOrder(order: Order): PublicOrder {
     paymentBaseUnits: order.paymentBaseUnits,
     expiresAt: order.expiresAt,
     hasContent: order.hasContent,
-    caption: order.caption,
-    link: order.link,
+    caption: showText ? order.caption : null,
+    link: showText ? order.link : null,
     imageFit: order.imageFit,
     isAnimated: order.isAnimated,
   };

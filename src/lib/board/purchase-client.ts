@@ -25,6 +25,25 @@ import type { PublicOrder } from "./orders";
 
 export type ClientOrder = PublicOrder;
 
+/**
+ * The header a buyer proves a hold is theirs with, on a GET.
+ *
+ * A HEADER and not a query string, for the same reason `releaseHold` puts the
+ * pubkey in a DELETE body: it is the only credential this codebase has, and a
+ * URL ends up in access logs, in `Referer`, and in a browser's own history.
+ *
+ * It lives in this file — imported by `src/app/api/orders/[id]/route.ts`,
+ * which reads it — because this is the one module describing these four
+ * endpoints that pulls in neither `pg` nor a node built-in, so both halves of
+ * the wire can share one spelling of it instead of two literals that agree
+ * until somebody edits one.
+ *
+ * Sending it is optional. Without it a caller is a stranger and simply gets a
+ * stranger's view — no 400, no 403. Polling a hold's status must keep working
+ * for anyone who has the id.
+ */
+export const BUYER_PUBKEY_HEADER = "x-buyer-pubkey";
+
 export type ClientFailure = {
   ok: false;
   status: number;
@@ -137,9 +156,18 @@ export function createHold(rect: Rect, buyerPubkey: string): Promise<ClientResul
   );
 }
 
-/** An order's current state, for polling a hold or a confirmation screen. */
-export function fetchOrder(orderId: string): Promise<ClientResult> {
-  return send(() => fetch(`/api/orders/${orderId}`));
+/**
+ * An order's current state, for polling a hold or a confirmation screen.
+ *
+ * `buyerPubkey` is optional and only ever widens the answer: a hold that has
+ * not been paid for publishes no caption and no link to anybody but the buyer
+ * who wrote them, so a caller who has one sends it and gets their own words
+ * back. A caller who has none still gets the status, the rectangle and the
+ * clock, which is all polling needs.
+ */
+export function fetchOrder(orderId: string, buyerPubkey?: string): Promise<ClientResult> {
+  const headers = buyerPubkey ? { [BUYER_PUBKEY_HEADER]: buyerPubkey } : undefined;
+  return send(() => fetch(`/api/orders/${orderId}`, { headers }));
 }
 
 /**

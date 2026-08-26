@@ -53,6 +53,38 @@ describe("GET /api/board", () => {
     expect(withImage[0]).toMatchObject({ x: 260, y: 490 });
   });
 
+  /**
+   * The board is one public, unauthenticated payload with no reader to be the
+   * owner of anything, so a hold's words are absent from it for everybody —
+   * including the buyer, who reads their own back from their order instead.
+   */
+  it("keeps a held block's caption and link to itself, which is what makes a free hold worthless to abuse", async () => {
+    await execute(
+      `INSERT INTO blocks (x, y, w, h, status, expires_at, caption, link, price_per_pixel_usdc, total_usdc)
+       VALUES (0, 0, 10, 10, 'reserved', '2999-01-01T00:00:00Z',
+               'Claim your airdrop', 'https://not-really-us.example/claim', 1000000, 100000000)`,
+    );
+    const response = await GET();
+    const raw = await response.text();
+    expect(raw).not.toContain("Claim your airdrop");
+    expect(raw).not.toContain("not-really-us.example");
+
+    const body = JSON.parse(raw);
+    expect(body.blocks).toHaveLength(1);
+    expect(body.blocks[0]).toMatchObject({ status: "reserved", caption: null, link: null });
+  });
+
+  it("publishes a sold block's caption and link to everyone, because somebody paid for them", async () => {
+    await insert(10, 0, 10, 10, "paid");
+    await insert(20, 0, 10, 10, "minted");
+    const body = await (await GET()).json();
+    expect(body.blocks).toHaveLength(2);
+    for (const block of body.blocks) {
+      expect(block.caption).toBe("A caption");
+      expect(block.link).toBe("https://example.com");
+    }
+  });
+
   it("tells the canvas which fit a sold block chose, so it stops squashing people's photographs", async () => {
     await execute(
       `INSERT INTO blocks (x, y, w, h, status, image_fit, price_per_pixel_usdc, total_usdc)

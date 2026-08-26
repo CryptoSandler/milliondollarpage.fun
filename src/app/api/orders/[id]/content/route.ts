@@ -96,7 +96,11 @@ export async function POST(
 
   try {
     const updated = await attachContent(id, buyerPubkey, validated.content);
-    return json(toPublicOrder(updated), { headers: NO_STORE });
+    // The caller proved ownership two statements ago, so they get their
+    // own caption and link back — the redaction in `toPublicOrder` is for
+    // strangers reading somebody else's unpaid hold, not for the buyer
+    // reading back what they just uploaded.
+    return json(toPublicOrder(updated, buyerPubkey), { headers: NO_STORE });
   } catch (error) {
     if (error instanceof OrderNotFound) return problem(404, error.message);
     if (error instanceof OrderNotYours) return problem(403, error.message);

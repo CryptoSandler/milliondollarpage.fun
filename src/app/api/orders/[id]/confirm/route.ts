@@ -62,7 +62,8 @@ export async function POST(
 
   try {
     const paid = await markPaid(id, buyerPubkey, verified.signature);
-    return json(toPublicOrder(paid), { headers: NO_STORE });
+    // Paid, and to its own buyer: both halves of `toPublicOrder`'s test.
+    return json(toPublicOrder(paid, buyerPubkey), { headers: NO_STORE });
   } catch (error) {
     if (error instanceof OrderNotFound) return problem(404, error.message);
     if (error instanceof OrderNotYours) return problem(403, error.message);

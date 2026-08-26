@@ -4,6 +4,8 @@ import {
   IMAGE_BEARING_STATUSES,
   blockImageUrl,
   hasPublicImageSql,
+  publishesText,
+  publishesTextSql,
   servesImage,
 } from "../block-image";
 import { getBlockImage } from "../blocks";
@@ -59,6 +61,46 @@ describe("blockImageUrl", () => {
     expect(blockImageUrl("24f229b2-f126-455c-a6a0-0a68c32975b9")).toBe(
       "/api/blocks/24f229b2-f126-455c-a6a0-0a68c32975b9/image",
     );
+  });
+});
+
+describe("publishesText — the same rule, applied to the caption and the link", () => {
+  it("lets a sold block publish its words", () => {
+    expect(publishesText("paid")).toBe(true);
+    expect(publishesText("minted")).toBe(true);
+  });
+
+  it("refuses a hold, which has paid for neither its pixels nor its words", () => {
+    expect(publishesText("reserved")).toBe(false);
+  });
+
+  it("refuses a removed block, whose rectangle is for sale again", () => {
+    expect(publishesText("removed")).toBe(false);
+  });
+
+  /**
+   * Not "these two happen to agree": the same function, so they cannot stop
+   * agreeing. A second list of statuses is exactly how the text came to be
+   * published when the bytes were not.
+   */
+  it("is the pixel predicate itself, not a copy of it", () => {
+    expect(publishesText).toBe(servesImage);
+  });
+});
+
+describe("publishesTextSql", () => {
+  it("binds the statuses at the position it is given rather than splicing them in", () => {
+    expect(publishesTextSql(1)).toBe("status = ANY($1)");
+    expect(publishesTextSql(4)).toBe("status = ANY($4)");
+    expect(publishesTextSql(1)).not.toContain("paid");
+  });
+
+  it("asks nothing about the bytes, which a caption does not have", () => {
+    expect(publishesTextSql(1)).not.toContain("pending_image");
+  });
+
+  it("is the status half of the image test, so the two can never disagree", () => {
+    expect(hasPublicImageSql(3)).toContain(publishesTextSql(3));
   });
 });
 

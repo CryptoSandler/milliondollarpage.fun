@@ -82,6 +82,51 @@ describe("listLiveBlocks", () => {
   });
 
   /**
+   * A hold's words are as unpaid as its pixels.
+   *
+   * Reserving costs nothing and lasts half an hour. Before this, the board
+   * published a reservation's caption and link to every visitor, which made a
+   * free hold into free hosting for a phishing link, repeatable for as long
+   * as somebody cared to keep re-reserving. The bytes were already protected;
+   * these are the same rule applied to the text.
+   */
+  it("publishes no caption and no link for a held block, however filled in it is", async () => {
+    await insert(0, 0, 10, 10, "reserved", "2999-01-01T00:00:00Z");
+    await execute(
+      `UPDATE blocks SET caption = 'Free money', link = 'https://not-really-us.example/', image_fit = 'cover'`,
+    );
+    const [block] = await listLiveBlocks();
+    expect(block.status).toBe("reserved");
+    expect(block.caption).toBeNull();
+    expect(block.link).toBeNull();
+    expect(block.imageFit).toBeNull();
+  });
+
+  it("still returns the held block itself, because the board has to draw it", async () => {
+    await insert(40, 50, 20, 20, "reserved", "2999-01-01T00:00:00Z");
+    await execute(`UPDATE blocks SET caption = 'Free money', link = 'https://not-really-us.example/'`);
+    const blocks = await listLiveBlocks();
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toMatchObject({ x: 40, y: 50, w: 20, h: 20, status: "reserved" });
+  });
+
+  it("publishes a paid block's caption and link, which is what somebody bought", async () => {
+    await insert(0, 0, 10, 10, "paid");
+    await execute(`UPDATE blocks SET caption = 'My shop', link = 'https://example.com/shop'`);
+    const [block] = await listLiveBlocks();
+    expect(block.caption).toBe("My shop");
+    expect(block.link).toBe("https://example.com/shop");
+  });
+
+  it("publishes a minted block's caption and link too", async () => {
+    await insert(0, 0, 10, 10, "minted");
+    await execute(`UPDATE blocks SET caption = 'Minted', link = 'https://example.com/minted'`);
+    const [block] = await listLiveBlocks();
+    expect(block.caption).toBe("Minted");
+    expect(block.link).toBe("https://example.com/minted");
+  });
+
+  /**
    * The canvas cannot draw an image correctly without knowing which fit its
    * buyer chose. It used to stretch every bitmap to the block's shape; now it
    * letterboxes or crops, and this is the column that tells it which.

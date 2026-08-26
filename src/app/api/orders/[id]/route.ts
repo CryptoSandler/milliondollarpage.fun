@@ -6,6 +6,7 @@ import {
   releaseOwnReservation,
   toPublicOrder,
 } from "../../../../lib/board/orders";
+import { BUYER_PUBKEY_HEADER } from "../../../../lib/board/purchase-client";
 import { NO_STORE, isUuid, json, problem } from "../../../../lib/http";
 
 /**
@@ -20,9 +21,17 @@ import { NO_STORE, isUuid, json, problem } from "../../../../lib/http";
  * before the response goes out: `/board` already publishes every live
  * block's id, so an `Order` returned here with its `buyerPubkey` intact would
  * hand anyone the one credential `/content` and `/confirm` trust.
+ *
+ * Unauthenticated is not the same as undiscriminating. A caller MAY offer
+ * their pubkey in `x-buyer-pubkey`, and if it is the buyer's, the caption and
+ * link they wrote come back with the order; if it is absent or somebody
+ * else's, an unpaid hold's words do not, because a reservation is free and a
+ * free hold serving a stranger's link to every visitor is exactly the abuse
+ * this closes. Offering nothing is never an error — the status, the rectangle
+ * and the clock answer any caller who has the id, as they always did.
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await params;
@@ -30,7 +39,7 @@ export async function GET(
 
   const order = await getOrder(id);
   if (!order) return problem(404, "That order does not exist.");
-  return json(toPublicOrder(order), { headers: NO_STORE });
+  return json(toPublicOrder(order, request.headers.get(BUYER_PUBKEY_HEADER)), { headers: NO_STORE });
 }
 
 /**

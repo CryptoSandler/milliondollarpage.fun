@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { execute } from "../../../lib/db";
 import { reserveRect } from "../../../lib/board/reserve";
 import { CONTENT_LIMITS, MULTIPART_FRAMING_ALLOWANCE_BYTES } from "../../../lib/board/content";
+import { BUYER_PUBKEY_HEADER } from "../../../lib/board/purchase-client";
 import { DELETE, GET } from "../orders/[id]/route";
 import { POST as POST_CONTENT } from "../orders/[id]/content/route";
 import { POST as POST_CONFIRM } from "../orders/[id]/confirm/route";
@@ -85,6 +86,65 @@ describe("GET /api/orders/:id", () => {
     const body = await (await GET(new Request("http://localhost/"), ctx(held.id))).json();
     expect(body).not.toHaveProperty("buyerPubkey");
     expect(JSON.stringify(body)).not.toContain(BUYER);
+  });
+
+  /**
+   * A hold is free and lasts thirty minutes. Anyone can read the board, and
+   * the board publishes every live block's id, so anyone can GET any hold —
+   * which is fine for a status and a clock, and was not fine at all for a
+   * caption and a link somebody attached and never paid for.
+   */
+  describe("an unpaid hold's caption and link", () => {
+    async function heldWithContent(): Promise<string> {
+      const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+      const attached = await POST_CONTENT(
+        await contentRequest({ caption: "Claim your airdrop", link: "https://not-really-us.example/claim" }),
+        ctx(held.id),
+      );
+      expect(attached.status).toBe(200);
+      return held.id;
+    }
+
+    it("are absent for a caller who proves nothing", async () => {
+      const id = await heldWithContent();
+      const raw = await (await GET(new Request("http://localhost/"), ctx(id))).text();
+      expect(raw).not.toContain("Claim your airdrop");
+      expect(raw).not.toContain("not-really-us.example");
+      const body = JSON.parse(raw);
+      expect(body.status).toBe("reserved");
+      expect(body.caption).toBeNull();
+      expect(body.link).toBeNull();
+      // Everything polling actually needs is still there.
+      expect(body.hasContent).toBe(true);
+      expect(body.expiresAt).not.toBeNull();
+    });
+
+    it("are absent for a caller who proves somebody else's wallet", async () => {
+      const id = await heldWithContent();
+      const request = new Request("http://localhost/", { headers: { [BUYER_PUBKEY_HEADER]: STRANGER } });
+      const body = await (await GET(request, ctx(id))).json();
+      expect(body.caption).toBeNull();
+      expect(body.link).toBeNull();
+    });
+
+    it("come back to the buyer who wrote them, who needs them to finish paying", async () => {
+      const id = await heldWithContent();
+      const request = new Request("http://localhost/", { headers: { [BUYER_PUBKEY_HEADER]: BUYER } });
+      const body = await (await GET(request, ctx(id))).json();
+      expect(body.caption).toBe("Claim your airdrop");
+      expect(body.link).toBe("https://not-really-us.example/claim");
+      // Proving ownership still does not buy a copy of the credential.
+      expect(body).not.toHaveProperty("buyerPubkey");
+    });
+
+    it("are published to every stranger once the block is paid for", async () => {
+      const id = await heldWithContent();
+      await execute("UPDATE blocks SET status = 'paid', expires_at = NULL WHERE id = $1", [id]);
+      const body = await (await GET(new Request("http://localhost/"), ctx(id))).json();
+      expect(body.status).toBe("paid");
+      expect(body.caption).toBe("Claim your airdrop");
+      expect(body.link).toBe("https://not-really-us.example/claim");
+    });
   });
 });
 
