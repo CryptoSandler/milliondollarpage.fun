@@ -43,6 +43,9 @@ export type UploadMessages = {
   stalled: boolean;
 };
 
+/** Nothing is wrong: the state the form starts in and returns to on every edit. */
+export const NO_UPLOAD_MESSAGES: UploadMessages = { fields: {}, form: null, fatal: false, stalled: false };
+
 /**
  * What the screen says when the upload has run past `STEP_CEILING_MS`.
  *
