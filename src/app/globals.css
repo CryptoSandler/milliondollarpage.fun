@@ -1,46 +1,159 @@
 @import "tailwindcss";
 
+/*
+ * The token layer. Every value here comes from DESIGN.md's front matter, which
+ * is the design authority for this project: colours, radii, type ramp, motion
+ * and the two bar heights. Nothing in a component invents a colour — if a
+ * value is missing here, DESIGN.md is where it gets decided first.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  /* One accent. It means "primary action" or "your selection", nothing else. */
+  --primary: #dd4e22;
+  --primary-pressed: #b93e19;
+  --primary-soft: #f7dccb;
+  --on-primary: #fff8ef;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --ink: #2b241c;
+  --ink-soft: #443a2c;
+  --body: #6b6154;
+  --mute: #948a79;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+  --canvas: #f3ede0;
+  --canvas-deep: #e9dfc9;
+  --card: #fffcf5;
+  --card-warm: #fbf5e8;
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans);
-}
+  --hairline: rgba(43, 36, 28, 0.1);
+  --hairline-strong: #c9baa0;
 
-:root {
+  --danger: #a8371f;
+  --danger-soft: #f1d4c8;
+  --ok: #4c7a4a;
+
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-hover: 160ms;
+  --dur-press: 90ms;
+  --dur-enter: 220ms;
+
+  /* The bars are fixed-height, and the board's fit maths reads their measured
+     height. Changing these changes how much board is visible; nothing else. */
   --bar-top-h: 52px;
   --bar-bottom-h: 88px;
 }
 
 @media (max-width: 640px) {
   :root {
-    --bar-top-h: 44px;
-    --bar-bottom-h: 76px;
+    --bar-top-h: 48px;
+    --bar-bottom-h: 92px;
   }
+}
+
+@theme inline {
+  --color-primary: var(--primary);
+  --color-primary-pressed: var(--primary-pressed);
+  --color-primary-soft: var(--primary-soft);
+  --color-on-primary: var(--on-primary);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-body: var(--body);
+  --color-mute: var(--mute);
+  --color-canvas: var(--canvas);
+  --color-canvas-deep: var(--canvas-deep);
+  --color-card: var(--card);
+  --color-card-warm: var(--card-warm);
+  --color-hairline: var(--hairline);
+  --color-hairline-strong: var(--hairline-strong);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-ok: var(--ok);
+
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-ui: var(--font-karla), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Hierarchy comes from size and weight. Display is Bricolage, everything else
+   is Karla, and both are declared once here rather than per component. */
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+/* Numbers that tick — counters, prices, countdowns — must not shuffle width. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.label-caps {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+/* Browser surfaces the design still owns. */
+::selection {
+  background: var(--primary-soft);
+  color: var(--ink);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--hairline-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--hairline-strong);
+  border-radius: var(--radius-pill);
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
 }
 
 .board-shell {
   position: fixed;
   inset: 0;
   overflow: hidden;
+  background: var(--canvas);
 }
 
 .board-canvas {
@@ -59,17 +172,17 @@ body {
   z-index: 10;
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 0 0.75rem;
-  background: color-mix(in oklab, var(--background) 82%, transparent);
-  backdrop-filter: blur(8px);
-  border-color: color-mix(in oklab, var(--foreground) 12%, transparent);
+  gap: 16px;
+  padding: 0 16px;
+  background: var(--canvas);
+  border-color: var(--hairline-strong);
 }
 
 .board-bar--top {
   top: 0;
   height: var(--bar-top-h);
   border-bottom-width: 1px;
+  box-shadow: 0 1px 0 rgba(43, 36, 28, 0.04);
 }
 
 .board-bar--bottom {
@@ -82,7 +195,9 @@ body {
      SelectionPanel and InteractionLegend for what gives way first. */
   height: var(--bar-bottom-h);
   border-top-width: 1px;
-  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  padding-bottom: max(0px, env(safe-area-inset-bottom));
+  background: var(--card-warm);
+  box-shadow: 0 -1px 0 rgba(43, 36, 28, 0.04);
   overflow: hidden;
 }
 
@@ -95,4 +210,184 @@ body {
 
 .scrollbar-none::-webkit-scrollbar {
   display: none;
+}
+
+/* The one unmistakable button on the page. Terracotta, pill, a hard shoulder
+   of the pressed tone underneath it, and the only thing on the page that
+   lifts on hover. */
+.btn-primary {
+  font-weight: 700;
+  color: var(--on-primary);
+  background: var(--primary);
+  border: none;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  box-shadow:
+    0 2px 0 var(--primary-pressed),
+    0 8px 18px rgba(221, 78, 34, 0.24);
+  transition:
+    transform var(--dur-hover) var(--ease),
+    box-shadow var(--dur-hover) var(--ease),
+    filter var(--dur-hover) var(--ease);
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  filter: brightness(1.05);
+  box-shadow:
+    0 4px 0 var(--primary-pressed),
+    0 12px 22px rgba(221, 78, 34, 0.3);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
+  transition-duration: var(--dur-press);
+  box-shadow: 0 1px 0 var(--primary-pressed);
+}
+
+.btn-primary:disabled {
+  background: var(--canvas-deep);
+  color: var(--mute);
+  box-shadow: none;
+  cursor: not-allowed;
+  transform: none;
+  filter: none;
+}
+
+.btn-quiet {
+  font-weight: 600;
+  color: var(--body);
+  background: var(--card);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-hover) var(--ease),
+    color var(--dur-hover) var(--ease),
+    background var(--dur-hover) var(--ease);
+}
+
+.btn-quiet:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--ink);
+}
+
+.btn-quiet:disabled {
+  cursor: not-allowed;
+  color: var(--mute);
+}
+
+.btn-quiet[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--canvas);
+}
+
+.field-input {
+  width: 100%;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  padding: 9px 11px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-sm);
+  background: var(--canvas);
+  color: var(--ink);
+  outline: none;
+  transition:
+    border-color var(--dur-hover) var(--ease),
+    box-shadow var(--dur-hover) var(--ease);
+}
+
+.field-input::placeholder {
+  color: var(--mute);
+}
+
+.field-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+  outline: none;
+}
+
+.field-input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.dialog-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(43, 36, 28, 0.42);
+  animation: scrim-in var(--dur-enter) var(--ease);
+}
+
+.dialog-card {
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 50px rgba(43, 36, 28, 0.18);
+  animation: dialog-in var(--dur-enter) var(--ease);
+}
+
+.floating-card {
+  background: var(--card);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-md);
+  box-shadow: 0 6px 18px rgba(43, 36, 28, 0.14);
+  animation: card-in var(--dur-hover) var(--ease);
+}
+
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    transform: none;
+  }
 }
