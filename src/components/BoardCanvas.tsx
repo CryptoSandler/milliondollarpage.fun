@@ -221,6 +221,14 @@ export default function BoardCanvas({
       canvas.height = store.height;
     }
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    // NEAREST NEIGHBOUR, NEVER INTERPOLATION, and re-set on every draw rather
+    // than once: reassigning canvas.width above resets the whole context to
+    // its defaults, and the default is smoothing ON. It survives save/restore
+    // (it is part of the state the stack carries), so setting it here covers
+    // everything drawn below and anything drawImage'd later — a block is a
+    // small bitmap of somebody's artwork, and interpolating it is the one
+    // thing this board must not do to it.
+    context.imageSmoothingEnabled = false;
 
     const family = getComputedStyle(canvas).fontFamily || "system-ui, sans-serif";
     const screen = { width, height };

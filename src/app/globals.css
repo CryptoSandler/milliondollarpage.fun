@@ -175,6 +175,13 @@ h3 {
     height: 100dvh; /* phones: excludes the browser chrome that 100vh includes */
     touch-action: none;
     cursor: crosshair;
+    /* The backing store is sized in real device pixels, so normally there is
+       nothing for the browser to resample here. The exception is a fractional
+       devicePixelRatio — 1.5 on Windows scaling, 2.75 on some Android — where
+       rounding the store to whole pixels leaves a sub-pixel mismatch against
+       the CSS box. `pixelated` decides how that mismatch reads: a hard
+       nearest-neighbour edge rather than a blur across every block. */
+    image-rendering: pixelated;
   }
 
   .board-bar {
