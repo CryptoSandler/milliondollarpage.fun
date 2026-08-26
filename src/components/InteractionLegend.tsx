@@ -1,24 +1,26 @@
 /**
  * How to drive the board, stated on the board.
  *
- * A drag-to-size selector is not discoverable, and neither is scroll-to-pan on
- * a canvas that covers the window. Two legends rather than one: a pointer has
+ * A drag-to-size selector is not discoverable, and neither is a wheel that
+ * zooms rather than scrolls. Two lines rather than one: a pointer has
  * modifiers and a wheel, a touchscreen has neither.
  *
- * Of everything in the bottom bar this is the least essential — it explains an
- * interaction, it isn't one — so per DESIGN.md it is the first thing to go as
- * the bar runs out of width, hidden below `lg` rather than squeezed or wrapped.
+ * Of everything in the controls this is the least essential — it explains an
+ * interaction, it isn't one — so per DESIGN.md it is the first thing to go
+ * when room runs out: hidden below `lg` in the bottom bar, and hidden again
+ * in a side panel too short to hold it. Where the panel does have the room it
+ * comes back, pinned to the floor of the column.
  */
 export default function InteractionLegend() {
   return (
-    <div className="hidden shrink-0 flex-col gap-0.5 text-[11.5px] leading-tight text-mute lg:flex">
+    <div className="interaction-legend hidden shrink-0 flex-col gap-0.5 text-[11.5px] leading-tight text-mute lg:flex">
       <p>
         <span className="font-semibold text-body">Drag</span> to outline ·{" "}
-        <span className="font-semibold text-body">scroll</span> to move down the board
+        <span className="font-semibold text-body">tap</span> on a touchscreen
       </p>
       <p>
-        <span className="font-semibold text-body">⌘/ctrl-scroll</span> to zoom ·{" "}
-        <span className="font-semibold text-body">shift-drag</span> to pan ·{" "}
+        <span className="font-semibold text-body">Scroll or pinch</span> to zoom ·{" "}
+        <span className="font-semibold text-body">shift-drag</span> to move once zoomed in ·{" "}
         <span className="font-semibold text-body">esc</span> to clear
       </p>
     </div>

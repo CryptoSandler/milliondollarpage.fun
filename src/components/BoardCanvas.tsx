@@ -292,6 +292,20 @@ export default function BoardCanvas({
     context.fillStyle = PAINT.paper;
     context.fillRect(origin.x, origin.y, span, span);
 
+    // The sheet's edge. The wall behind the board is the same cream as the
+    // board, which is what DESIGN.md asks for — so this hairline, drawn just
+    // outside the paper in the coarse rule's own tone, is the only thing
+    // saying where the artwork stops. Without it the board has no boundary at
+    // all in the corners no ruling reaches.
+    context.strokeStyle = PAINT.ruleCoarse;
+    context.lineWidth = 1;
+    context.strokeRect(
+      Math.round(origin.x) - 0.5,
+      Math.round(origin.y) - 0.5,
+      Math.round(span) + 1,
+      Math.round(span) + 1,
+    );
+
     // Two-tier graph paper. The fine tier is one block — it says where a
     // block would land. The coarse tier is a hundred pixels — it is how you
     // navigate without counting.

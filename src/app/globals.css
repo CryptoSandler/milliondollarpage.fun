@@ -41,10 +41,20 @@
   --dur-press: 90ms;
   --dur-enter: 220ms;
 
-  /* The bars are fixed-height, and the board's fit maths reads their measured
-     height. Changing these changes how much board is visible; nothing else. */
+  /* The chrome is fixed-size, and the board's fit maths reads its measured
+     box. Changing these changes how much board is visible; nothing else. */
   --bar-top-h: 52px;
   --bar-bottom-h: 88px;
+
+  /* The side panel's width in the landscape layout.
+     The board is square and fits by its limiting dimension, so in a landscape
+     window it is exactly as tall as the space under the top bar and the width
+     left over is the panel's. `100vw - (100dvh - bar)` is precisely that
+     leftover. The floor is the narrowest the controls stay usable at; the
+     ceiling stops an ultrawide monitor from handing five buttons half a
+     screen, and the cream either side of the board there is the wall the
+     sheet hangs on rather than a letterbox. */
+  --panel-w: clamp(280px, calc(100vw - (100dvh - var(--bar-top-h))), 560px);
 }
 
 @media (max-width: 640px) {
@@ -89,9 +99,21 @@
   --radius-lg: 20px;
 }
 
+/*
+ * THE DOCUMENT NEVER SCROLLS, in either axis, at any size.
+ *
+ * The whole board is always on screen and the chrome is fixed, so there is
+ * never anything below the fold — and a page that can scroll a few pixels is
+ * a page that rubber-bands under a wheel meant for the board. `overflow:
+ * hidden` is the belt; the fit maths in viewport.ts is the braces, and its
+ * tests assert that the board plus the chrome never asks for more room than
+ * the viewport has.
+ */
 html,
 body {
   height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body {
@@ -204,20 +226,53 @@ h3 {
     box-shadow: 0 1px 0 rgba(43, 36, 28, 0.04);
   }
 
-  .board-bar--bottom {
+  /*
+   * The controls: the presets, the readout, the wallet field, the Buy button
+   * and the legend. ONE element and one DOM tree, which the two layouts below
+   * move rather than duplicate — a second copy would mean two wallet inputs
+   * and two Buy buttons for a screen reader to find.
+   *
+   * Which layout applies is decided here in CSS and nowhere else. No JS media
+   * query, so there is nothing for a server render and a hydration to
+   * disagree about and nothing to flash; BoardView reads the layout back off
+   * this element's measured box instead.
+   *
+   * This is the bottom-bar layout: portrait, and phones. Fixed height, never
+   * flex-wrap, because BoardView measures the box to keep the board from
+   * running under it and a bar that can grow to two rows is a bar that can
+   * cover the board it was measured against. Everything inside fits one row
+   * down to a phone width — see SelectionPanel and InteractionLegend for what
+   * gives way first.
+   */
+  .board-controls {
+    position: fixed;
+    left: 0;
+    right: 0;
     bottom: 0;
-    /* Fixed, not min-height, and never flex-wrap: BoardView measures this
-       element's real height to keep the canvas viewport from running under it,
-       so a bar that can grow (wrapping to a second row) or shrink is a bar
-       that can drift out of sync with that measurement. Everything inside is
-       laid out to fit this one row down to a phone width instead — see
-       SelectionPanel and InteractionLegend for what gives way first. */
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 0 16px;
     height: var(--bar-bottom-h);
+    border-color: var(--hairline-strong);
     border-top-width: 1px;
     padding-bottom: max(0px, env(safe-area-inset-bottom));
     background: var(--card-warm);
     box-shadow: 0 -1px 0 rgba(43, 36, 28, 0.04);
     overflow: hidden;
+  }
+
+  /* Same as the top bar on a phone: the gaps close before anything in the row
+     is allowed to wrap or scroll out of reach. In the components layer rather
+     than beside the token overrides above, so the side-panel layout — which
+     starts at exactly this width — is not fighting an unlayered rule for the
+     one viewport where both queries match. */
+  @media (max-width: 640px) {
+    .board-controls {
+      gap: 8px;
+      padding: 0 10px;
+    }
   }
 
   /* A horizontally-scrolling row (the preset buttons on a narrow bottom bar)
@@ -409,5 +464,121 @@ h3 {
 
   .btn-primary:hover:not(:disabled) {
     transform: none;
+  }
+}
+
+/*
+ * THE SIDE PANEL: what the bottom bar becomes when the window is wider than it
+ * is tall.
+ *
+ * The board is square and contained, so a landscape window has width left over
+ * once the board has taken all the height there is. That leftover is not a
+ * margin — it is where the controls live, and there is no bottom bar in this
+ * layout at all.
+ *
+ * 5:4 rather than a plain 1:1 because the crossover is not where the window
+ * turns landscape, it is where a side panel buys a bigger board than a bottom
+ * bar does: at 1280x1024 the panel wins, at 600x590 it does not. 640px is the
+ * width below which a 280px panel would leave less board than the bar does.
+ *
+ * These rules are in the UTILITIES layer and keyed off two classes on purpose.
+ * A component-layer rule loses to every Tailwind utility in the markup, which
+ * is right for a component's own look and wrong for a layout that has to
+ * override `items-center` and `w-44`. Two classes in the same layer beats one,
+ * deterministically, without an `!important` anywhere.
+ */
+@layer utilities {
+  @media (min-width: 640px) and (min-aspect-ratio: 5 / 4) {
+    .board-controls {
+      top: var(--bar-top-h);
+      right: auto;
+      bottom: 0;
+      width: var(--panel-w);
+      height: auto;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 16px;
+      padding: 16px;
+      padding-bottom: max(16px, env(safe-area-inset-bottom));
+      border-top-width: 0;
+      border-right-width: 1px;
+      box-shadow: 1px 0 0 rgba(43, 36, 28, 0.04);
+      /* The panel sheds the legend and closes its gaps on a short window
+         (below), so in practice this never scrolls. It is here so that a
+         window shorter than every fallback clips nothing a buyer needs — the
+         Buy button stays reachable. The DOCUMENT still never scrolls; this
+         one box may, and it is the only one that can. */
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    .board-controls .selection-panel {
+      flex: 1 1 auto;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 16px;
+    }
+
+    /* Reading order down the panel, independent of the source order the
+       bottom bar needs: pick a size, see what it costs, say where it goes,
+       buy it. The legend is last and pinned to the floor of the panel. */
+    .board-controls .selection-presets {
+      order: 1;
+      max-width: none;
+      flex-wrap: wrap;
+      overflow: visible;
+    }
+
+    .board-controls .selection-readout {
+      order: 2;
+      flex: 0 0 auto;
+    }
+
+    .board-controls .wallet-field {
+      order: 3;
+    }
+
+    .board-controls .wallet-field input {
+      width: 100%;
+    }
+
+    .board-controls .selection-buy {
+      order: 4;
+      align-items: stretch;
+    }
+
+    .board-controls .selection-buy p {
+      max-width: none;
+      text-align: left;
+    }
+
+    /* Room for it here, so the legend the bottom bar drops first comes back. */
+    .board-controls .interaction-legend {
+      order: 5;
+      display: flex;
+      margin-top: auto;
+    }
+  }
+
+  /* A short landscape window — a phone on its side, a laptop with the dock
+     out — has a short panel. What gives way is what DESIGN.md says gives way:
+     the legend first, then the wallet's own label, then the gaps. */
+  @media (min-width: 640px) and (min-aspect-ratio: 5 / 4) and (max-height: 620px) {
+    .board-controls {
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .board-controls .selection-panel {
+      gap: 10px;
+    }
+
+    .board-controls .interaction-legend {
+      display: none;
+    }
+
+    .board-controls .wallet-field .label-caps {
+      display: none;
+    }
   }
 }

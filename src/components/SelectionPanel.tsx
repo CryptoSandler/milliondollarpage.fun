@@ -7,13 +7,18 @@ import { formatUsdc } from "../lib/board/pricing";
 /**
  * What you are selecting, what it costs, and the one button that buys it.
  *
- * This has to fit one fixed-height row all the way down to a phone width —
- * see .board-bar--bottom in globals.css, which never wraps. Three things never
- * give way, no matter how little room is left: the pixel count, the total
- * price, and the Buy button. Everything else yields first, in the order
- * DESIGN.md sets out: the legend (its own component), then the exact rectangle
- * readout, then the per-preset prices, which move into a tooltip and then
- * scroll horizontally rather than wrap.
+ * This has to work in both of the layouts .board-controls chooses between: one
+ * fixed-height row across the bottom, all the way down to a phone width, and a
+ * column down the side of a landscape window. The row is what the markup here
+ * describes; the column is a handful of rules in globals.css that re-order and
+ * re-stretch these same elements, keyed to the class names below. One DOM
+ * tree, two shapes — never two copies of the Buy button.
+ *
+ * Three things never give way in either, no matter how little room is left:
+ * the pixel count, the total price, and the Buy button. Everything else yields
+ * first, in the order DESIGN.md sets out: the legend (its own component), then
+ * the exact rectangle readout, then the per-preset prices, which move into a
+ * tooltip and then scroll horizontally rather than wrap.
  *
  * The Buy button is disabled rather than hidden when the rectangle cannot be
  * bought, and `hint` underneath it always says why — or, when it can be
@@ -42,15 +47,16 @@ export default function SelectionPanel({
   onClear: () => void;
   onBuy: () => void;
   /**
-   * Whatever else the bar carries — the legend, the wallet field — rendered
-   * between the readout and the Buy button. DESIGN.md puts the primary action
-   * at the end of the bar, so nothing is allowed to sit to the right of it.
+   * Whatever else the controls carry — the legend, the wallet field —
+   * rendered between the readout and the Buy button. DESIGN.md puts the
+   * primary action last, so nothing sits to the right of it in the bar or
+   * below it in the panel.
    */
   children?: ReactNode;
 }) {
   return (
-    <section className="flex min-w-0 flex-1 items-center gap-x-4">
-      <div className="scrollbar-none flex min-w-0 max-w-[5rem] shrink items-center gap-1.5 overflow-x-auto sm:max-w-none">
+    <section className="selection-panel flex min-w-0 flex-1 items-center gap-x-4">
+      <div className="selection-presets scrollbar-none flex min-w-0 max-w-[5rem] shrink items-center gap-1.5 overflow-x-auto sm:max-w-none">
         {/* Freehand is the default and, below `sm`, tapping the active preset
             already returns to it — so this is the one control the phone drops. */}
         <button
@@ -80,7 +86,7 @@ export default function SelectionPanel({
         ))}
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5">
+      <div className="selection-readout flex min-w-0 flex-1 flex-col justify-center gap-0.5">
         {selection === null ? (
           <>
             <p className="truncate font-display text-[15px] font-semibold text-ink sm:text-[17px]">
@@ -88,7 +94,7 @@ export default function SelectionPanel({
               <span className="hidden sm:inline">Nothing selected yet</span>
             </p>
             <p className="hidden truncate text-[12.5px] text-body sm:block">
-              Drag the board, or pick a size on the left.
+              Drag out a rectangle, or start from one of the sizes.
             </p>
           </>
         ) : (
@@ -110,7 +116,7 @@ export default function SelectionPanel({
 
       {children}
 
-      <div className="flex shrink-0 flex-col items-end gap-1">
+      <div className="selection-buy flex shrink-0 flex-col items-end gap-1">
         <button
           type="button"
           onClick={onBuy}

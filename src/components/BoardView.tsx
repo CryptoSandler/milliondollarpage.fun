@@ -59,7 +59,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
    */
   const [ownHoldIds, setOwnHoldIds] = useState<string[]>([]);
   const topBarRef = useRef<HTMLElement>(null);
-  const bottomBarRef = useRef<HTMLDivElement>(null);
+  const controlsRef = useRef<HTMLDivElement>(null);
 
   const clear = useCallback(() => setSelection(null), []);
 
@@ -174,7 +174,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
     if (walletMissing) {
       return {
         canBuy: false,
-        hint: "Add your wallet address to buy — the field is on the left.",
+        hint: "Add your wallet address to buy. Nothing is held until you do.",
         tone: "info",
       };
     }
@@ -251,37 +251,48 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
     return () => clearTimeout(timeout);
   }, [notice]);
 
-  // --bar-top-h / --bar-bottom-h are nominal heights, kept here as a
-  // matching JS constant for the very first paint. Both bars now have a
-  // fixed `height` rather than `min-height` and neither ever `flex-wrap`
-  // (see globals.css), specifically so this can never desync from them —
-  // but the actual box also depends on env(safe-area-inset-bottom) and rem
-  // sizing that a static JS number can't mirror, so this still measures the
-  // two bar elements directly rather than reading the CSS variables off the
-  // root.
-  //
-  // This cannot loop: the measured heights only flow into `bars` state, which
-  // affects the canvas's viewport (a different element) and the hover card's
-  // position, never a style on the bar elements themselves from inside their
-  // own observer callback.
+  /**
+   * The chrome the board has to stay clear of, measured rather than assumed.
+   *
+   * --bar-top-h / --bar-bottom-h / --panel-w are nominal sizes, mirrored by
+   * FALLBACK_CHROME above for the very first paint. They are not enough on
+   * their own: the real box also depends on env(safe-area-inset-bottom) and on
+   * rem sizing that a static JS number cannot mirror, so this measures the two
+   * elements directly.
+   *
+   * WHICH LAYOUT IS IN FORCE is read back off the controls element's own box,
+   * not duplicated here as a matchMedia call. globals.css is the only place
+   * that decides, so there is nothing to desync — and nothing that renders one
+   * way on the server and another after hydration, which is the flash the
+   * Next.js guidance on client-only state warns about.
+   *
+   * This cannot loop: the measured sizes only flow into `chrome` state, which
+   * affects the canvas's viewport (a different element) and the hover card's
+   * position, never a style on the measured elements themselves from inside
+   * their own observer callback.
+   */
   useEffect(() => {
     const topEl = topBarRef.current;
-    const bottomEl = bottomBarRef.current;
-    if (!topEl || !bottomEl) return;
+    const controlsEl = controlsRef.current;
+    if (!topEl || !controlsEl) return;
 
     function measure() {
-      setChrome({
-        top: topEl!.offsetHeight || FALLBACK_CHROME.top,
-        right: 0,
-        bottom: bottomEl!.offsetHeight || FALLBACK_CHROME.bottom,
-        left: 0,
-      });
+      const top = topEl!.offsetHeight || FALLBACK_CHROME.top;
+      const box = controlsEl!.getBoundingClientRect();
+      // A controls block narrower than the window is the side panel, anchored
+      // to the left edge; one that spans the window is the bottom bar.
+      const side = box.width > 0 && box.width < window.innerWidth - 1;
+      setChrome(
+        side
+          ? { top, right: 0, bottom: 0, left: box.right }
+          : { top, right: 0, bottom: box.height || FALLBACK_CHROME.bottom, left: 0 },
+      );
     }
 
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(topEl);
-    observer.observe(bottomEl);
+    observer.observe(controlsEl);
     return () => observer.disconnect();
   }, []);
 
@@ -313,7 +324,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
         </div>
       </header>
 
-      <div ref={bottomBarRef} className="board-bar board-bar--bottom">
+      <div ref={controlsRef} className="board-controls">
         <SelectionPanel
           selection={selection}
           perPixel={board.pricePerPixelBaseUnits}
@@ -327,7 +338,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
         >
           <InteractionLegend />
 
-          <label className="flex shrink-0 flex-col justify-center gap-1">
+          <label className="wallet-field flex shrink-0 flex-col justify-center gap-1">
             <span className="label-caps hidden items-center gap-1.5 sm:flex">
               Wallet
               {walletNeeded && <span className="font-bold text-primary-pressed">needed</span>}
@@ -386,9 +397,15 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
 
       {notice && (
         <div
-          className="floating-card fixed left-1/2 z-30 max-w-md -translate-x-1/2 px-4 py-3 text-[13px] text-ink-soft"
+          className="floating-card fixed z-30 max-w-md -translate-x-1/2 px-4 py-3 text-[13px] text-ink-soft"
           role="status"
-          style={{ top: `calc(${chrome.top}px + 12px)` }}
+          // Centred on the BOARD, not on the window: in the side-panel layout
+          // the window's middle is a couple of hundred pixels left of the
+          // artwork this is a notice about.
+          style={{
+            top: `calc(${chrome.top}px + 12px)`,
+            left: `calc(${chrome.left}px + (100vw - ${chrome.left}px - ${chrome.right}px) / 2)`,
+          }}
         >
           {notice}
         </div>
