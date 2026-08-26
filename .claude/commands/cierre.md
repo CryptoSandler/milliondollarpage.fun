@@ -42,9 +42,13 @@ npm run build
 compares where that URL and `DATABASE_URL` actually point rather than how they are spelled,
 and refuses to run when they address the same database. The suite truncates every table
 between tests, so that guard is the only thing between a hand-edited `.env.local` and
-TRUNCATE against real data. It is also not concurrency-safe: two runs at once truncate each
-other's fixtures, so never start a second one. If it aborts, that is a blocked close (see
-rule 2). Do not work around it by running a subset.
+TRUNCATE against real data. Two runs at once are safe now: `vitest.globalSetup.ts` takes a
+run-scoped Postgres advisory lock before the first test file loads, so a second `npm test`
+waits — it prints `Another run of this suite holds the test database. Waiting for it to
+finish...`, then `Waited Ns for the test database.` and runs its own tests from a clean
+board. It queues rather than skipping, so the second run's results are real results.
+If it aborts, that is a blocked close (see rule 2). Do not work around it by running a
+subset.
 
 Paste the parts that are not about your change too. A pre-existing failure you inherited is
 information the reader needs; hiding it makes the next batch debug it from scratch.
