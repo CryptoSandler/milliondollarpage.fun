@@ -76,7 +76,52 @@
   --card-warm: #fbf5e8;
 
   --hairline: rgba(43, 36, 28, 0.1);
+
+  /*
+   * DECORATION. It draws the sheet's edge, the bar under the wordmark, the
+   * outline round a card and the rule round a box of prose, and it is
+   * deliberately faint: 1.63:1 on --canvas, 1.86:1 on --card. WCAG 1.4.11
+   * reaches what identifies a CONTROL or carries information in a graphic,
+   * and none of those is either — a card is found by what is printed in it,
+   * not by its outline. Raising this would put a hard rule round every box on
+   * a page DESIGN.md asks to stay quiet.
+   *
+   * It is also the coarse rule's own tone, which is what a held block is
+   * painted in, so its value is load-bearing on the board as well as here.
+   */
   --hairline-strong: #c9baa0;
+
+  /*
+   * CONTROLS. The same line where the border is the only thing saying "you can
+   * type here" or "this is a button": every .field-input, every .btn-quiet,
+   * the image dropzone and the fit chooser. That is a boundary identifying an
+   * interactive component, which WCAG 1.4.11 puts at 3:1 against what is
+   * either side of it, and --hairline-strong's 1.63:1 on --canvas and 1.86:1
+   * on --card is not close.
+   *
+   * A separate token rather than darkening --hairline-strong, because the two
+   * lines have different floors: one must be found, the other must not shout.
+   * Merging them would have dragged a 3:1 rule round every card and every
+   * paragraph in a box.
+   *
+   * Chosen, not picked: the same hue as --hairline-strong (38deg), so the
+   * decorative line and the control line read as one family; the saturation
+   * dropped from 27.5% to 20%, which is the ink ramp's own range and keeps the
+   * tone a warm neutral instead of the olive that hue turns into when it is
+   * darkened at full saturation; then the lightness taken down until the worst
+   * of the four surfaces a control lands on clears 3:1 with room to spare.
+   * Measured: 3.62:1 on --canvas, 4.12:1 on --card, 3.89:1 on --card-warm,
+   * 3.19:1 on --canvas-deep (a disabled .btn-quiet — inactive components are
+   * exempt from 1.4.11, and this project does not spend the exemption).
+   *
+   * ponytail: --mute already measures 3.69/4.20/3.96/3.25 on those same four
+   * surfaces and would have cost no token at all. It is not reused because its
+   * documented job is to be the quietest rung the page has, exempt from both
+   * 1.4.3 and 1.4.11 — tying a border that MUST clear 3:1 to a tone that is
+   * allowed not to means the next pass on disabled labels silently moves every
+   * input's edge.
+   */
+  --control-line: #8a795c;
 
   --danger: #a8371f;
   --danger-soft: #f1d4c8;
@@ -155,6 +200,7 @@
   --color-card-warm: var(--card-warm);
   --color-hairline: var(--hairline);
   --color-hairline-strong: var(--hairline-strong);
+  --color-control-line: var(--control-line);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
   --color-danger-line: var(--danger-line);
@@ -233,9 +279,13 @@ h3 {
     color: var(--ink);
   }
 
+  /* A scrollbar thumb is a control you drag, and its fill is the only thing
+     saying it is there, so it takes the control line rather than the
+     decorative one — WCAG 1.4.11 again, and the same 3:1. It is the one
+     control here whose indicator is a fill instead of a border. */
   * {
     scrollbar-width: thin;
-    scrollbar-color: var(--hairline-strong) transparent;
+    scrollbar-color: var(--control-line) transparent;
   }
 
   *::-webkit-scrollbar {
@@ -248,7 +298,7 @@ h3 {
   }
 
   *::-webkit-scrollbar-thumb {
-    background: var(--hairline-strong);
+    background: var(--control-line);
     border-radius: var(--radius-pill);
   }
 
@@ -418,7 +468,7 @@ h3 {
     font-weight: 600;
     color: var(--body);
     background: var(--card);
-    border: 1px solid var(--hairline-strong);
+    border: 1px solid var(--control-line);
     border-radius: var(--radius-sm);
     cursor: pointer;
     transition:
@@ -446,11 +496,11 @@ h3 {
     cursor: not-allowed;
     color: var(--mute);
     background: var(--canvas-deep);
-    border-color: var(--hairline-strong);
+    border-color: var(--control-line);
   }
 
   .btn-quiet:disabled:hover {
-    border-color: var(--hairline-strong);
+    border-color: var(--control-line);
     color: var(--mute);
   }
 
@@ -476,7 +526,7 @@ h3 {
     font-family: var(--font-ui);
     font-size: 16px;
     padding: 9px 11px;
-    border: 1px solid var(--hairline-strong);
+    border: 1px solid var(--control-line);
     border-radius: var(--radius-sm);
     background: var(--canvas);
     color: var(--ink);

@@ -298,7 +298,7 @@ export default function ContentForm({
           onDragLeave={() => setDropActive(false)}
           onDrop={handleDrop}
           className={`mt-1.5 flex cursor-pointer items-center gap-3.5 rounded-xl border-2 border-dashed bg-canvas p-4 transition-colors ${
-            dropActive ? "border-primary" : "border-hairline-strong hover:border-primary"
+            dropActive ? "border-primary" : "border-control-line hover:border-primary"
           }`}
         >
           <span className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-hairline-strong bg-canvas-deep">
@@ -498,7 +498,7 @@ function FitOption({
       className={`flex flex-1 cursor-pointer flex-col items-center rounded-lg border px-2 py-2 text-center transition-colors ${
         checked
           ? "border-ink bg-ink text-canvas"
-          : "border-hairline-strong bg-canvas text-body hover:border-primary"
+          : "border-control-line bg-canvas text-body hover:border-primary"
       }`}
     >
       <input type="radio" name="imageFit" checked={checked} onChange={onChange} className="sr-only" />

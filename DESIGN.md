@@ -17,6 +17,7 @@ colors:
   card-warm: "#fbf5e8"
   hairline: "rgba(43,36,28,0.10)"
   hairline-strong: "#c9baa0"
+  control-line: "#8a795c"
   danger: "#a8371f"
   danger-soft: "#f1d4c8"
   danger-line: "#e2b6a4"
@@ -176,6 +177,31 @@ which 1.4.11 does not reach. Both sit on `canvas-deep`. **Exempt is not a licenc
 to be invisible**, so it darkened to `#827968` all the same: **2.57:1 → 3.25:1**,
 which is the 3:1 floor this project claimed in a comment for months without ever
 having measured it.
+
+**There are two line colours, and the split is the point.** `hairline-strong`
+(`#c9baa0`) is decoration: the sheet's edge, the rule under the top bar, the
+outline round a card, the border round a box of prose. It measures **1.63:1**
+on `canvas` and **1.86:1** on `card` and it stays exactly there, because WCAG
+1.4.11 reaches what identifies a *control* or carries information in a graphic,
+and a card is found by what is printed in it rather than by its outline. A 3:1
+rule round every box would be a louder page than this document asks for.
+
+`control-line` (`#8a795c`) is the other job: the border that is the only thing
+saying an interactive area is there. Every text field, every quiet button, the
+image dropzone and the fit chooser. Those are boundaries identifying a
+component, 1.4.11 puts them at 3:1, and `hairline-strong` was carrying them at
+1.63:1 — the one failure the last contrast pass reported and left. Measured on
+the four surfaces a control lands on: **3.62:1** on `canvas`, **4.12:1** on
+`card`, **3.89:1** on `card-warm`, **3.19:1** on `canvas-deep`. The scrollbar
+thumb takes it too — it is a control you drag, and it is the one whose only
+indication is a fill rather than a border.
+
+**The hue did not move here either.** `control-line` is the same 38° as the
+decorative line so the two read as one family; the saturation drops from 27.5%
+to 20%, which is where the ink ramp already sits and which keeps the tone a
+warm neutral rather than the olive that hue becomes when it is darkened at full
+saturation; the lightness then comes down until the worst of the four surfaces
+clears 3:1 with room to spare.
 
 Every ratio in this document is a WCAG 2.1 relative-luminance ratio, computed
 from the values above and confirmed against pixels sampled out of a rendered
