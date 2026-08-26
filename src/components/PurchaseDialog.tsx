@@ -472,7 +472,7 @@ export default function PurchaseDialog({
             type="button"
             onClick={() => void requestClose()}
             aria-label="Close"
-            className="-mr-1 rounded-md px-2 py-1 text-[20px] leading-none text-mute hover:bg-canvas-deep hover:text-ink"
+            className="-mr-1 rounded-md px-2 py-1 text-[20px] leading-none text-body hover:bg-canvas-deep hover:text-ink"
           >
             ×
           </button>

@@ -13,7 +13,7 @@
  */
 export default function InteractionLegend() {
   return (
-    <div className="interaction-legend hidden shrink-0 flex-col gap-0.5 text-[11.5px] leading-tight text-mute lg:flex">
+    <div className="interaction-legend hidden shrink-0 flex-col gap-0.5 text-[11.5px] leading-tight text-body lg:flex">
       <p>
         <span className="font-semibold text-body">Click</span> to place a size ·{" "}
         <span className="font-semibold text-body">drag</span> to outline freehand

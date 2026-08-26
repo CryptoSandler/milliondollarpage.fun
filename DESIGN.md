@@ -10,7 +10,7 @@ colors:
   ink: "#2b241c"
   ink-soft: "#443a2c"
   body: "#6b6154"
-  mute: "#948a79"
+  mute: "#827968"
   canvas: "#f3ede0"
   canvas-deep: "#e9dfc9"
   card: "#fffcf5"
@@ -158,6 +158,23 @@ within the hue, never drift out of it.
 it is the shoulder under the button — and for one it did not: it is set as
 *text* on `primary-soft` in the counter pill at 12px/700, where it measured
 **4.26:1** and now measures **5.26:1**.
+
+**`mute` is a tone, not a text colour.** It used to set the all-caps labels, the
+form hints, the interaction legend, the hover card's metadata and the input
+placeholders. At `#948a79` that measured **2.92:1** on `canvas`, **3.32:1** on
+`card`, **3.13:1** on `card-warm` and **2.57:1** on `canvas-deep`, and every one
+of those sites is 11–16px text, which 1.4.3 puts at 4.5:1. Darkening the token
+far enough to carry 11px text on the cream would have parked it on top of
+`body`, which is to say it would have deleted the rung instead of fixing it. So
+that text is `body` now — **5.20:1** on `canvas`, **5.92:1** on `card`,
+**5.58:1** on `card-warm` — and the ramp keeps four distinct steps.
+
+What `mute` still sets is the two things allowed to be quiet: a disabled control's
+label, which 1.4.3 exempts as incidental, and one aria-hidden decorative glyph,
+which 1.4.11 does not reach. Both sit on `canvas-deep`. **Exempt is not a licence
+to be invisible**, so it darkened to `#827968` all the same: **2.57:1 → 3.25:1**,
+which is the 3:1 floor this project claimed in a comment for months without ever
+having measured it.
 
 Every ratio in this document is a WCAG 2.1 relative-luminance ratio, computed
 from the values above and confirmed against pixels sampled out of a rendered

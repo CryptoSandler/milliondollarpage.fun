@@ -424,7 +424,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
               {hovered.block.link}
             </p>
           )}
-          <p className="tabular mt-1 text-[11px] text-mute">
+          <p className="tabular mt-1 text-[11px] text-body">
             {hovered.block.w} × {hovered.block.h} at ({hovered.block.x}, {hovered.block.y}) ·{" "}
             {(hovered.block.w * hovered.block.h).toLocaleString("en-US")} px
           </p>

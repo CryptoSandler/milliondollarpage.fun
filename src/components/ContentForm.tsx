@@ -287,7 +287,7 @@ export default function ContentForm({
       <div>
         <div className="flex items-baseline justify-between gap-2">
           <span className="text-[15px] font-bold text-ink">Image</span>
-          <span className="text-[14px] text-mute">Any picture, up to {MAX_INPUT_MB} MB</span>
+          <span className="text-[14px] text-body">Any picture, up to {MAX_INPUT_MB} MB</span>
         </div>
         <label
           htmlFor={imageId}
@@ -306,6 +306,11 @@ export default function ContentForm({
               // eslint-disable-next-line @next/next/no-img-element -- a local blob: URL, not something next/image can optimize.
               <img src={previewUrl} alt="" className="size-full" style={{ objectFit: draft.imageFit }} />
             ) : (
+              // The last thing in the product still set in --mute, and it is
+              // aria-hidden decoration standing in for a thumbnail that has
+              // not been picked yet — the sentence beside it carries the
+              // meaning — so WCAG 1.4.11 does not reach it. Measured anyway:
+              // 3.25:1 on the --canvas-deep well it sits in.
               <svg aria-hidden viewBox="0 0 24 24" className="size-5 text-mute" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 16V5" />
                 <path d="m7 10 5-5 5 5" />
@@ -373,7 +378,7 @@ export default function ContentForm({
           <label htmlFor={captionId} className="text-[15px] font-bold text-ink">
             Caption <span className="font-normal text-body">— optional</span>
           </label>
-          <span className="tabular text-[14px] text-mute">
+          <span className="tabular text-[14px] text-body">
             {draft.caption.length} / {CAPTION_MAX_LENGTH}
           </span>
         </div>
@@ -463,7 +468,7 @@ function listMissing(missing: string[]): string {
 /** What this field costs you once the order is paid, said under that field. */
 function Permanence({ children }: { children: ReactNode }) {
   return (
-    <p className="mt-1.5 flex gap-1.5 text-[14px] leading-snug text-mute">
+    <p className="mt-1.5 flex gap-1.5 text-[14px] leading-snug text-body">
       <svg aria-hidden viewBox="0 0 8 8" className="mt-1 size-2 shrink-0 text-primary-pressed" fill="currentColor">
         <path d="M4 0 8 4 4 8 0 4Z" />
       </svg>
@@ -498,7 +503,7 @@ function FitOption({
     >
       <input type="radio" name="imageFit" checked={checked} onChange={onChange} className="sr-only" />
       <span className="text-[15px] font-bold">{label}</span>
-      <span className={`text-[14px] ${checked ? "text-canvas-deep" : "text-mute"}`}>{detail}</span>
+      <span className={`text-[14px] ${checked ? "text-canvas-deep" : "text-body"}`}>{detail}</span>
     </label>
   );
 }

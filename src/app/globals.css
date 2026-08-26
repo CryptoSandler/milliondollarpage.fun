@@ -41,7 +41,33 @@
   --ink: #2b241c;
   --ink-soft: #443a2c;
   --body: #6b6154;
-  --mute: #948a79;
+
+  /*
+   * THE QUIETEST RUNG, AND IT DOES NOT SET TEXT ANY MORE.
+   *
+   * It used to set nine things: the all-caps labels, the form hints, the
+   * interaction legend, the hover card's metadata, the input placeholders, the
+   * disabled zoom buttons. At #948a79 it measured 2.92:1 on --canvas, 3.32:1
+   * on --card, 3.13:1 on --card-warm and 2.57:1 on --canvas-deep. Every one of
+   * those sites is text at 11-16px, so the rule is WCAG 1.4.3's 4.5:1, and
+   * every one of them failed it. A comment right here used to assert the
+   * opposite.
+   *
+   * Darkening the token far enough to carry 11px text on --canvas would have
+   * landed it on top of --body (5.20:1 there), which is to say it would have
+   * deleted the rung rather than fixed it. So the text moved to --body, which
+   * already measures 5.20:1 on --canvas, 5.92:1 on --card and 5.58:1 on
+   * --card-warm, and this token kept its job of being quiet.
+   *
+   * What is left are the two places a quiet tone is allowed to be quiet:
+   * .btn-quiet:disabled, where disabled text is exempt from 1.4.3
+   * ("Incidental"), and one aria-hidden decorative glyph, which is exempt from
+   * 1.4.11. Both sit on --canvas-deep. Being exempt is not a licence to be
+   * invisible, so the token still darkened, from #948a79 to #827968: 2.57:1 to
+   * 3.25:1 on --canvas-deep. That is the 3:1 floor this project set itself,
+   * now measured rather than asserted.
+   */
+  --mute: #827968;
 
   --canvas: #f3ede0;
   --canvas-deep: #e9dfc9;
@@ -169,12 +195,17 @@ h3 {
     font-variant-numeric: tabular-nums;
   }
 
+  /* 11px/600, so it is text under WCAG 1.4.3's 4.5:1 however marker-like it
+     reads. --body clears that on all three surfaces it lands on: 5.20:1 on
+     --canvas (the top bar), 5.92:1 on --card (the dialog), 5.58:1 on
+     --card-warm (the controls). It is quiet by size, caps and tracking rather
+     than by being too pale to read. */
   .label-caps {
     font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--mute);
+    color: var(--body);
   }
 
   /* Browser surfaces the design still owns. */
@@ -387,8 +418,11 @@ h3 {
      and does nothing, which is the one thing a button must never be. So the
      card back goes flat to the deep cream, the ink drops to mute, and the
      cursor says so. Text on a disabled control is exempt from the 4.5:1 text
-     rule (WCAG 1.4.3, "Incidental"); mute on canvas-deep still clears 3:1, so
-     it stays legible rather than merely present. */
+     rule (WCAG 1.4.3, "Incidental"), and this is the one place in the product
+     that leans on that exemption — said out loud rather than left implied.
+     Measured, not assumed: --mute on --canvas-deep is 3.25:1. It was 2.57:1
+     while a comment here claimed it cleared 3:1, which is how the token came
+     to be darkened. Exempt is not a licence to be invisible. */
   .btn-quiet:disabled {
     cursor: not-allowed;
     color: var(--mute);
@@ -433,8 +467,12 @@ h3 {
       box-shadow var(--dur-hover) var(--ease);
   }
 
+  /* A placeholder is text, and WCAG makes no exception for it: 4.5:1 or it is
+     not there. --body on the field's --canvas fill measures 5.20:1. It still
+     reads as a prompt rather than as a value, because a typed value is --ink
+     at 13.12:1 — two and a half times the weight on the page. */
   .field-input::placeholder {
-    color: var(--mute);
+    color: var(--body);
   }
 
   .field-input:focus {
