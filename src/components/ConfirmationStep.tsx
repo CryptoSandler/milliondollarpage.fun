@@ -1,18 +1,18 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { formatUsdc } from "../lib/board/pricing";
 import type { ClientOrder } from "../lib/board/purchase-client";
 import type { ContentDraft } from "./ContentForm";
-import HoldTimer from "./HoldTimer";
 
 /**
  * The last screen before a rectangle is paid for.
  *
  * Deliberately its own component rather than a summary bolted onto the form:
  * this is the one place a buyer sees everything they are about to lock in
- * together, at the size and position it will actually appear, before the
- * point of no return. Every value shown here is read-only.
+ * together, at the fit it will actually use, before the point of no return.
+ * Every value shown here is read-only, and the sentence above the button says
+ * plainly what pressing it does.
  */
 export default function ConfirmationStep({
   order,
@@ -21,7 +21,6 @@ export default function ConfirmationStep({
   confirmError,
   onBack,
   onConfirm,
-  onExpired,
 }: {
   order: ClientOrder;
   draft: ContentDraft;
@@ -29,7 +28,6 @@ export default function ConfirmationStep({
   confirmError: string | null;
   onBack: () => void;
   onConfirm: () => void;
-  onExpired: () => void;
 }) {
   const pixels = order.rect.w * order.rect.h;
 
@@ -46,86 +44,98 @@ export default function ConfirmationStep({
   }, [previewUrl]);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="mt-3 flex flex-col gap-4">
       <div className="flex gap-4">
-        <div className="h-28 w-28 shrink-0 overflow-hidden rounded border border-neutral-700 bg-neutral-950">
+        {/* Zero radius, like every block on the board: this is a preview of a
+            rectangle of pixels, not a card. */}
+        <div className="size-28 shrink-0 overflow-hidden border border-ink bg-canvas-deep">
           {previewUrl && (
             // eslint-disable-next-line @next/next/no-img-element -- a local blob: URL.
             <img
               src={previewUrl}
-              alt="Chosen image, at the fit that will be used"
-              className="h-full w-full"
+              alt="Your image, at the fit it will use on the board"
+              className="size-full"
               style={{ objectFit: draft.imageFit }}
             />
           )}
         </div>
-        <dl className="flex flex-1 flex-col justify-center gap-1 text-sm">
-          <div className="flex justify-between gap-2">
-            <dt className="text-neutral-400">Rectangle</dt>
-            <dd className="tabular-nums">
-              {order.rect.w} × {order.rect.h} at ({order.rect.x}, {order.rect.y})
-            </dd>
-          </div>
-          <div className="flex justify-between gap-2">
-            <dt className="text-neutral-400">Pixels</dt>
-            <dd className="tabular-nums">{pixels.toLocaleString("en-US")}</dd>
-          </div>
-          <div className="flex justify-between gap-2">
-            <dt className="text-neutral-400">Total</dt>
-            <dd className="font-semibold tabular-nums">{formatUsdc(order.totalBaseUnits)}</dd>
-          </div>
+        <dl className="flex flex-1 flex-col justify-center gap-1.5 text-[13px]">
+          <Row term="Rectangle">
+            {order.rect.w} × {order.rect.h} at ({order.rect.x}, {order.rect.y})
+          </Row>
+          <Row term="Pixels">{pixels.toLocaleString("en-US")}</Row>
+          <Row term="Fit">{draft.imageFit === "cover" ? "Fill completely" : "Fit inside"}</Row>
+          <Row term="You pay" strong>
+            {formatUsdc(order.totalBaseUnits)}
+          </Row>
         </dl>
       </div>
 
-      <dl className="flex flex-col gap-2 text-sm">
+      <dl className="flex flex-col gap-2 rounded-xl border border-hairline-strong bg-card-warm px-4 py-3 text-[13px]">
         <div>
-          <dt className="text-neutral-400">Link</dt>
-          <dd className="break-all">{draft.link}</dd>
+          <dt className="label-caps">Link</dt>
+          <dd className="break-all text-ink">{draft.link}</dd>
         </div>
         <div>
-          <dt className="text-neutral-400">Caption</dt>
-          <dd className="break-words">{draft.caption}</dd>
+          <dt className="label-caps">Caption</dt>
+          <dd className="break-words text-ink">{draft.caption}</dd>
         </div>
       </dl>
 
-      <p className="rounded border border-amber-700/50 bg-amber-500/10 p-3 text-sm text-amber-200">
-        Confirming locks the rectangle, the image, the link, and the caption above together — none of it can be
-        edited, replaced, or taken back once you proceed.
+      <p className="text-[12.5px] leading-relaxed text-body">
+        Paying claims these {pixels.toLocaleString("en-US")} pixels for good and charges{" "}
+        <span className="font-bold text-ink">{formatUsdc(order.totalBaseUnits)}</span>. The image, the
+        link, the caption and the fit above are locked to the block together — none of them can be
+        edited, replaced or taken back afterwards.
       </p>
 
-      <p className="text-xs text-neutral-400">
-        No payment is collected in this preview build: there is no wallet, no signature, and no funds move.
-        Pressing Confirm marks this order paid immediately, standing in for the real payment step arriving later.
+      <p className="rounded-lg border border-hairline-strong bg-canvas px-3 py-2 text-[12px] leading-relaxed text-body">
+        Nothing is charged in this preview build: no wallet is connected, no signature is asked for,
+        and no funds move. Confirm marks the order paid on the spot, standing in for the payment step
+        that arrives later.
       </p>
 
-      {confirmError && <p className="text-sm text-red-400">{confirmError}</p>}
+      {confirmError && (
+        <p className="rounded-lg border border-[#e2b6a4] bg-danger-soft px-3 py-2 text-[13px] text-ink-soft">
+          {confirmError}
+        </p>
+      )}
 
-      <div className="flex items-center justify-between gap-4 border-t border-neutral-800 pt-4">
+      <div className="flex items-center justify-between gap-4 border-t border-hairline pt-4">
         <button
           type="button"
           onClick={onBack}
           disabled={confirming}
-          className="rounded border border-neutral-700 px-4 py-2 text-sm disabled:cursor-not-allowed disabled:text-neutral-600"
+          className="btn-quiet px-4 py-2 text-[13px]"
         >
-          Back
+          Back to edit
         </button>
-
-        <div className="flex items-center gap-3">
-          {!confirming && order.expiresAt && (
-            <p className="text-xs text-neutral-400">
-              Hold expires in <HoldTimer expiresAt={order.expiresAt} onExpired={onExpired} />
-            </p>
-          )}
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={confirming}
-            className="rounded bg-emerald-500 px-4 py-2 text-sm font-medium text-black disabled:cursor-not-allowed disabled:bg-neutral-700 disabled:text-neutral-400"
-          >
-            {confirming ? "Confirming…" : "Confirm and lock it in"}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={confirming}
+          className="btn-primary px-5 py-2.5 text-[14px]"
+        >
+          {confirming ? "Paying…" : `Pay ${formatUsdc(order.totalBaseUnits)} and claim it`}
+        </button>
       </div>
+    </div>
+  );
+}
+
+function Row({
+  term,
+  children,
+  strong,
+}: {
+  term: string;
+  children: ReactNode;
+  strong?: boolean;
+}) {
+  return (
+    <div className="flex justify-between gap-2">
+      <dt className="text-body">{term}</dt>
+      <dd className={`tabular text-ink ${strong ? "font-bold" : ""}`}>{children}</dd>
     </div>
   );
 }

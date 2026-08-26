@@ -6,6 +6,7 @@ import { confirmOrder, createHold, type ClientOrder } from "../lib/board/purchas
 import type { Selection } from "../lib/board/selection";
 import ConfirmationStep from "./ConfirmationStep";
 import ContentForm, { EMPTY_DRAFT, type ContentDraft } from "./ContentForm";
+import HoldTimer from "./HoldTimer";
 
 type Step = "holding" | "describing" | "confirming" | "paying" | "done";
 
@@ -20,6 +21,10 @@ type Step = "holding" | "describing" | "confirming" | "paying" | "done";
  * a 422's rejections back to the field they named, and renders whatever
  * message the server sent for anything else, per `problem()`'s contract that
  * that message is always safe to show as-is.
+ *
+ * It also owns the countdown. The hold is the thing every step is racing, so
+ * it is stated once, at the top, beside the price — not repeated in each
+ * step's footer where a buyer scrolled past it would never see it.
  *
  * `fatalMessage` is a screen, not a step: it can be reached from any step
  * (a taken rectangle, an expired hold, an order that stopped being ours) and
@@ -62,7 +67,7 @@ export default function PurchaseDialog({
     (notice?: string) => {
       if (hasLiveHold) {
         const abandon = window.confirm(
-          "Closing now gives up this hold. Someone else could take these pixels before you come back. Close anyway?",
+          "Close and these pixels go straight back on the board — nothing you have typed here is kept, and anyone can buy them. Close anyway?",
         );
         if (!abandon) return;
       }
@@ -116,9 +121,11 @@ export default function PurchaseDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [requestClose]);
 
-  function handleExpired() {
-    setFatalMessage("This hold expired before you finished. Close this and start again to pick a rectangle.");
-  }
+  const handleExpired = useCallback(() => {
+    setFatalMessage(
+      "The thirty minutes ran out before this purchase was finished, so the hold ended and these pixels went back on the board. Nothing was charged. Close this and select them again — they are still free unless somebody else got there first.",
+    );
+  }, []);
 
   async function handleConfirm() {
     if (!order) return;
@@ -139,79 +146,130 @@ export default function PurchaseDialog({
     setStep("confirming");
   }
 
+  const rect = order?.rect ?? selection.rect;
+  const pixels = rect.w * rect.h;
+  const total = order?.totalBaseUnits ?? selection.totalBaseUnits;
+  const showTimer = order !== null && fatalMessage === null && step !== "done";
+
   return (
     <div
-      className="fixed inset-0 z-20 flex items-center justify-center bg-black/70 p-4"
+      className="dialog-scrim"
       onClick={(event) => {
         if (event.target === event.currentTarget) requestClose();
       }}
     >
-      <div className="flex max-h-[90vh] w-full max-w-md flex-col overflow-y-auto rounded-lg border border-neutral-700 bg-neutral-900 p-5">
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <h2 className="text-lg font-semibold">
-            {selection.rect.w} × {selection.rect.h} · {formatUsdc(selection.totalBaseUnits)}
-          </h2>
+      <div className="dialog-card p-6" role="dialog" aria-modal="true" aria-label="Buy these pixels">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h2 className="font-display text-[21px] font-bold">Buy this block</h2>
+            <p className="tabular mt-0.5 truncate text-[13.5px] text-body">
+              {rect.w} × {rect.h} at ({rect.x}, {rect.y}) · {pixels.toLocaleString("en-US")} pixels
+            </p>
+          </div>
           <button
             type="button"
             onClick={() => requestClose()}
             aria-label="Close"
-            className="text-neutral-400 hover:text-neutral-200"
+            className="-mr-1 rounded-md px-2 py-1 text-[20px] leading-none text-mute hover:bg-canvas-deep hover:text-ink"
           >
-            ✕
+            ×
           </button>
         </div>
 
+        {fatalMessage === null && (
+          <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-hairline-strong bg-card-warm px-4 py-3">
+            <div>
+              <p className="label-caps">You pay</p>
+              <p className="tabular font-display text-[20px] font-bold text-ink">{formatUsdc(total)}</p>
+            </div>
+            <div className="text-right">
+              <p className="label-caps">These pixels are held for</p>
+              <p className="tabular font-display text-[20px] font-bold text-primary-pressed">
+                {showTimer && order?.expiresAt ? (
+                  <HoldTimer expiresAt={order.expiresAt} onExpired={handleExpired} />
+                ) : step === "done" ? (
+                  "Yours"
+                ) : (
+                  "—"
+                )}
+              </p>
+            </div>
+          </div>
+        )}
+
         {fatalMessage ? (
-          <div className="flex flex-col gap-4">
-            <p className="text-sm text-neutral-200">{fatalMessage}</p>
+          <div className="mt-4 flex flex-col gap-4">
+            <h3 className="font-display text-[17px] font-semibold text-danger">
+              This purchase stopped here
+            </h3>
+            <p className="rounded-xl border border-[#e2b6a4] bg-danger-soft px-4 py-3 text-[13.5px] leading-relaxed text-ink-soft">
+              {fatalMessage}
+            </p>
             <button
               type="button"
               onClick={() => onClose(fatalMessage)}
-              className="self-end rounded bg-neutral-700 px-4 py-2 text-sm font-medium"
+              className="btn-quiet self-end px-4 py-2 text-[13.5px]"
             >
-              Close
+              Back to the board
             </button>
           </div>
         ) : step === "holding" ? (
-          <p className="text-sm text-neutral-400">Holding these pixels…</p>
+          <p className="mt-6 text-[13.5px] text-body">
+            Holding these pixels for you — nobody else can buy them while this is open…
+          </p>
         ) : step === "describing" && order ? (
-          <ContentForm
-            order={order}
-            buyerPubkey={ownerPubkey}
-            draft={draft}
-            onDraftChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
-            onSubmitted={(updated) => {
-              setOrder(updated);
-              setStep("confirming");
-            }}
-            onExpired={handleExpired}
-            onFatalError={setFatalMessage}
-          />
+          <>
+            <p className="label-caps mt-5">Step 1 of 2 · what goes in the block</p>
+            <ContentForm
+              order={order}
+              buyerPubkey={ownerPubkey}
+              draft={draft}
+              onDraftChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
+              onSubmitted={(updated) => {
+                setOrder(updated);
+                setStep("confirming");
+              }}
+              onFatalError={setFatalMessage}
+            />
+          </>
         ) : (step === "confirming" || step === "paying") && order ? (
-          <ConfirmationStep
-            order={order}
-            draft={draft}
-            confirming={step === "paying"}
-            confirmError={confirmError}
-            onBack={() => setStep("describing")}
-            onConfirm={handleConfirm}
-            onExpired={handleExpired}
-          />
+          <>
+            <p className="label-caps mt-5">Step 2 of 2 · check it, then pay</p>
+            <ConfirmationStep
+              order={order}
+              draft={draft}
+              confirming={step === "paying"}
+              confirmError={confirmError}
+              onBack={() => setStep("describing")}
+              onConfirm={handleConfirm}
+            />
+          </>
         ) : step === "done" && order ? (
-          <div className="flex flex-col gap-4">
-            <p className="text-sm text-neutral-200">
-              Paid. This rectangle now belongs to {ownerPubkey}, exactly as confirmed.
+          <div className="mt-4 flex flex-col gap-4">
+            <h3 className="font-display text-[17px] font-semibold text-ink">
+              Done — {pixels.toLocaleString("en-US")} pixels are yours
+            </h3>
+            <p className="text-[13.5px] leading-relaxed text-body">
+              {formatUsdc(order.totalBaseUnits)} paid for {rect.w} × {rect.h} at ({rect.x}, {rect.y}),
+              registered to {shortenAddress(ownerPubkey)}. Your image, link and caption are locked to it
+              exactly as you confirmed them. Close this and the block is on the board.
             </p>
             <button
               type="button"
               onClick={() => onClose()}
-              className="self-end rounded bg-emerald-500 px-4 py-2 text-sm font-medium text-black"
+              className="btn-primary self-end px-5 py-2.5 text-[14px]"
             >
-              Close
+              See it on the board
             </button>
           </div>
         ) : null}
       </div>
     </div>
   );
+}
+
+/** A Solana address is 44 characters of noise; enough of it to recognise is not. */
+function shortenAddress(address: string): string {
+  if (address.length <= 14) return address;
+  return `${address.slice(0, 6)}…${address.slice(-6)}`;
 }
