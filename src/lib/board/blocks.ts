@@ -28,7 +28,10 @@ export type LiveBlock = {
   link: string | null;
 };
 
-const LIVE = `status IN ('reserved', 'paid', 'minted')
+// Exported so reserve.ts can ask, after a 409, which rows are live over a
+// given rectangle — the same "currently blocking" predicate, not a second
+// copy of it that could drift from this one.
+export const LIVE = `status IN ('reserved', 'paid', 'minted')
               AND (status <> 'reserved' OR (expires_at IS NOT NULL AND expires_at > now()))`;
 
 export async function listLiveBlocks(): Promise<LiveBlock[]> {

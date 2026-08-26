@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { execute } from "../../../lib/db";
 import { RESERVATION_LIMITS } from "../../../lib/callers/limits";
 import { POST } from "../reserve/route";
 
@@ -43,6 +44,35 @@ describe("POST /api/reserve", () => {
     expect(second.status).toBe(409);
     const body = await second.json();
     expect(typeof body.message).toBe("string");
+  });
+
+  it("carries availableAt and names a time when a live hold blocks the rectangle", async () => {
+    const first = await POST(request({ rect: { x: 0, y: 0, w: 20, h: 20 }, buyerPubkey: BUYER }));
+    expect(first.status).toBe(201);
+    const firstBody = await first.json();
+
+    const second = await POST(
+      request({ rect: { x: 10, y: 10, w: 20, h: 20 }, buyerPubkey: BUYER }, "203.0.113.9"),
+    );
+    expect(second.status).toBe(409);
+    const body = await second.json();
+    expect(body.availableAt).toBe(firstBody.expiresAt);
+    // Names a clock time (e.g. "2:34 PM"), not just a vague refusal.
+    expect(body.message).toMatch(/\d{1,2}:\d{2}/);
+  });
+
+  it("answers 409 with availableAt: null and a permanence message when a sold block blocks it", async () => {
+    await execute(
+      `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc)
+       VALUES (0, 0, 20, 20, 'paid', 1000000, 400000000)`,
+    );
+    const response = await POST(
+      request({ rect: { x: 10, y: 10, w: 20, h: 20 }, buyerPubkey: BUYER }, "203.0.113.10"),
+    );
+    expect(response.status).toBe(409);
+    const body = await response.json();
+    expect(body.availableAt).toBeNull();
+    expect(body.message.toLowerCase()).toMatch(/sold|permanent/);
   });
 
   it("answers 400 for a rectangle off the grid", async () => {

@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
-import { transaction } from "../db";
-import { sweepExpiredReservations } from "./blocks";
+import { query, transaction } from "../db";
+import { LIVE, sweepExpiredReservations } from "./blocks";
 import { type Rect, rectIsValid, rectPixels } from "./geometry";
 import { totalBaseUnits } from "./pricing";
 
@@ -34,9 +34,19 @@ export const FRACTION_MIN = 1;
 export const FRACTION_MAX = 999_999;
 
 export class RectangleTaken extends Error {
-  constructor() {
+  /**
+   * When the block that beat us might free up.
+   *
+   * The expiry of the live reservation that stands in the way, or `null`
+   * when what blocks it is `paid` or `minted` and therefore never expires.
+   * Never the identity of who holds it — see `earliestAvailability` below.
+   */
+  readonly availableAt: string | null;
+
+  constructor(availableAt: string | null = null) {
     super("Those pixels are no longer available.");
     this.name = "RectangleTaken";
+    this.availableAt = availableAt;
   }
 }
 
@@ -113,7 +123,51 @@ export async function reserveRect(
     });
   } catch (error) {
     // 23P01 is the exclusion constraint: somebody else holds those pixels.
-    if ((error as { code?: string } | null)?.code === "23P01") throw new RectangleTaken();
+    // The transaction above has already rolled back and released its
+    // connection by the time we get here, so this is a fresh, best-effort
+    // read on the pool — good enough to explain a 409, not a second
+    // correctness check standing in for the constraint.
+    if ((error as { code?: string } | null)?.code === "23P01") {
+      throw new RectangleTaken(await earliestAvailability(rect));
+    }
     throw error;
   }
+}
+
+/**
+ * When the rectangle blocking this request might come free.
+ *
+ * Queries the same LIVE rows the exclusion constraint and the board selector
+ * already agree on (see `blocks.ts`), restricted to rows overlapping the
+ * requested rectangle via the same generated int4range columns the
+ * constraint uses.
+ *
+ * A rectangle stays blocked for as long as ANY overlapping row is live, so a
+ * single `paid`/`minted` row among the blockers makes the whole thing
+ * permanent regardless of any reservation also in the way — hence checking
+ * for one first. Once every blocker is a reservation, the earliest of their
+ * expiries is the first moment anything could change, which is the most
+ * useful single instant to tell the caller.
+ *
+ * Deliberately returns only `status` and `expires_at`: never `buyer_pubkey`
+ * or `ip_hash`. A 409 explains what happened, not who is holding it.
+ */
+async function earliestAvailability(rect: Rect): Promise<string | null> {
+  const rows = await query<{ status: string; expires_at: Date | null }>(
+    `SELECT status, expires_at
+       FROM blocks
+      WHERE ${LIVE}
+        AND x_range && int4range($1, $2)
+        AND y_range && int4range($3, $4)`,
+    [rect.x, rect.x + rect.w, rect.y, rect.y + rect.h],
+  );
+
+  if (rows.length === 0 || rows.some((row) => row.status !== "reserved")) return null;
+
+  const expiries = rows
+    .map((row) => row.expires_at)
+    .filter((expiresAt): expiresAt is Date => expiresAt !== null);
+  if (expiries.length === 0) return null;
+
+  return expiries.reduce((earliest, current) => (current < earliest ? current : earliest)).toISOString();
 }

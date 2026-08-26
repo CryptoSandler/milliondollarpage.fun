@@ -20,6 +20,14 @@ type BoardPayload = {
 // and this is what the CSS assumes too.
 const FALLBACK_BARS = { top: 52, bottom: 88 };
 
+// Somebody else's hold, or your own abandoned attempt in another tab, is
+// invisible until the board refetches — the selector otherwise keeps
+// offering rectangles the server will refuse. Thirty seconds: the hold
+// window is thirty minutes, so this is frequent enough that a stale
+// rectangle is rare, and the payload (see /api/board) is small enough that
+// twice a minute per open tab is nowhere near "hammering" the endpoint.
+const REFRESH_INTERVAL_MS = 30_000;
+
 export default function BoardView({ initial }: { initial: BoardPayload }) {
   const [board, setBoard] = useState(initial);
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -85,6 +93,39 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
 
   const handlePurchased = useCallback(() => {
     void refreshBoard();
+  }, [refreshBoard]);
+
+  // Whether PurchaseDialog is currently past its "holding" step — describing,
+  // confirming, paying, or done — with no fatal message on screen. A
+  // background repaint of the board is disorienting under an open form, and
+  // the buyer's own rectangle is already held either way. A plain ref, not
+  // state: the interval and the visibility listener below only need to read
+  // the current value when they fire, not re-run when it changes.
+  const dialogBlocksRefresh = useRef(false);
+
+  const setDialogBlocksRefresh = useCallback((blocked: boolean) => {
+    dialogBlocksRefresh.current = blocked;
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (dialogBlocksRefresh.current) return;
+      void refreshBoard();
+    }, REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [refreshBoard]);
+
+  // A tab left open for an hour and then refocused holds the most stale
+  // board of anyone; catch it the moment it becomes visible again rather
+  // than waiting for the next poll tick.
+  useEffect(() => {
+    function onVisibilityChange() {
+      if (document.visibilityState !== "visible") return;
+      if (dialogBlocksRefresh.current) return;
+      void refreshBoard();
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, [refreshBoard]);
 
   useEffect(() => {
@@ -192,6 +233,8 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           buyerPubkey={buyerPubkey}
           onClose={closeDialog}
           onPurchased={handlePurchased}
+          onRefresh={refreshBoard}
+          onGateChange={setDialogBlocksRefresh}
         />
       )}
     </div>

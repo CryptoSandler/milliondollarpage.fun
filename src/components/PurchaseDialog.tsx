@@ -31,11 +31,17 @@ export default function PurchaseDialog({
   buyerPubkey,
   onClose,
   onPurchased,
+  onRefresh,
+  onGateChange,
 }: {
   selection: Selection;
   buyerPubkey: string;
   onClose: (notice?: string) => void;
   onPurchased: () => void;
+  /** Refetch the board immediately — used the instant a hold attempt comes back 409, so the rectangle that beat us appears behind the message. */
+  onRefresh: () => void;
+  /** Tell BoardView whether its background poll should skip a refresh right now: true from the moment content is on screen (describing/confirming/paying/done) until either a fatal message appears or this dialog unmounts. */
+  onGateChange: (blocked: boolean) => void;
 }) {
   // Snapshotted at open time: the order this dialog holds belongs to this
   // exact address for its whole life. If the buyer edits the wallet field
@@ -77,6 +83,10 @@ export default function PurchaseDialog({
         setStep("describing");
         return;
       }
+      // The rectangle that just refused us is invisible on a stale board;
+      // refresh immediately so it appears behind this message instead of
+      // leaving the buyer staring at empty pixels and a "taken" notice.
+      if (result.status === 409) onRefresh();
       const suffix = result.retryAt
         ? ` Try again after ${new Date(result.retryAt).toLocaleTimeString()}.`
         : "";
@@ -87,6 +97,16 @@ export default function PurchaseDialog({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Reports to BoardView whether its background poll should hold off right
+  // now. Blocked once the dialog is showing real content past the holding
+  // step (describing/confirming/paying/done); unblocked the moment a fatal
+  // message takes over the screen (nothing left to disrupt), and always
+  // unblocked on unmount so a closed dialog never leaves the gate stuck shut.
+  useEffect(() => {
+    onGateChange(fatalMessage === null && step !== "holding");
+    return () => onGateChange(false);
+  }, [step, fatalMessage, onGateChange]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {

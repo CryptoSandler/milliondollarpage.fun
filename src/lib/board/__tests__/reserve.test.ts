@@ -132,6 +132,60 @@ describe("reserveRect", () => {
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(2);
   });
 
+  it("tells the caller exactly when a blocking live hold frees up", async () => {
+    await seedBlock(0, 0, "reserved", 30);
+    const error = await reserveRect({ x: 10, y: 10, w: 20, h: 20 }, BUYER, CALLER).catch((e) => e);
+    expect(error).toBeInstanceOf(RectangleTaken);
+    const [row] = await query<{ expires_at: Date }>(
+      "SELECT expires_at FROM blocks WHERE status = 'reserved'",
+    );
+    expect((error as RectangleTaken).availableAt).toBe(row.expires_at.toISOString());
+  });
+
+  it("says a minted block never frees up", async () => {
+    await seedBlock(0, 0, "minted", null);
+    const error = await reserveRect({ x: 10, y: 10, w: 20, h: 20 }, BUYER, CALLER).catch((e) => e);
+    expect(error).toBeInstanceOf(RectangleTaken);
+    expect((error as RectangleTaken).availableAt).toBeNull();
+  });
+
+  it("says a paid order never frees up", async () => {
+    await seedBlock(0, 0, "paid", null);
+    const error = await reserveRect({ x: 10, y: 10, w: 20, h: 20 }, BUYER, CALLER).catch((e) => e);
+    expect(error).toBeInstanceOf(RectangleTaken);
+    expect((error as RectangleTaken).availableAt).toBeNull();
+  });
+
+  it("picks the EARLIEST expiry when several live holds overlap the request", async () => {
+    // The two seeded blocks must not overlap EACH OTHER (the exclusion
+    // constraint would refuse the second insert), only the rectangle being
+    // requested. The one at (30,30) expires sooner, so its expiry is what
+    // the caller learns — the first moment anything could change.
+    await seedBlock(0, 0, "reserved", 30);
+    await seedBlock(30, 30, "reserved", 10);
+    const error = await reserveRect({ x: 0, y: 0, w: 50, h: 50 }, BUYER, CALLER).catch((e) => e);
+    expect(error).toBeInstanceOf(RectangleTaken);
+    const rows = await query<{ x: number; expires_at: Date }>(
+      "SELECT x, expires_at FROM blocks WHERE status = 'reserved' ORDER BY x",
+    );
+    const earliest = rows.reduce((a, b) => (a.expires_at < b.expires_at ? a : b));
+    expect((error as RectangleTaken).availableAt).toBe(earliest.expires_at.toISOString());
+  });
+
+  it("REGRESSION: a 10x10 at (990,620) with nothing there succeeds — this was not an edge bug", async () => {
+    const held = await reserveRect({ x: 990, y: 620, w: 10, h: 10 }, BUYER, CALLER);
+    expect(held.rect).toEqual({ x: 990, y: 620, w: 10, h: 10 });
+  });
+
+  it.each([
+    [990, 990],
+    [0, 990],
+    [990, 0],
+  ])("REGRESSION: the board's other corners also succeed: (%i, %i)", async (x, y) => {
+    const held = await reserveRect({ x, y, w: 10, h: 10 }, BUYER, CALLER);
+    expect(held.rect).toEqual({ x, y, w: 10, h: 10 });
+  });
+
   it("rolls the sweep back when the insert fails, proving the sweep is in the transaction", async () => {
     // An expired hold somewhere harmless, and a minted block in the way of the
     // rectangle we are about to ask for.
