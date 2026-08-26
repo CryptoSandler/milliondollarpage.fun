@@ -1,10 +1,10 @@
 ---
 version: alpha
 name: milliondollarpage.fun
-description: "A warm cream workshop wall for a permanent pixel canvas on Solana. Ruled graph paper (#f3ede0) holds a 1000x1000 board where every sold block paints solid edge-to-edge and every free cell keeps its ruling, so availability never depends on what colour a buyer uploaded. The whole board is always visible and the page never scrolls; the wall around it is the same cream as the sheet. Olive-brown ink (#2b241c) sets text on the cream instead of punching through it; a single terracotta (#dd4e22) carries every primary action and every selection, and appears nowhere else. Bricolage Grotesque sets display, Karla sets everything else. The board and its blocks have zero radius because they are literally pixels; only the chrome rounds. A thin fixed top bar, and the rest of the controls in a side panel or a bottom bar depending on which shape of window they are in. The system reads as a workshop wall: warm, plainly labelled, and entirely subordinate to the artwork pinned to it."
+description: "A warm cream workshop wall for a permanent pixel canvas on Solana. Ruled graph paper (#f3ede0) holds a 1000x1000 board where every sold block paints solid edge-to-edge and every free cell keeps its ruling, so availability never depends on what colour a buyer uploaded. The whole board is always visible and the page never scrolls; the wall around it is the same cream as the sheet. Olive-brown ink (#2b241c) sets text on the cream instead of punching through it; a single terracotta (#c2451e) carries every primary action and every selection, and appears nowhere else. Bricolage Grotesque sets display, Karla sets everything else. The board and its blocks have zero radius because they are literally pixels; only the chrome rounds. A thin fixed top bar, and the rest of the controls in a side panel or a bottom bar depending on which shape of window they are in. The system reads as a workshop wall: warm, plainly labelled, and entirely subordinate to the artwork pinned to it."
 colors:
-  primary: "#dd4e22"
-  primary-pressed: "#b93e19"
+  primary: "#c2451e"
+  primary-pressed: "#9f3819"
   primary-soft: "#f7dccb"
   on-primary: "#fff8ef"
   ink: "#2b241c"
@@ -136,7 +136,32 @@ reason: yellow disappears into skin tones and sand, which real uploads are full
 of. A red-leaning hue stays rare against arbitrary artwork.
 
 The selection outline is terracotta over an ink core with a cream ring, so it
-survives any artwork underneath without depending on contrast with it.
+survives any artwork underneath without depending on contrast with it. That
+sandwich, not the terracotta, is what makes the outline visible over an upload;
+the accent only says whose outline it is.
+
+**The accent deepened by six points of lightness, and that was measured rather
+than chosen.** It used to be `#dd4e22`. On-primary cream (`#fff8ef`) on that
+measures **3.84:1**, and the label on every Buy, Continue, Confirm and "Ask
+again" is 15px/700 — under 18.66px bold, so WCAG 1.4.3 asks 4.5:1. The board's
+selection tag sets the same cream at 11px/700 on the same fill, so one number
+failed in two places. `#c2451e` measures **4.79:1** on the same cream.
+
+**The hue did not move, and it must not.** Both tones are HSL 14° at 73%
+saturation; only the lightness went 50% → 44%. The whole reason terracotta beat
+the yellow it descends from is that a red-leaning hue stays rare against
+arbitrary artwork, and buying contrast by sliding towards yellow or towards a
+neutral would have spent exactly the property the colour was picked for. Darken
+within the hue, never drift out of it.
+
+`primary-pressed` followed it down to `#9f3819` for the same reason it exists —
+it is the shoulder under the button — and for one it did not: it is set as
+*text* on `primary-soft` in the counter pill at 12px/700, where it measured
+**4.26:1** and now measures **5.26:1**.
+
+Every ratio in this document is a WCAG 2.1 relative-luminance ratio, computed
+from the values above and confirmed against pixels sampled out of a rendered
+screenshot. A ratio nobody computed is not a ratio.
 
 ## Type
 

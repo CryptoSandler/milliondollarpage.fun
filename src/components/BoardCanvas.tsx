@@ -133,8 +133,14 @@ const PAINT = {
   chip: "#2b241c",
   chipText: "#f3ede0",
   lift: "rgba(255,252,245,0.16)",
-  selection: "#dd4e22",
-  selectionFill: "rgba(221,78,34,0.14)",
+  // --primary, and it is the fill behind the selection tag as well as the
+  // outline's top stroke. The tag sets PAINT.cream at 11px/700 on it, so this
+  // is a WCAG 1.4.3 text pair at 4.5:1, not a decoration: on the old #dd4e22
+  // it measured 3.84:1 and on this it measures 4.79:1. Same hue, same
+  // saturation, six points darker — see globals.css for why the hue could not
+  // move.
+  selection: "#c2451e",
+  selectionFill: "rgba(194,69,30,0.14)",
   cream: "#fff8ef",
   danger: "#a8371f",
   dangerFill: "rgba(168,55,31,0.16)",

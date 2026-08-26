@@ -7,9 +7,34 @@
  * value is missing here, DESIGN.md is where it gets decided first.
  */
 :root {
-  /* One accent. It means "primary action" or "your selection", nothing else. */
-  --primary: #dd4e22;
-  --primary-pressed: #b93e19;
+  /*
+   * One accent. It means "primary action" or "your selection", nothing else.
+   *
+   * It is six points darker than the terracotta this project started with
+   * (#dd4e22), and that is a contrast fix rather than a taste one: cream
+   * (#fff8ef) on #dd4e22 measures 3.84:1, and the label on every Buy,
+   * Continue, Confirm and "Ask again" is 15px/700 — under 18.66px bold, so
+   * WCAG 1.4.3 wants 4.5:1 and 3.84 is not it. The board's own selection tag
+   * sets the same cream at 11px/700 on the same fill, so it failed twice.
+   *
+   * The hue and the saturation did NOT move: both tones are HSL 14deg at 73%,
+   * only the lightness drops from 50% to 44%. That matters, because DESIGN.md
+   * chose a red-leaning terracotta over the yellow it descends from precisely
+   * so the selection outline stays rare against arbitrary buyer artwork —
+   * yellow vanishes into skin tones and sand. A deeper red-orange keeps that
+   * property; drifting the hue to buy contrast would have thrown it away.
+   *
+   * Measured against #fff8ef: primary 4.79:1, primary-pressed 6.52:1.
+   * Measured as a 2px focus ring (WCAG 1.4.11, 3:1): 4.32:1 on --canvas,
+   * 4.92:1 on --card, 4.64:1 on --card-warm, 3.81:1 on --canvas-deep.
+   *
+   * --primary-pressed follows it down, both to keep the button's shoulder
+   * under the new face and because it is set as TEXT on --primary-soft in the
+   * counter pill at 12px/700, where it used to measure 4.26:1 and now
+   * measures 5.26:1.
+   */
+  --primary: #c2451e;
+  --primary-pressed: #9f3819;
   --primary-soft: #f7dccb;
   --on-primary: #fff8ef;
 
@@ -288,7 +313,10 @@ h3 {
 
   /* The one unmistakable button on the page. Terracotta, pill, a hard shoulder
      of the pressed tone underneath it, and the only thing on the page that
-     lifts on hover. */
+     lifts on hover. --on-primary on --primary measures 4.79:1, and the label
+     is 15px/700, so the rule is WCAG 1.4.3's 4.5:1 for text under 18.66px
+     bold. It holds in every state of the button, which is the point of the
+     note on :hover below. */
   .btn-primary {
     font-weight: 700;
     color: var(--on-primary);
@@ -298,19 +326,26 @@ h3 {
     cursor: pointer;
     box-shadow:
       0 2px 0 var(--primary-pressed),
-      0 8px 18px rgba(221, 78, 34, 0.24);
+      0 8px 18px rgba(194, 69, 30, 0.24);
     transition:
       transform var(--dur-hover) var(--ease),
-      box-shadow var(--dur-hover) var(--ease),
-      filter var(--dur-hover) var(--ease);
+      box-shadow var(--dur-hover) var(--ease);
   }
 
+  /* This used to add `filter: brightness(1.05)`, and a filter on the element
+     lightens the LABEL as well as the fill — so hovering shaved the measured
+     contrast from 4.79:1 to 4.64:1 for a sheen nobody asked for, and made the
+     hover ratio impossible to read off this stylesheet at all. DESIGN.md's
+     motion section names two things for this button, the 2px lift and the
+     0.97 press, and neither is a tone change. So the lift and the doubled
+     shoulder carry hover on their own; under prefers-reduced-motion the lift
+     is suppressed and the shoulder still doubles, which is a change you can
+     see without any motion. */
   .btn-primary:hover:not(:disabled) {
     transform: translateY(-2px);
-    filter: brightness(1.05);
     box-shadow:
       0 4px 0 var(--primary-pressed),
-      0 12px 22px rgba(221, 78, 34, 0.3);
+      0 12px 22px rgba(194, 69, 30, 0.3);
   }
 
   .btn-primary:active:not(:disabled) {
@@ -319,13 +354,14 @@ h3 {
     box-shadow: 0 1px 0 var(--primary-pressed);
   }
 
+  /* Disabled text is exempt from WCAG 1.4.3 ("Incidental"), and this pair does
+     not need the exemption: --body on --canvas-deep measures 4.58:1. */
   .btn-primary:disabled {
     background: var(--canvas-deep);
     color: var(--body);
     box-shadow: none;
     cursor: not-allowed;
     transform: none;
-    filter: none;
   }
 
   .btn-quiet {
