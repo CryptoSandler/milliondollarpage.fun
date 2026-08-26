@@ -7,6 +7,7 @@ import {
   toPublicOrder,
 } from "../../../../lib/board/orders";
 import { BUYER_PUBKEY_HEADER } from "../../../../lib/board/purchase-client";
+import { consumeReleaseChallenge } from "../../../../lib/board/release-challenge";
 import { NO_STORE, isUuid, json, problem } from "../../../../lib/http";
 
 /**
@@ -43,6 +44,19 @@ export async function GET(
 }
 
 /**
+ * The one thing every 403 here says, whatever went wrong.
+ *
+ * A missing signature, an expired challenge, a replayed one, a challenge
+ * issued for a different order, and a signature from somebody else's wallet
+ * all answer this. That is the point: a stranger walking the board must not
+ * be able to tell which of those they tripped, because the differences between
+ * them are facts about somebody else's order.
+ */
+const UNSIGNED =
+  "Letting a hold go has to be signed by the wallet that started it, and this was not. " +
+  "Ask for a fresh challenge and sign that.";
+
+/**
  * Give a hold back before the thirty minutes are up.
  *
  * The one destructive endpoint on the site, and the only one whose whole job
@@ -51,19 +65,39 @@ export async function GET(
  * WHERE clause (see orders.ts — a paid order is undeletable there, not merely
  * refused here).
  *
- * The status ladder is exactly the one `/content` and `/confirm` already
- * walk, and for the same reason: an id that is not a uuid and an id that
- * names nothing both answer 404, so a caller cannot tell a malformed guess
- * from a wrong one; somebody else's order answers 403 whatever state it is
- * in, so a stranger cannot learn from the status code that an order exists in
- * a state theirs is not.
+ * ## What replaced the address in the body
  *
- * `buyerPubkey` travels in the body rather than the URL: it is the only
- * credential this codebase has, and a query string ends up in access logs and
- * `Referer` headers. There is no `identify()` here — no rate limit hangs off
- * it, and a caller without the right pubkey can neither delete anything nor
- * learn anything by trying, which is the same reason GET above is
- * unauthenticated.
+ * This route used to take `buyerPubkey` in its body and compare it to the
+ * order's. That authenticated nobody. `/api/board` publishes every live
+ * block's id, and a wallet address is public by construction — it is printed
+ * on every explorer there is — so the whole credential was a value an
+ * attacker could look up, which made releasing a stranger's rectangle a
+ * two-request walk of the board.
+ *
+ * Now the caller signs. `POST /api/orders/:id/release-challenge` mints a
+ * single-use nonce bound to this order; the wallet signs the sentence it
+ * comes back with; and the proof — nonce, address, signature — travels in
+ * this body. `consumeReleaseChallenge` spends the nonce and verifies the
+ * signature, and only an address it hands back is compared to the order's.
+ * See `src/lib/board/release-challenge.ts`; the payment step will present the
+ * same proof in the same shape.
+ *
+ * ## The ladder, and what it deliberately does not disclose
+ *
+ * An id that is not a uuid and an id that names nothing both answer 404, so a
+ * caller cannot tell a malformed guess from a wrong one. Anything wrong with
+ * the signature answers 403, and it is checked BEFORE the order's status, so
+ * a stranger gets the identical 403 whether the rectangle they are poking at
+ * is held or sold — the 409 that says "this one is paid for" is only ever
+ * seen by the wallet that can prove it owns it. Then, and only then, a paid
+ * order answers 409 and a held one is deleted.
+ *
+ * The proof travels in the body rather than the URL: a query string ends up
+ * in access logs, in `Referer`, and in a browser's own history, and a nonce
+ * that is meant to be spent once should not be written down three times on
+ * its way in. There is no `identify()` — no rate limit hangs off this, and a
+ * caller without the key can neither delete anything nor learn anything by
+ * trying, which is the same reason GET above is unauthenticated.
  *
  * Answers 204 with no body. There is nothing left to describe: the order the
  * caller named is gone, and returning a corpse of it would only invite a
@@ -83,18 +117,21 @@ export async function DELETE(
     return problem(400, "That request body is not JSON.");
   }
 
-  const buyerPubkey =
-    typeof body === "object" && body !== null ? (body as Record<string, unknown>).buyerPubkey : undefined;
-  if (typeof buyerPubkey !== "string" || buyerPubkey.trim() === "") {
-    return problem(400, "A wallet address is required.");
-  }
+  const order = await getOrder(id);
+  if (!order) return problem(404, "That order does not exist.");
+
+  // The nonce is spent whatever happens next, including on a wrong key: the
+  // caller presented it, so it is used up. Nothing about the order is read
+  // out of this — an address comes back, or nothing does.
+  const proven = await consumeReleaseChallenge(id, body);
+  if (proven === null || proven !== order.buyerPubkey) return problem(403, UNSIGNED);
 
   try {
-    await releaseOwnReservation(id, buyerPubkey);
+    await releaseOwnReservation(id, proven);
     return new Response(null, { status: 204, headers: NO_STORE });
   } catch (error) {
     if (error instanceof OrderNotFound) return problem(404, error.message);
-    if (error instanceof OrderNotYours) return problem(403, error.message);
+    if (error instanceof OrderNotYours) return problem(403, UNSIGNED);
     if (error instanceof OrderNotReady) return problem(409, error.message);
     throw error;
   }

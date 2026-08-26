@@ -4,9 +4,11 @@ import { execute } from "../../../lib/db";
 import { reserveRect } from "../../../lib/board/reserve";
 import { CONTENT_LIMITS, MULTIPART_FRAMING_ALLOWANCE_BYTES } from "../../../lib/board/content";
 import { BUYER_PUBKEY_HEADER } from "../../../lib/board/purchase-client";
+import { testWallet, type TestWallet } from "../../../lib/wallet/__tests__/keypair";
 import { DELETE, GET } from "../orders/[id]/route";
 import { POST as POST_CONTENT } from "../orders/[id]/content/route";
 import { POST as POST_CONFIRM } from "../orders/[id]/confirm/route";
+import { POST as POST_CHALLENGE } from "../orders/[id]/release-challenge/route";
 
 // Reserving, attaching content and confirming each cost their own round trips
 // to the remote Neon test branch, and several tests chain two or three of
@@ -296,11 +298,66 @@ describe("POST /api/orders/:id/confirm", () => {
   });
 });
 
+/**
+ * A wallet the server has never seen, and a second one to be refused with.
+ * Generated once per file: the tests below care about which key signed, not
+ * about which addresses they are.
+ */
+const OWNER: TestWallet = testWallet();
+const STRANGER_WALLET: TestWallet = testWallet();
+
+type Challenge = { nonce: string; message: string; expiresAt: string };
+
+async function challengeFor(orderId: string): Promise<Challenge> {
+  const response = await POST_CHALLENGE(new Request("http://localhost/"), ctx(orderId));
+  expect(response.status, "the challenge endpoint should have issued one").toBe(200);
+  return (await response.json()) as Challenge;
+}
+
+/** The proof body a wallet would build: ask for a challenge, sign it, present it. */
+async function proofFor(orderId: string, wallet: TestWallet): Promise<Record<string, string>> {
+  const challenge = await challengeFor(orderId);
+  return { nonce: challenge.nonce, publicKey: wallet.address, signature: wallet.sign(challenge.message) };
+}
+
+describe("POST /api/orders/:id/release-challenge", () => {
+  it("issues a fresh single-use challenge naming the order", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+
+    const response = await POST_CHALLENGE(new Request("http://localhost/"), ctx(held.id));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+
+    const body = await response.json();
+    expect(body.nonce).toMatch(/^[0-9a-f]{64}$/);
+    expect(body.message).toContain(`Order: ${held.id}`);
+    expect(body.message).toContain(`Nonce: ${body.nonce}`);
+    expect(body.message).toContain("Action: release");
+    expect(new Date(body.expiresAt).getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it("never issues the same nonce twice", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const first = await challengeFor(held.id);
+    const second = await challengeFor(held.id);
+    expect(first.nonce).not.toBe(second.nonce);
+  });
+
+  it("answers 404 for a non-uuid and for an id that names nothing", async () => {
+    expect((await POST_CHALLENGE(new Request("http://localhost/"), ctx("not-a-uuid"))).status).toBe(404);
+    const unknown = await POST_CHALLENGE(
+      new Request("http://localhost/"),
+      ctx("00000000-0000-0000-0000-000000000000"),
+    );
+    expect(unknown.status).toBe(404);
+  });
+});
+
 describe("DELETE /api/orders/:id", () => {
-  // Takes the WHOLE body rather than a pubkey, so "no buyerPubkey key at all"
-  // is expressible. A defaulted parameter could not say it: passing undefined
+  // Takes the WHOLE body rather than a proof, so "no credential at all" is
+  // expressible. A defaulted parameter could not say it: passing undefined
   // would silently reinstate the default.
-  function releaseRequest(body: unknown = { buyerPubkey: BUYER }): Request {
+  function releaseRequest(body: unknown): Request {
     return new Request("http://localhost/api/orders/x", {
       method: "DELETE",
       headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.9" },
@@ -308,40 +365,159 @@ describe("DELETE /api/orders/:id", () => {
     });
   }
 
-  it("answers 204 and the rectangle is reservable again immediately", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, BUYER, CALLER);
+  async function stillReserved(id: string): Promise<void> {
+    const still = await GET(new Request("http://localhost/"), ctx(id));
+    expect(still.status, "a refused release must not have cost the owner their hold").toBe(200);
+    expect((await still.json()).status).toBe("reserved");
+  }
 
-    const response = await DELETE(releaseRequest(), ctx(held.id));
+  it("answers 204 to a fresh signature from the owner, and the rectangle is reservable again", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
+
+    const response = await DELETE(releaseRequest(await proofFor(held.id, OWNER)), ctx(held.id));
     expect(response.status).toBe(204);
     expect(response.headers.get("cache-control")).toBe("no-store");
 
     const gone = await GET(new Request("http://localhost/"), ctx(held.id));
     expect(gone.status).toBe(404);
 
-    const again = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, BUYER, CALLER);
+    const again = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
     expect(again.rect).toEqual({ x: 0, y: 0, w: 20, h: 20 });
   });
 
-  it("answers 403 to a different pubkey, AND the hold is still there afterwards", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, BUYER, CALLER);
+  it("answers 403 to a different wallet's signature, AND the hold is still there afterwards", async () => {
+    // The hole this whole mechanism closes: the buyer's address is public, so
+    // before signatures a stranger who could read the board could release
+    // anyone's rectangle. Here the stranger signs a perfectly valid challenge
+    // for this very order — with their own key.
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
 
-    const response = await DELETE(releaseRequest({ buyerPubkey: STRANGER }), ctx(held.id));
+    const response = await DELETE(releaseRequest(await proofFor(held.id, STRANGER_WALLET)), ctx(held.id));
     expect(response.status).toBe(403);
 
     // The status code on its own would also be returned by a handler that
     // deleted the row and then refused. Read the row back.
-    const still = await GET(new Request("http://localhost/"), ctx(held.id));
-    expect(still.status, "a stranger's 403 must not have cost the owner their hold").toBe(200);
-    expect((await still.json()).status).toBe("reserved");
+    await stillReserved(held.id);
   });
 
-  it("answers 409 for a paid order, even to the buyer who paid for it", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
-    await POST_CONTENT(await contentRequest(), ctx(held.id));
-    const paid = await POST_CONFIRM(confirmRequest(), ctx(held.id));
+  it("answers 403 when the stranger sends the owner's address without the owner's key", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
+    const challenge = await challengeFor(held.id);
+
+    const response = await DELETE(
+      releaseRequest({
+        nonce: challenge.nonce,
+        publicKey: OWNER.address,
+        signature: STRANGER_WALLET.sign(challenge.message),
+      }),
+      ctx(held.id),
+    );
+    expect(response.status).toBe(403);
+    await stillReserved(held.id);
+  });
+
+  it("refuses a replayed challenge, even the owner's own", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
+    const proof = await proofFor(held.id, OWNER);
+
+    // Same proof, twice. The first release succeeds, so the second is aimed at
+    // a fresh hold on the same rectangle: a captured signature must be worth
+    // nothing the moment its nonce has been spent.
+    expect((await DELETE(releaseRequest(proof), ctx(held.id))).status).toBe(204);
+
+    const again = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
+    const replay = await DELETE(releaseRequest(proof), ctx(again.id));
+    expect(replay.status).toBe(403);
+    await stillReserved(again.id);
+  });
+
+  it("refuses a replayed challenge on the same order when the first attempt failed", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
+    const challenge = await challengeFor(held.id);
+
+    // A fumbled first attempt spends the nonce too, so the owner's own second
+    // try with the same nonce is refused rather than accepted.
+    const fumbled = await DELETE(
+      releaseRequest({ nonce: challenge.nonce, publicKey: OWNER.address, signature: "not-a-signature" }),
+      ctx(held.id),
+    );
+    expect(fumbled.status).toBe(403);
+
+    const retry = await DELETE(
+      releaseRequest({
+        nonce: challenge.nonce,
+        publicKey: OWNER.address,
+        signature: OWNER.sign(challenge.message),
+      }),
+      ctx(held.id),
+    );
+    expect(retry.status).toBe(403);
+    await stillReserved(held.id);
+  });
+
+  it("refuses an expired challenge", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
+    const proof = await proofFor(held.id, OWNER);
+
+    // Age the row rather than wait two minutes for it. issued_at moves with
+    // expires_at because the table refuses a row that expired before it was
+    // issued.
+    await execute(
+      `UPDATE release_challenges
+          SET issued_at = now() - interval '10 minutes',
+              expires_at = now() - interval '1 second'
+        WHERE nonce = $1`,
+      [proof.nonce],
+    );
+
+    const response = await DELETE(releaseRequest(proof), ctx(held.id));
+    expect(response.status).toBe(403);
+    await stillReserved(held.id);
+  });
+
+  it("refuses a challenge issued for another order", async () => {
+    const mine = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
+    const other = await reserveRect({ x: 40, y: 40, w: 20, h: 20 }, OWNER.address, CALLER);
+
+    // Signed correctly, by the owner of both — but the nonce names `mine`, so
+    // it cannot spend `other`. This is what binds a proof to one rectangle.
+    const proof = await proofFor(mine.id, OWNER);
+    const response = await DELETE(releaseRequest(proof), ctx(other.id));
+    expect(response.status).toBe(403);
+
+    await stillReserved(mine.id);
+    await stillReserved(other.id);
+  });
+
+  it("answers 403 to a body carrying no proof at all", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
+    const bodies: unknown[] = [
+      {},
+      null,
+      { buyerPubkey: OWNER.address },
+      { nonce: "a".repeat(64), publicKey: OWNER.address },
+      { nonce: "", publicKey: OWNER.address, signature: "x" },
+      { nonce: 42, publicKey: OWNER.address, signature: "x" },
+    ];
+    for (const body of bodies) {
+      const response = await DELETE(releaseRequest(body), ctx(held.id));
+      expect(response.status, JSON.stringify(body)).toBe(403);
+    }
+    await stillReserved(held.id);
+  });
+
+  it("answers 409 for a paid order, and only to the wallet that can prove it owns it", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    await POST_CONTENT(await contentRequest({ buyerPubkey: OWNER.address }), ctx(held.id));
+    const paid = await POST_CONFIRM(confirmRequest(OWNER.address), ctx(held.id));
     expect(paid.status).toBe(200);
 
-    const response = await DELETE(releaseRequest(), ctx(held.id));
+    // A stranger gets the same 403 they would get on a held rectangle, so the
+    // status code never tells them this one is a sale.
+    const stranger = await DELETE(releaseRequest(await proofFor(held.id, STRANGER_WALLET)), ctx(held.id));
+    expect(stranger.status).toBe(403);
+
+    const response = await DELETE(releaseRequest(await proofFor(held.id, OWNER)), ctx(held.id));
     expect(response.status).toBe(409);
 
     const survivor = await GET(new Request("http://localhost/"), ctx(held.id));
@@ -350,31 +526,22 @@ describe("DELETE /api/orders/:id", () => {
   });
 
   it("answers 404 for an id that is not a uuid, rather than 500ing", async () => {
-    const response = await DELETE(releaseRequest(), ctx("not-a-uuid"));
+    const response = await DELETE(releaseRequest({}), ctx("not-a-uuid"));
     expect(response.status).toBe(404);
   });
 
   it("answers 404 for a well-formed id that names nothing", async () => {
-    const response = await DELETE(releaseRequest(), ctx("00000000-0000-0000-0000-000000000000"));
+    const response = await DELETE(releaseRequest({}), ctx("00000000-0000-0000-0000-000000000000"));
     expect(response.status).toBe(404);
   });
 
-  it("answers 400 without a wallet address, before looking anything up", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, BUYER, CALLER);
-    for (const body of [{}, { buyerPubkey: "" }, { buyerPubkey: "   " }, { buyerPubkey: 42 }, null]) {
-      const response = await DELETE(releaseRequest(body), ctx(held.id));
-      expect(response.status, JSON.stringify(body)).toBe(400);
-    }
-    const still = await GET(new Request("http://localhost/"), ctx(held.id));
-    expect(still.status).toBe(200);
-  });
-
   it("answers 400 for a body that is not JSON", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, BUYER, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
     const response = await DELETE(
       new Request("http://localhost/api/orders/x", { method: "DELETE", body: "not json" }),
       ctx(held.id),
     );
     expect(response.status).toBe(400);
+    await stillReserved(held.id);
   });
 });
