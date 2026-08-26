@@ -51,8 +51,14 @@ describe("POST /api/reserve", () => {
     expect(first.status).toBe(201);
     const firstBody = await first.json();
 
+    // A DIFFERENT buyer, deliberately: this is the somebody-else's-hold copy,
+    // where the useful fact is the clock. A buyer colliding with their own
+    // hold gets a different sentence and its own test below.
     const second = await POST(
-      request({ rect: { x: 10, y: 10, w: 20, h: 20 }, buyerPubkey: BUYER }, "203.0.113.9"),
+      request(
+        { rect: { x: 10, y: 10, w: 20, h: 20 }, buyerPubkey: "SomeoneElse1111111111111111111111111111111" },
+        "203.0.113.9",
+      ),
     );
     expect(second.status).toBe(409);
     const body = await second.json();
@@ -73,6 +79,41 @@ describe("POST /api/reserve", () => {
     const body = await response.json();
     expect(body.availableAt).toBeNull();
     expect(body.message.toLowerCase()).toMatch(/sold|permanent/);
+  });
+
+  it("resumes the caller's own hold on the same rectangle with a 201, not a 409", async () => {
+    const rect = { x: 300, y: 300, w: 20, h: 20 };
+    const first = await POST(request({ rect, buyerPubkey: BUYER }));
+    expect(first.status).toBe(201);
+    const firstBody = await first.json();
+
+    const again = await POST(request({ rect, buyerPubkey: BUYER }));
+    expect(again.status, "your own hold must not refuse you").toBe(201);
+    const againBody = await again.json();
+    expect(againBody.id).toBe(firstBody.id);
+    expect(againBody.expiresAt).toBe(firstBody.expiresAt);
+  });
+
+  it("carries yourOrderIds so the client can offer to release your own blocking hold", async () => {
+    const first = await POST(request({ rect: { x: 100, y: 100, w: 20, h: 20 }, buyerPubkey: BUYER }));
+    const firstBody = await first.json();
+
+    const overlapping = await POST(request({ rect: { x: 110, y: 110, w: 20, h: 20 }, buyerPubkey: BUYER }));
+    expect(overlapping.status).toBe(409);
+    const body = await overlapping.json();
+    expect(body.yourOrderIds).toEqual([firstBody.id]);
+    expect(body.message.toLowerCase()).toContain("yourself");
+  });
+
+  it("leaves yourOrderIds empty, and says nothing about anyone else, when the hold is not yours", async () => {
+    await POST(request({ rect: { x: 0, y: 0, w: 20, h: 20 }, buyerPubkey: BUYER }));
+    const response = await POST(
+      request({ rect: { x: 10, y: 10, w: 20, h: 20 }, buyerPubkey: "SomeoneElse1111111111111111111111111111111" }, "203.0.113.11"),
+    );
+    expect(response.status).toBe(409);
+    const body = await response.json();
+    expect(body.yourOrderIds).toEqual([]);
+    expect(JSON.stringify(body)).not.toContain("BuyerPubkey");
   });
 
   it("answers 400 for a rectangle off the grid", async () => {

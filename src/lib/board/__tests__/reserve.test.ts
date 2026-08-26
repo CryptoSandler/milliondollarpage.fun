@@ -208,3 +208,137 @@ describe("reserveRect", () => {
     ).toHaveLength(1);
   });
 });
+
+describe("disjoint rectangles never collide", () => {
+  // Filed as a false 409: reserving 10x10 at (630,160) was reported as colliding
+  // with a live 70x40 hold at (810,440), which shares neither an x range nor a y
+  // range with it. If the axes were crossed, or width and height swapped, or the
+  // constraint inclusive, this is the test that would catch it.
+  //
+  // It passes. That is the finding: the refusal was real and came from a
+  // different row at the SAME coordinates, not from this one. Kept as a
+  // regression guard so the hypothesis never has to be re-tested by hand.
+  const REPORTED = { x: 630, y: 160, w: 10, h: 10 };
+  const OTHER_HOLD = { x: 810, y: 440, w: 70, h: 40 };
+
+  it("does not refuse the reported rectangle when only the far hold exists", async () => {
+    await execute(
+      `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, expires_at)
+       VALUES ($1, $2, $3, $4, 'reserved', 1000000, $5, now() + interval '30 minutes')`,
+      [OTHER_HOLD.x, OTHER_HOLD.y, OTHER_HOLD.w, OTHER_HOLD.h, OTHER_HOLD.w * OTHER_HOLD.h * 1000000],
+    );
+
+    const held = await reserveRect(REPORTED, BUYER, CALLER);
+    expect(held.rect).toEqual(REPORTED);
+  });
+
+  it("refuses it only once a hold sits on those exact pixels", async () => {
+    // The second request comes from a DIFFERENT buyer on purpose. This test is
+    // about the constraint refusing a competing request for the same pixels;
+    // the same buyer asking twice now resumes their own hold instead of being
+    // refused, which is its own test in "resuming your own hold" below.
+    const other = "OtherBuyerPubkey111111111111111111111111111";
+    await reserveRect(REPORTED, BUYER, CALLER);
+    await expect(reserveRect(REPORTED, other, CALLER)).rejects.toBeInstanceOf(RectangleTaken);
+  });
+
+  it("keeps the axes straight: swapping x for y is not a collision", async () => {
+    await reserveRect({ x: 630, y: 160, w: 10, h: 20 }, BUYER, CALLER);
+    const mirrored = await reserveRect({ x: 160, y: 630, w: 20, h: 10 }, BUYER, CALLER);
+    expect(mirrored.rect).toEqual({ x: 160, y: 630, w: 20, h: 10 });
+  });
+
+  it("keeps width and height straight: a tall rect does not block a wide one beside it", async () => {
+    await reserveRect({ x: 100, y: 200, w: 10, h: 80 }, BUYER, CALLER);
+    const wide = await reserveRect({ x: 110, y: 200, w: 80, h: 10 }, BUYER, CALLER);
+    expect(wide.rect.x).toBe(110);
+  });
+
+  it("treats a shared edge as disjoint, not as an overlap", async () => {
+    await reserveRect({ x: 630, y: 160, w: 10, h: 10 }, BUYER, CALLER);
+    const flush = await reserveRect({ x: 640, y: 160, w: 10, h: 10 }, BUYER, CALLER);
+    expect(flush.rect.x).toBe(640);
+  });
+});
+
+describe("resuming your own hold", () => {
+  // A buyer drags a rectangle, presses Buy, then abandons the dialog. Every
+  // retry on that rectangle collided with their own thirty-minute hold, and
+  // the refusal was correct and useless: they were locked out of their own
+  // pixels with nothing to do about it.
+  const RECT = { x: 300, y: 300, w: 20, h: 20 };
+
+  it("returns the SAME order rather than refusing, when the only blocker is your own exact hold", async () => {
+    const first = await reserveRect(RECT, BUYER, CALLER);
+    const again = await reserveRect(RECT, BUYER, CALLER);
+    expect(again.id).toBe(first.id);
+    expect(again.rect).toEqual(RECT);
+  });
+
+  it("resumes the hold that exists rather than creating a second row", async () => {
+    await reserveRect(RECT, BUYER, CALLER);
+    await reserveRect(RECT, BUYER, CALLER);
+    const rows = await query("SELECT id FROM blocks WHERE status = 'reserved'");
+    expect(rows, "a resume must not open a second hold on the same pixels").toHaveLength(1);
+  });
+
+  it("keeps the original expiry and payment fraction, so the clock is not restarted", async () => {
+    const first = await reserveRect(RECT, BUYER, CALLER);
+    const again = await reserveRect(RECT, BUYER, CALLER);
+    expect(again.expiresAt).toBe(first.expiresAt);
+    // The fraction attributes an incoming transfer to this order; a resume
+    // that minted a new one would leave a payment already in flight
+    // unattributable.
+    expect(again.paymentBaseUnits).toBe(first.paymentBaseUnits);
+    expect(again.totalBaseUnits).toBe(first.totalBaseUnits);
+    expect(again.pricePerPixelBaseUnits).toBe(first.pricePerPixelBaseUnits);
+  });
+
+  it("does NOT resume a different buyer's hold on the same rectangle", async () => {
+    const other = "OtherBuyerPubkey111111111111111111111111111";
+    await reserveRect(RECT, other, CALLER);
+    const error = await reserveRect(RECT, BUYER, CALLER).catch((e) => e);
+    expect(error).toBeInstanceOf(RectangleTaken);
+    expect(
+      (error as RectangleTaken).yourOrderIds,
+      "somebody else's row must never appear in yourOrderIds",
+    ).toEqual([]);
+  });
+
+  it("does NOT resume on partial overlap, and hands back your own blocking id instead", async () => {
+    const held = await reserveRect({ x: 100, y: 100, w: 20, h: 20 }, BUYER, CALLER);
+    const error = await reserveRect({ x: 110, y: 110, w: 20, h: 20 }, BUYER, CALLER).catch((e) => e);
+    expect(error).toBeInstanceOf(RectangleTaken);
+    expect((error as RectangleTaken).yourOrderIds).toEqual([held.id]);
+  });
+
+  it("does NOT resume when anything else is in the way as well", async () => {
+    // Your own exact hold, plus a stranger's block inside the same request.
+    await reserveRect({ x: 300, y: 300, w: 20, h: 20 }, BUYER, CALLER);
+    await seedBlock(320, 320, "minted", null);
+    const error = await reserveRect({ x: 300, y: 300, w: 50, h: 50 }, BUYER, CALLER).catch((e) => e);
+    expect(error).toBeInstanceOf(RectangleTaken);
+    expect((error as RectangleTaken).availableAt, "a sold block never frees up").toBeNull();
+  });
+
+  it("does NOT resume a PAID rectangle of your own — a sale is not a hold", async () => {
+    const held = await reserveRect(RECT, BUYER, CALLER);
+    await execute("UPDATE blocks SET status = 'paid', expires_at = NULL WHERE id = $1", [held.id]);
+    const error = await reserveRect(RECT, BUYER, CALLER).catch((e) => e);
+    expect(error).toBeInstanceOf(RectangleTaken);
+    expect((error as RectangleTaken).availableAt).toBeNull();
+  });
+
+  it("lists only YOUR blocking ids when yours and a stranger's are both in the way", async () => {
+    const mine = await reserveRect({ x: 400, y: 400, w: 20, h: 20 }, BUYER, CALLER);
+    const theirs = await reserveRect(
+      { x: 440, y: 400, w: 20, h: 20 },
+      "OtherBuyerPubkey111111111111111111111111111",
+      CALLER,
+    );
+    const error = await reserveRect({ x: 400, y: 400, w: 100, h: 20 }, BUYER, CALLER).catch((e) => e);
+    expect(error).toBeInstanceOf(RectangleTaken);
+    expect((error as RectangleTaken).yourOrderIds).toEqual([mine.id]);
+    expect((error as RectangleTaken).yourOrderIds).not.toContain(theirs.id);
+  });
+});

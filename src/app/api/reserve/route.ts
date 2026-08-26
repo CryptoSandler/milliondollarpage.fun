@@ -29,11 +29,23 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
+    // A hold this caller already has on exactly this rectangle comes back as
+    // an ordinary reservation rather than a 409 — they are resuming their own
+    // purchase, not competing for it. 201 either way: from the client's side
+    // the outcome is identical, "these pixels are held for you".
     const held = await reserveRect(parsed.rect, parsed.buyerPubkey, caller.ipHash);
     return json(held, { status: 201, headers: NO_STORE });
   } catch (error) {
     if (error instanceof RectangleTaken) {
-      return problem(409, rectangleTakenMessage(error.availableAt), { availableAt: error.availableAt });
+      return problem(409, rectangleTakenMessage(error.availableAt, error.yourOrderIds), {
+        availableAt: error.availableAt,
+        // Only ever this caller's own order ids (see RectangleTaken in
+        // reserve.ts). A blocking row belonging to anybody else contributes
+        // nothing to this array, so the 409 body still says nothing about who
+        // else is on the board — the client uses it to offer a release, and
+        // the caller already knows about every id in it.
+        yourOrderIds: error.yourOrderIds,
+      });
     }
     if (error instanceof RectangleInvalid) return problem(400, "That is not a rectangle this board can sell.");
     throw error;
@@ -41,15 +53,23 @@ export async function POST(request: Request): Promise<Response> {
 }
 
 /**
- * Distinguishes the two ways a rectangle can be unavailable: sold, which is
- * permanent, from held, which is somebody else mid-purchase and frees up on
- * its own. `availableAt` is null exactly for the first case (see
- * `earliestAvailability` in reserve.ts), so that alone decides which copy to
- * use. Never mentions who holds it — only when.
+ * Distinguishes the three ways a rectangle can be unavailable.
+ *
+ * Sold is permanent and outranks everything, so it is checked first: a hold of
+ * your own in the way changes nothing about pixels somebody has already paid
+ * for. Otherwise, a hold you started yourself is the one refusal you can act
+ * on, so it gets its own sentence and says what to do. Only then does it fall
+ * through to somebody else's hold, where the useful fact is the clock.
+ *
+ * Never mentions who holds a rectangle — only when, or that it is yours.
  */
-function rectangleTakenMessage(availableAt: string | null): string {
+function rectangleTakenMessage(availableAt: string | null, yourOrderIds: string[]): string {
   if (availableAt === null) {
     return "Part of this rectangle has already been sold. That's permanent — pick a different one.";
+  }
+  if (yourOrderIds.length > 0) {
+    return "Part of this rectangle is a hold you started yourself and never finished. " +
+      "Let that hold go and those pixels are free to pick again — nothing was ever charged for them.";
   }
   const time = new Date(availableAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   return `Someone is currently holding part of this rectangle while they finish buying it. ` +
