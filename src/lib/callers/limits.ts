@@ -47,7 +47,7 @@ export async function checkReservationLimits(ipHash: string): Promise<LimitDecis
     return {
       ok: false,
       reason: "too_many_live",
-      message: `You are already holding ${RESERVATION_LIMITS.liveHoldsPerCaller} rectangles. Finish one or let a hold expire.`,
+      message: `You are already holding ${RESERVATION_LIMITS.liveHoldsPerCaller} rectangles. Finish one, or let one go — your own holds are marked on the board.`,
       retryAt: (next ?? new Date(Date.now() + 60_000)).toISOString(),
     };
   }

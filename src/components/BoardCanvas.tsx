@@ -39,6 +39,9 @@ const PAINT = {
   ruleCoarse: "#c9baa0",
   sold: "#443a2c",
   soldEdge: "#2b241c",
+  // The held treatment is the paper's own cream, drawn back OVER a solid
+  // block. It is a ruling, not a hue: see drawHeldHatch below.
+  heldRule: "rgba(243,237,224,0.62)",
   chip: "#2b241c",
   chipText: "#f3ede0",
   lift: "rgba(255,252,245,0.16)",
@@ -58,6 +61,12 @@ const CHIP_HEIGHT = 18;
 // stops describing where a block would land and starts being a grey wash.
 const FINE_RULE_VISIBLE_ABOVE = 6 / BLOCK_PIXELS;
 
+// The held hatch, in SCREEN pixels rather than board pixels, so a hold is
+// equally legible on a 10x10 block at cover scale and on a 100x100 block
+// zoomed in. Seven is wide enough to read as separate strokes at the smallest
+// block the board can sell.
+const HELD_HATCH_STEP = 7;
+
 // The marching ants: 12px of dash cycle every 600ms, per DESIGN.md. Advancing
 // one pixel every 50ms gets there without redrawing the board sixty times a
 // second for an animation that moves twenty pixels in one.
@@ -66,6 +75,16 @@ const ANTS_DASH = 6;
 
 type Props = {
   blocks: LiveBlock[];
+  /**
+   * The ids of holds this browser started, so the board can mark them as the
+   * buyer's own.
+   *
+   * Derived entirely client-side from orders this session created (see
+   * BoardView). The board payload carries no `buyerPubkey` and must never
+   * start: whose hold a block is stays unknowable to everyone except the
+   * person who made it.
+   */
+  ownHoldIds: string[];
   selection: Selection | null;
   activePreset: number | null;
   perPixel: number;
@@ -81,6 +100,7 @@ type Drag =
 
 export default function BoardCanvas({
   blocks,
+  ownHoldIds,
   selection,
   activePreset,
   perPixel,
@@ -213,6 +233,7 @@ export default function BoardCanvas({
     context.restore();
 
     const colliding = new Set(selection?.collidesWith ?? []);
+    const own = new Set(ownHoldIds);
     for (const block of blocks) {
       const x = origin.x + block.x * scale;
       const y = origin.y + block.y * scale;
@@ -230,6 +251,42 @@ export default function BoardCanvas({
       context.strokeStyle = PAINT.soldEdge;
       context.lineWidth = 1;
       context.strokeRect(x + 0.5, y + 0.5, Math.max(0, w - 1), Math.max(0, h - 1));
+
+      // A hold is not a sale, and the board has to say so. It still paints
+      // solid — those pixels genuinely are not for sale right now — but the
+      // ruling comes back over the top as a hatch, and the ink edge is
+      // overdrawn with a broken one. Pencilled in, not inked.
+      //
+      // Structural, never a hue: the hatch is the paper's own cream and the
+      // edge is a dash pattern, so a hold reads the same whatever colour the
+      // buyer eventually uploads.
+      if (block.status === "reserved") {
+        // Clamped to the viewport before hatching, so a block zoomed until it
+        // is larger than the screen costs a screenful of strokes, not a
+        // blockful.
+        const hx = Math.max(x, 0);
+        const hy = Math.max(y, 0);
+        const hw = Math.min(x + w, width) - hx;
+        const hh = Math.min(y + h, height) - hy;
+        if (hw > 0 && hh > 0) drawHeldHatch(context, hx, hy, hw, hh);
+
+        context.save();
+        context.strokeStyle = PAINT.heldRule;
+        context.lineWidth = 1;
+        context.setLineDash([4, 4]);
+        context.strokeRect(x + 1.5, y + 1.5, Math.max(0, w - 3), Math.max(0, h - 3));
+        context.restore();
+
+        // Your own hold, marked harder, because it is the one held rectangle
+        // on the board you can do something about — resume it or let it go.
+        // Terracotta, which DESIGN.md reserves for the primary action and for
+        // your selection, and a hold you started is exactly your selection.
+        if (own.has(block.id)) {
+          context.strokeStyle = PAINT.selection;
+          context.lineWidth = 2;
+          context.strokeRect(x + 1, y + 1, Math.max(0, w - 2), Math.max(0, h - 2));
+        }
+      }
 
       if (colliding.has(block.id)) {
         context.strokeStyle = PAINT.danger;
@@ -304,7 +361,7 @@ export default function BoardCanvas({
     if (showPanHint && span > freeRegion && freeRegion > 80) {
       drawPanHint(context, width / 2, height - bars.bottom - 20, family);
     }
-  }, [blocks, selection, viewport, resizeTick, ants, hoveredId, showPanHint, bars.top, bars.bottom]);
+  }, [blocks, ownHoldIds, selection, viewport, resizeTick, ants, hoveredId, showPanHint, bars.top, bars.bottom]);
 
   function pointerBoard(event: ReactPointerEvent<HTMLCanvasElement>): Point {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -520,6 +577,41 @@ function drawRules(
   }
 
   context.stroke();
+}
+
+/**
+ * The ruling that says "held, not sold".
+ *
+ * Diagonals at 45 degrees, which is the one angle the graph paper's two tiers
+ * never use, so it can never be mistaken for the paper showing through. They
+ * are laid out on an absolute SCREEN grid rather than per block, so two
+ * adjacent holds read as one hatched region instead of two patterns that
+ * happen to meet at a seam.
+ */
+function drawHeldHatch(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) {
+  context.save();
+  context.beginPath();
+  context.rect(x, y, w, h);
+  context.clip();
+
+  context.strokeStyle = PAINT.heldRule;
+  context.lineWidth = 1;
+  context.beginPath();
+  // Each stroke runs down-right, so one starting up to `h` to the left of the
+  // block still crosses it: the loop begins that far back.
+  const first = Math.floor((x - h) / HELD_HATCH_STEP) * HELD_HATCH_STEP;
+  for (let p = first; p < x + w; p += HELD_HATCH_STEP) {
+    context.moveTo(p, y);
+    context.lineTo(p + h, y + h);
+  }
+  context.stroke();
+  context.restore();
 }
 
 /** The one hint the board itself carries: there is more of it below. */

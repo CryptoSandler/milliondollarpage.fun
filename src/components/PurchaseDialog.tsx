@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { formatUsdc } from "../lib/board/pricing";
-import { confirmOrder, createHold, type ClientOrder } from "../lib/board/purchase-client";
+import { confirmOrder, createHold, releaseHold, type ClientOrder } from "../lib/board/purchase-client";
 import type { Selection } from "../lib/board/selection";
+import { singleFlight } from "../lib/board/single-flight";
 import ConfirmationStep from "./ConfirmationStep";
 import ContentForm, { EMPTY_DRAFT, type ContentDraft } from "./ContentForm";
 import HoldTimer from "./HoldTimer";
@@ -29,11 +30,20 @@ type Step = "holding" | "describing" | "confirming" | "paying" | "done";
  * `fatalMessage` is a screen, not a step: it can be reached from any step
  * (a taken rectangle, an expired hold, an order that stopped being ours) and
  * once shown there is nothing to go back to, so it overrides the switch
- * below rather than living inside it.
+ * below rather than living inside it. Its one exception is a rectangle
+ * blocked by the buyer's OWN hold, where there is something to do about it —
+ * see `releasable`.
+ *
+ * Every request this dialog makes goes through `singleFlight`, so a
+ * double-clicked button produces one request rather than two, the second of
+ * which would lose the exclusion constraint to the first.
  */
 export default function PurchaseDialog({
   selection,
   buyerPubkey,
+  knownHoldIds,
+  onHoldStarted,
+  onHoldEnded,
   onClose,
   onPurchased,
   onRefresh,
@@ -41,6 +51,12 @@ export default function PurchaseDialog({
 }: {
   selection: Selection;
   buyerPubkey: string;
+  /** Holds this browser already started, so a returned order can be recognised as a resumed one rather than a new one. */
+  knownHoldIds: string[];
+  /** A hold now exists (fresh or resumed) — the board marks it as this buyer's. */
+  onHoldStarted: (orderId: string) => void;
+  /** That hold is over: released, expired, or paid for. */
+  onHoldEnded: (orderId: string) => void;
   onClose: (notice?: string) => void;
   onPurchased: () => void;
   /** Refetch the board immediately — used the instant a hold attempt comes back 409, so the rectangle that beat us appears behind the message. */
@@ -60,48 +76,107 @@ export default function PurchaseDialog({
   const [draft, setDraft] = useState<ContentDraft>(EMPTY_DRAFT);
   const [fatalMessage, setFatalMessage] = useState<string | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  // True when the hold that came back is one this browser already had, rather
+  // than one this dialog just opened. Nothing on the wire says so — the server
+  // returns a resumed hold in exactly the shape a fresh one takes — so it is
+  // recognised by its id, which only the buyer who created it can know.
+  const [resumed, setResumed] = useState(false);
+  // Holds of the buyer's own that stood in the way of this rectangle. Only
+  // ever their own ids: the 409 body carries nobody else's.
+  const [releasable, setReleasable] = useState<string[]>([]);
+  const [releasing, setReleasing] = useState(false);
+  const [releaseError, setReleaseError] = useState<string | null>(null);
+
+  // One single-flight wrapper per dialog instance, built once by the lazy
+  // initialiser. This has to be an identity guarantee rather than a
+  // performance hint: two wrappers would mean two in-flight slots, and the
+  // double click this exists to stop would go straight through both.
+  const [call] = useState(() => ({
+    hold: singleFlight(createHold),
+    confirm: singleFlight(confirmOrder),
+    release: singleFlight(releaseHold),
+  }));
+
+  // The holds this browser already had when the dialog opened. Snapshotted
+  // like `ownerPubkey` above, because what makes a returned order a RESUMED
+  // one is that it was already ours before this dialog asked — an id added
+  // while it is open is one this dialog itself created.
+  const [holdIdsAtOpen] = useState(knownHoldIds);
+
+  const unmounted = useRef(false);
+  useEffect(() => {
+    return () => {
+      unmounted.current = true;
+    };
+  }, []);
 
   const hasLiveHold = order !== null && step !== "done" && fatalMessage === null;
 
+  /**
+   * Asks for the rectangle, and sorts the answer into the three things it can
+   * be: a hold (fresh or resumed), a refusal the buyer can undo, or a refusal
+   * they cannot.
+   */
+  const attemptHold = useCallback(async () => {
+    const result = await call.hold(selection.rect, ownerPubkey);
+    if (unmounted.current) return;
+
+    if (result.ok) {
+      setResumed(holdIdsAtOpen.includes(result.order.id));
+      onHoldStarted(result.order.id);
+      setOrder(result.order);
+      setStep("describing");
+      return;
+    }
+
+    // The rectangle that just refused us is invisible on a stale board;
+    // refresh immediately so it appears behind this message instead of
+    // leaving the buyer staring at empty pixels and a "taken" notice.
+    if (result.status === 409) onRefresh();
+
+    // A refusal caused by the buyer's own earlier attempt is the one refusal
+    // with a way out, so it keeps the ids and offers the release below
+    // instead of ending in a dead end.
+    if (result.status === 409 && result.yourOrderIds && result.yourOrderIds.length > 0) {
+      setReleasable(result.yourOrderIds);
+      setFatalMessage(result.message);
+      return;
+    }
+
+    const suffix = result.retryAt
+      ? ` Try again after ${new Date(result.retryAt).toLocaleTimeString()}.`
+      : "";
+    setFatalMessage(`${result.message}${suffix}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Runs exactly once: a dialog instance holds exactly one rectangle for its
+  // whole life (BoardView mounts a fresh one per purchase attempt). A retry
+  // after a release goes through `attemptHold` directly, not through here.
+  useEffect(() => {
+    void (async () => {
+      await attemptHold();
+    })();
+  }, [attemptHold]);
+
   const requestClose = useCallback(
-    (notice?: string) => {
-      if (hasLiveHold) {
+    async (notice?: string) => {
+      if (hasLiveHold && order) {
         const abandon = window.confirm(
-          "Close and these pixels go straight back on the board — nothing you have typed here is kept, and anyone can buy them. Close anyway?",
+          "Close and this hold ends: these pixels go straight back on the board for anyone to buy, " +
+            "and nothing you have typed here is kept. Close anyway?",
         );
         if (!abandon) return;
+        // The sentence above promises the pixels come back now, so they do.
+        // Leaving the row to expire would have made it a thirty-minute lie —
+        // and the buyer's own next attempt the thing it blocked.
+        await call.release(order.id, ownerPubkey);
+        onHoldEnded(order.id);
       }
       onClose(notice);
     },
-    [hasLiveHold, onClose],
+    [hasLiveHold, order, ownerPubkey, call, onHoldEnded, onClose],
   );
-
-  // Runs exactly once: a dialog instance holds exactly one rectangle for its
-  // whole life (BoardView mounts a fresh one per purchase attempt).
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const result = await createHold(selection.rect, ownerPubkey);
-      if (cancelled) return;
-      if (result.ok) {
-        setOrder(result.order);
-        setStep("describing");
-        return;
-      }
-      // The rectangle that just refused us is invisible on a stale board;
-      // refresh immediately so it appears behind this message instead of
-      // leaving the buyer staring at empty pixels and a "taken" notice.
-      if (result.status === 409) onRefresh();
-      const suffix = result.retryAt
-        ? ` Try again after ${new Date(result.retryAt).toLocaleTimeString()}.`
-        : "";
-      setFatalMessage(`${result.message}${suffix}`);
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Reports to BoardView whether its background poll should hold off right
   // now. Blocked once the dialog is showing real content past the holding
@@ -115,24 +190,51 @@ export default function PurchaseDialog({
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") requestClose();
+      if (event.key === "Escape") void requestClose();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [requestClose]);
 
   const handleExpired = useCallback(() => {
+    if (order) onHoldEnded(order.id);
     setFatalMessage(
       "The thirty minutes ran out before this purchase was finished, so the hold ended and these pixels went back on the board. Nothing was charged. Close this and select them again — they are still free unless somebody else got there first.",
     );
-  }, []);
+  }, [order, onHoldEnded]);
+
+  /** Hands back the buyer's own blocking holds, then asks for the rectangle again. */
+  async function handleRelease() {
+    setReleasing(true);
+    setReleaseError(null);
+
+    for (const id of releasable) {
+      const result = await call.release(id, ownerPubkey);
+      if (!result.ok) {
+        setReleaseError(result.message);
+        setReleasing(false);
+        return;
+      }
+      onHoldEnded(id);
+    }
+
+    onRefresh();
+    setReleasable([]);
+    setFatalMessage(null);
+    setReleasing(false);
+    setStep("holding");
+    await attemptHold();
+  }
 
   async function handleConfirm() {
     if (!order) return;
     setStep("paying");
     setConfirmError(null);
-    const result = await confirmOrder(order.id, ownerPubkey);
+    const result = await call.confirm(order.id, ownerPubkey);
     if (result.ok) {
+      // Paid: this is a sale now, not a hold, and the board should stop
+      // calling it one.
+      onHoldEnded(order.id);
       setOrder(result.order);
       setStep("done");
       onPurchased();
@@ -155,7 +257,7 @@ export default function PurchaseDialog({
     <div
       className="dialog-scrim"
       onClick={(event) => {
-        if (event.target === event.currentTarget) requestClose();
+        if (event.target === event.currentTarget) void requestClose();
       }}
     >
       <div className="dialog-card p-6" role="dialog" aria-modal="true" aria-label="Buy these pixels">
@@ -168,7 +270,7 @@ export default function PurchaseDialog({
           </div>
           <button
             type="button"
-            onClick={() => requestClose()}
+            onClick={() => void requestClose()}
             aria-label="Close"
             className="-mr-1 rounded-md px-2 py-1 text-[20px] leading-none text-mute hover:bg-canvas-deep hover:text-ink"
           >
@@ -197,21 +299,64 @@ export default function PurchaseDialog({
           </div>
         )}
 
+        {/* Why the clock reads less than thirty minutes: this is the hold that
+            was already open on these pixels, not a new one. */}
+        {resumed && fatalMessage === null && step !== "done" && (
+          <p className="mt-3 rounded-lg border border-hairline-strong bg-canvas px-3 py-2 text-[12.5px] leading-relaxed text-ink-soft">
+            Carrying on with the hold you already had here — same pixels, same price, and the clock
+            has been running since you first pressed Buy.
+          </p>
+        )}
+
         {fatalMessage ? (
           <div className="mt-4 flex flex-col gap-4">
-            <h3 className="font-display text-[17px] font-semibold text-danger">
-              This purchase stopped here
+            <h3
+              className={`font-display text-[17px] font-semibold ${
+                releasable.length > 0 ? "text-ink" : "text-danger"
+              }`}
+            >
+              {releasable.length > 0 ? "You are already holding these" : "This purchase stopped here"}
             </h3>
-            <p className="rounded-xl border border-[#e2b6a4] bg-danger-soft px-4 py-3 text-[13.5px] leading-relaxed text-ink-soft">
+            <p
+              className={`rounded-xl px-4 py-3 text-[13.5px] leading-relaxed text-ink-soft ${
+                releasable.length > 0
+                  ? "border border-hairline-strong bg-card-warm"
+                  : "border border-[#e2b6a4] bg-danger-soft"
+              }`}
+            >
               {fatalMessage}
             </p>
-            <button
-              type="button"
-              onClick={() => onClose(fatalMessage)}
-              className="btn-quiet self-end px-4 py-2 text-[13.5px]"
-            >
-              Back to the board
-            </button>
+
+            {releaseError && (
+              <p className="rounded-lg border border-[#e2b6a4] bg-danger-soft px-3 py-2 text-[13px] text-ink-soft">
+                {releaseError}
+              </p>
+            )}
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => onClose(releasable.length > 0 ? undefined : fatalMessage)}
+                disabled={releasing}
+                className="btn-quiet px-4 py-2 text-[13.5px]"
+              >
+                {releasable.length > 0 ? "Leave it held" : "Back to the board"}
+              </button>
+              {releasable.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => void handleRelease()}
+                  disabled={releasing}
+                  className="btn-primary px-5 py-2.5 text-[14px]"
+                >
+                  {releasing
+                    ? "Letting them go…"
+                    : releasable.length === 1
+                      ? "Let that hold go and try again"
+                      : "Let those holds go and try again"}
+                </button>
+              )}
+            </div>
           </div>
         ) : step === "holding" ? (
           <p className="mt-6 text-[13.5px] text-body">
@@ -241,7 +386,7 @@ export default function PurchaseDialog({
               confirming={step === "paying"}
               confirmError={confirmError}
               onBack={() => setStep("describing")}
-              onConfirm={handleConfirm}
+              onConfirm={() => void handleConfirm()}
             />
           </>
         ) : step === "done" && order ? (

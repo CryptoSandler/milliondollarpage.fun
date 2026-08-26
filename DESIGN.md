@@ -56,8 +56,8 @@ pictures.
 
 Free cells keep their ruling. Sold blocks paint solid, opaque, edge to edge, and
 the ruling vanishes underneath them. Ruled means available; unruled-and-solid
-means taken. That holds whether the upload is black, neon, or the same cream as
-the canvas.
+means taken; and ruled *back over* a solid block means held rather than sold.
+That holds whether the upload is black, neon, or the same cream as the canvas.
 
 Anything that signals state through hue alone is wrong, because the buyer chooses
 the hue and we do not.
@@ -118,7 +118,7 @@ the total, or the Buy button — those are what the bar is for.
 | Hovered | A soft cream lift and the caption card, no colour change |
 | Selecting | Terracotta outline with marching ants, so a drag never looks like a placed block |
 | Refused | The offending block outlined in danger, the selection outlined in danger, Buy disabled |
-| Held | Solid, with the countdown live in the control it gates |
+| Held | Solid like a sale, then ruled back over: a cream hatch at 45° — the one angle neither tier of the graph paper uses — and a broken edge where a sale carries an unbroken ink one. Pencilled in, not inked. A hold **you** started adds the terracotta ring, because it is still your selection and the only held rectangle you can act on. The countdown stays live in the control it gates |
 | Sold | Solid, edge to edge, 1px ink border |
 
 ## Motion
@@ -140,6 +140,13 @@ sale when the pixels were merely held, and it offered nothing to do next. What
 replaced it names which of the two situations it is and when the pixels come back.
 
 Never say who holds a rectangle. When, yes. Who, never.
+
+The one exception is *you*. A hold you started yourself is named as yours — on
+the board, in the sentence under the Buy button, and in the refusal that offers
+to hand it back. That is not a disclosure and cannot become one: the browser
+recognises an order id it created itself, and the server puts nobody else's id,
+key or count on the wire. "Someone is holding this" stays the only thing anyone
+ever learns about anyone else.
 
 ## Attribution
 

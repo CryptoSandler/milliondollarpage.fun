@@ -43,6 +43,20 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
   // selection underneath a dialog that is already holding a rectangle.
   const [purchaseSelection, setPurchaseSelection] = useState<Selection | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /**
+   * The holds this browser started, newest first.
+   *
+   * Kept in BoardView rather than in the dialog because it has to outlive the
+   * dialog: an abandoned hold is exactly the case this whole feature exists
+   * for, and the board should keep saying "that one is yours" after the
+   * dialog is gone.
+   *
+   * This is the ONLY place ownership is known on the client, and it is known
+   * by memory, not by disclosure: /api/board publishes no buyerPubkey and
+   * these are ids this session created. Nobody else's hold can ever end up in
+   * here, so nothing about anybody else can ever be painted from it.
+   */
+  const [ownHoldIds, setOwnHoldIds] = useState<string[]>([]);
   const topBarRef = useRef<HTMLElement>(null);
   const bottomBarRef = useRef<HTMLDivElement>(null);
 
@@ -58,6 +72,14 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
 
   const handleHover = useCallback((block: LiveBlock | null, at: Point | null) => {
     setHovered(block && at ? { block, at } : null);
+  }, []);
+
+  const rememberOwnHold = useCallback((orderId: string) => {
+    setOwnHoldIds((current) => (current.includes(orderId) ? current : [orderId, ...current]));
+  }, []);
+
+  const forgetOwnHold = useCallback((orderId: string) => {
+    setOwnHoldIds((current) => current.filter((id) => id !== orderId));
   }, []);
 
   // Re-fetches the same payload the page loaded with. Best-effort: a failed
@@ -96,6 +118,26 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
       const hit = board.blocks.filter((block) => taken.has(block.id));
       const held = hit.filter((block) => block.status === "reserved").length;
       const sold = hit.length - held;
+
+      // Everything in the way is a hold this browser started. Buy stays ON:
+      // the server resumes an exact match and hands back the hold with its
+      // clock still running, and offers to release anything that only
+      // partly overlaps. Refusing here would put the selector in front of
+      // the one refusal the buyer can actually undo.
+      if (hit.length > 0 && hit.every((block) => ownHoldIds.includes(block.id))) {
+        if (walletMissing) {
+          return {
+            canBuy: false,
+            hint: "These are already yours to finish — add your wallet address to pick the hold back up.",
+            tone: "info",
+          };
+        }
+        return {
+          canBuy: true,
+          hint: "You are already holding these. Buy picks that hold up where you left it.",
+          tone: "info",
+        };
+      }
 
       if (sold > 0 && held > 0) {
         return {
@@ -141,12 +183,15 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
       hint: "Holds these pixels for 30 minutes while you upload.",
       tone: "info",
     };
-  }, [selection, board.blocks, walletMissing]);
+  }, [selection, board.blocks, walletMissing, ownHoldIds]);
 
+  // A second press while a dialog is already open must not start a second
+  // purchase. The scrim makes that all but unreachable by mouse; this is the
+  // part that does not depend on a z-index.
   const handleBuy = useCallback(() => {
-    if (!selection || !buyState.canBuy) return;
+    if (!selection || !buyState.canBuy || purchaseSelection !== null) return;
     setPurchaseSelection(selection);
-  }, [selection, buyState.canBuy]);
+  }, [selection, buyState.canBuy, purchaseSelection]);
 
   // Reservation holds sweep expired rows as a side effect of being created,
   // and a purchase turns a block from reserved to paid — either way the
@@ -243,6 +288,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
     <div className="board-shell">
       <BoardCanvas
         blocks={board.blocks}
+        ownHoldIds={ownHoldIds}
         selection={selection}
         activePreset={activePreset}
         perPixel={board.pricePerPixelBaseUnits}
@@ -269,7 +315,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           selection={selection}
           perPixel={board.pricePerPixelBaseUnits}
           activePreset={activePreset}
-          canBuy={buyState.canBuy}
+          canBuy={buyState.canBuy && purchaseSelection === null}
           hint={buyState.hint}
           hintTone={buyState.tone}
           onPresetChange={changePreset}
@@ -319,10 +365,18 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
             {hovered.block.w} × {hovered.block.h} at ({hovered.block.x}, {hovered.block.y}) ·{" "}
             {(hovered.block.w * hovered.block.h).toLocaleString("en-US")} px
           </p>
-          <p className="mt-1 text-[11px] font-semibold text-body">
-            {hovered.block.status === "reserved"
-              ? "On hold mid-purchase — not for sale right now"
-              : "Sold — not for sale"}
+          <p
+            className={`mt-1 text-[11px] font-semibold ${
+              hovered.block.status === "reserved" && ownHoldIds.includes(hovered.block.id)
+                ? "text-primary-pressed"
+                : "text-body"
+            }`}
+          >
+            {hovered.block.status !== "reserved"
+              ? "Sold — not for sale"
+              : ownHoldIds.includes(hovered.block.id)
+                ? "Your hold. Select it and press Buy to carry on, or to let it go."
+                : "On hold mid-purchase — not for sale right now"}
           </p>
         </div>
       )}
@@ -341,6 +395,9 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
         <PurchaseDialog
           selection={purchaseSelection}
           buyerPubkey={buyerPubkey}
+          knownHoldIds={ownHoldIds}
+          onHoldStarted={rememberOwnHold}
+          onHoldEnded={forgetOwnHold}
           onClose={closeDialog}
           onPurchased={handlePurchased}
           onRefresh={refreshBoard}
