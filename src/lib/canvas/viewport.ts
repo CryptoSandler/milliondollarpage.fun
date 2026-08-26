@@ -376,3 +376,32 @@ export function nextZoomScale(
 function above(a: number, b: number): boolean {
   return a > b + 1e-9 * Math.max(1, Math.abs(b));
 }
+
+/**
+ * Whether the ladder has a rung left in each direction.
+ *
+ * The wheel and the pinch can be pressed at the ends of the ladder without
+ * anyone noticing — they simply do nothing. A BUTTON cannot: a + that never
+ * zooms is a broken button, so the panel has to be able to disable it. This
+ * is the same question `nextZoomScale` answers implicitly, asked out loud and
+ * in one place, so the button's disabled state can never disagree with what
+ * pressing it would actually do.
+ *
+ * `canZoomOut` is deliberately the same predicate as `canPan`: the bottom rung
+ * is fit, and at fit there is neither anything to zoom out to nor anywhere to
+ * pan to.
+ *
+ * Called by BoardCanvas, which reports the answer up to SelectionPanel's zoom
+ * buttons.
+ */
+export function zoomAffordance(
+  scale: number,
+  fit: number,
+  maxZoom: number,
+): { canZoomIn: boolean; canZoomOut: boolean } {
+  const rungs = zoomLadder(fit, maxZoom);
+  return {
+    canZoomIn: above(rungs[rungs.length - 1], scale),
+    canZoomOut: above(scale, rungs[0]),
+  };
+}

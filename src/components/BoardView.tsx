@@ -5,7 +5,7 @@ import type { BoardStats, LiveBlock } from "../lib/board/blocks";
 import type { Point } from "../lib/board/geometry";
 import type { Selection } from "../lib/board/selection";
 import { BOARD_BOTTOM_GAP, type Chrome } from "../lib/canvas/viewport";
-import BoardCanvas from "./BoardCanvas";
+import BoardCanvas, { type ZoomControls, type ZoomState } from "./BoardCanvas";
 import BoardCounters from "./BoardCounters";
 import InteractionLegend from "./InteractionLegend";
 import PurchaseDialog from "./PurchaseDialog";
@@ -68,6 +68,31 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
   const [ownHoldIds, setOwnHoldIds] = useState<string[]>([]);
   const topBarRef = useRef<HTMLElement>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
+  /**
+   * The board's zoom, reachable from the panel.
+   *
+   * The viewport stays inside BoardCanvas — it is the only thing that knows
+   * how big its own box is — so what crosses this boundary is three commands
+   * going down and two booleans coming back up, rather than a second copy of
+   * the scale for the two of them to disagree about.
+   */
+  const zoomControlsRef = useRef<ZoomControls | null>(null);
+  const [zoom, setZoom] = useState<ZoomState>({ canZoomIn: true, canZoomOut: false });
+
+  // Guarded against re-setting an identical pair: this fires on every draw
+  // the scale or the chrome touches, and a fresh object each time would
+  // re-render the whole panel for no change at all.
+  const handleZoomStateChange = useCallback((next: ZoomState) => {
+    setZoom((current) =>
+      current.canZoomIn === next.canZoomIn && current.canZoomOut === next.canZoomOut
+        ? current
+        : next,
+    );
+  }, []);
+
+  const zoomIn = useCallback(() => zoomControlsRef.current?.in(), []);
+  const zoomOut = useCallback(() => zoomControlsRef.current?.out(), []);
+  const zoomFit = useCallback(() => zoomControlsRef.current?.fit(), []);
 
   const clear = useCallback(() => setSelection(null), []);
 
@@ -325,8 +350,10 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
         activePreset={activePreset}
         perPixel={board.pricePerPixelBaseUnits}
         chrome={chrome}
+        zoomControlsRef={zoomControlsRef}
         onSelectionChange={setSelection}
         onHoverChange={handleHover}
+        onZoomStateChange={handleZoomStateChange}
       />
 
       <header ref={topBarRef} className="board-bar board-bar--top">
@@ -347,12 +374,16 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           selection={selection}
           perPixel={board.pricePerPixelBaseUnits}
           activePreset={activePreset}
+          zoom={zoom}
           canBuy={buyState.canBuy && purchaseSelection === null}
           hint={buyState.hint}
           hintTone={buyState.tone}
           onPresetChange={changePreset}
           onClear={clear}
           onBuy={handleBuy}
+          onZoomIn={zoomIn}
+          onZoomOut={zoomOut}
+          onZoomFit={zoomFit}
         >
           <InteractionLegend />
 

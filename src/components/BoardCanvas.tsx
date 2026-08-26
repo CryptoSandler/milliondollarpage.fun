@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import type { PointerEvent as ReactPointerEvent, RefObject } from "react";
 import { blockImageUrl } from "../lib/board/block-image";
 import type { LiveBlock } from "../lib/board/blocks";
 import { BLOCK_PIXELS, BOARD_PIXELS, rectContains, type Point } from "../lib/board/geometry";
@@ -20,6 +20,7 @@ import {
   nextZoomScale,
   panBy,
   screenToBoard,
+  zoomAffordance,
   zoomToScale,
 } from "../lib/canvas/viewport";
 
@@ -134,6 +135,22 @@ const HELD_HATCH_STEP = 7;
 const ANTS_INTERVAL_MS = 50;
 const ANTS_DASH = 6;
 
+/**
+ * The board's zoom, driven from outside the canvas.
+ *
+ * The panel's +, - and Fit press these. The viewport itself stays here — the
+ * canvas is the only thing that knows how big its own box is — so the panel
+ * gets three functions rather than a copy of the state.
+ */
+export type ZoomControls = {
+  in: () => void;
+  out: () => void;
+  fit: () => void;
+};
+
+/** Which of those three would actually do something, so the panel can grey out the others. */
+export type ZoomState = { canZoomIn: boolean; canZoomOut: boolean };
+
 type Props = {
   blocks: LiveBlock[];
   /**
@@ -151,8 +168,12 @@ type Props = {
   perPixel: number;
   /** The insets the board must stay clear of: the top bar, and the panel or bar carrying the controls. */
   chrome: Chrome;
+  /** Filled in with the three zoom commands while this canvas is mounted, and emptied when it is not. */
+  zoomControlsRef: RefObject<ZoomControls | null>;
   onSelectionChange: (selection: Selection | null) => void;
   onHoverChange: (block: LiveBlock | null, at: Point | null) => void;
+  /** Reports which ends of the ladder still have a rung, so the buttons can be disabled at the ends. */
+  onZoomStateChange: (state: ZoomState) => void;
 };
 
 type Drag =
@@ -167,8 +188,10 @@ export default function BoardCanvas({
   activePreset,
   perPixel,
   chrome,
+  zoomControlsRef,
   onSelectionChange,
   onHoverChange,
+  onZoomStateChange,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // The canvas has no size before layout runs, so this starts from the
@@ -712,6 +735,64 @@ export default function BoardCanvas({
     canvas.addEventListener("wheel", handler, { passive: false });
     return () => canvas.removeEventListener("wheel", handler);
   }, []);
+
+  /**
+   * One rung of the ladder from a button rather than from a pointer.
+   *
+   * A wheel and a pinch both arrive with a point to zoom about; a button does
+   * not, so it zooms about the middle of the FREE REGION — the middle of the
+   * board as the person pressing it sees it, which in the side-panel layout is
+   * a couple of hundred pixels right of the middle of the window.
+   *
+   * It goes through exactly the same `steppedZoom` the wheel does, so there is
+   * one ladder and one definition of a step: no interpolation can creep in
+   * through a second path.
+   */
+  const stepZoom = useCallback((direction: "in" | "out") => {
+    const el = canvasRef.current;
+    if (!el) return;
+    hasInteracted.current = true;
+    const screen = { width: el.clientWidth, height: el.clientHeight };
+    const chromeNow = chromeRef.current;
+    const point = {
+      x: (chromeNow.left + (screen.width - chromeNow.right)) / 2,
+      y: (chromeNow.top + (screen.height - chromeNow.bottom)) / 2,
+    };
+    setViewport((v) => steppedZoom(v, screen, chromeNow, point, direction));
+  }, []);
+
+  /** Straight back to the bottom rung, re-centred: the whole board on screen. */
+  const zoomToFit = useCallback(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    hasInteracted.current = true;
+    setViewport(
+      initialViewport({ width: el.clientWidth, height: el.clientHeight }, chromeRef.current, {
+        width: BOARD_PIXELS,
+        height: BOARD_PIXELS,
+      }),
+    );
+  }, []);
+
+  useEffect(() => {
+    zoomControlsRef.current = { in: () => stepZoom("in"), out: () => stepZoom("out"), fit: zoomToFit };
+    return () => {
+      zoomControlsRef.current = null;
+    };
+  }, [zoomControlsRef, stepZoom, zoomToFit]);
+
+  // Which ends of the ladder still have a rung, recomputed whenever the scale
+  // or the box changes. The buttons are disabled from this, so a + that would
+  // do nothing is visibly dead rather than quietly inert.
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const fit = fitScale({ width: el.clientWidth, height: el.clientHeight }, chrome, {
+      width: BOARD_PIXELS,
+      height: BOARD_PIXELS,
+    });
+    onZoomStateChange(zoomAffordance(viewport.scale, fit, MAX_ZOOM));
+  }, [viewport.scale, resizeTick, chrome, onZoomStateChange]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {

@@ -17,6 +17,7 @@ import {
   nextZoomScale,
   panBy,
   screenToBoard,
+  zoomAffordance,
   zoomLadder,
   zoomToScale,
 } from "../viewport";
@@ -533,5 +534,53 @@ describe("nextZoomScale steps the ladder", () => {
     const drifted = 1.44 * (2 / 1.44);
     expect(nextZoomScale(drifted, "out", 1.44, 16)).toBe(1.44);
     expect(nextZoomScale(drifted, "in", 1.44, 16)).toBe(4);
+  });
+});
+
+describe("zoomAffordance tells the buttons which end of the ladder they are on", () => {
+  const FIT = 0.848;
+  const MAX = 16;
+
+  it("offers a step in but not out at the bottom rung", () => {
+    expect(zoomAffordance(FIT, FIT, MAX)).toEqual({ canZoomIn: true, canZoomOut: false });
+  });
+
+  it("offers a step out but not in at the top rung", () => {
+    expect(zoomAffordance(MAX, FIT, MAX)).toEqual({ canZoomIn: false, canZoomOut: true });
+  });
+
+  it("offers both on every rung in between", () => {
+    for (const scale of [1, 2, 4, 8]) {
+      expect(zoomAffordance(scale, FIT, MAX)).toEqual({ canZoomIn: true, canZoomOut: true });
+    }
+  });
+
+  it("agrees with nextZoomScale: a disabled button is exactly one that would not move", () => {
+    // Rungs only. Below fit — where a resize can briefly leave the scale —
+    // stepping "out" actually moves the scale UP to the floor, so the two
+    // deliberately part company there and the minus button stays off.
+    for (const fit of [0.32, 0.848, 1.44, 3.84]) {
+      for (const scale of [fit, ...[1, 2, 4, 8, 16].filter((rung) => rung > fit)]) {
+        const said = zoomAffordance(scale, fit, MAX);
+        expect(said.canZoomIn).toBe(nextZoomScale(scale, "in", fit, MAX) !== scale);
+        expect(said.canZoomOut).toBe(nextZoomScale(scale, "out", fit, MAX) !== scale);
+      }
+    }
+  });
+
+  it("says the same thing about zooming out that canPan says about panning", () => {
+    // The bottom rung is fit: there is nothing below it to zoom to and
+    // nowhere for a drag to go. One predicate, said twice, never drifting.
+    for (const fit of [0.848, 1.44]) {
+      for (const scale of [fit, fit * (2 / fit), 1, 2, 16]) {
+        expect(zoomAffordance(scale, fit, 16).canZoomOut).toBe(canPan(scale, fit));
+      }
+    }
+  });
+
+  it("never offers a step in above a fit scale that has swallowed the whole ladder", () => {
+    // A fit scale above maxZoom is the one case where the ladder is a single
+    // rung: fit itself. Neither button does anything there.
+    expect(zoomAffordance(20, 20, 16)).toEqual({ canZoomIn: false, canZoomOut: false });
   });
 });

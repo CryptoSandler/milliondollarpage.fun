@@ -90,7 +90,15 @@ the hue and we do not.
   allocates its backing store in real device pixels, draws with nearest-neighbour
   sampling, and the element itself renders pixelated. There is no scale at which
   the artwork is allowed to go soft.
-- **Zoom is a ladder, not a slider, and it is wheel and pinch only.** Every stop
+- **Zoom is a ladder, not a slider.** Wheel, pinch, and three buttons in the
+  controls — **+**, **−** and **Fit** — all step the same ladder; there is no
+  second one and no interpolation on any of the three paths. The buttons exist
+  because a wheel and a pinch are not reachable from a keyboard, and because a
+  gesture that does nothing at the end of the ladder is invisible while a
+  button that does nothing is broken: **+** is disabled at the top rung and
+  **−** and **Fit** at fit, greyed and marked so rather than merely inert. They
+  zoom about the middle of the free region, since a button has no pointer to
+  zoom about. Every stop
   puts a board pixel on a whole number of screen pixels, and every zoom is
   centred on the pointer. The bottom rung is the **fit scale** — whatever
   irrational number the free region divided by 1000 produces. **"Zoom 1" means
@@ -177,8 +185,10 @@ not which way the window is turned, it is which arrangement leaves a bigger
 board. At 1280×1024 a panel does; at 600×590 it does not.
 
 What gives way as room runs out, in order, in both layouts: **the interaction
-legend first**, then the exact rectangle readout, then the per-preset prices,
-then the wallet's own label, then the gaps. **Never** the pixel count, the
+legend first**, then the zoom trio — a phone has a pinch, and the bottom bar at
+that width has no room for three more buttons — then the exact rectangle
+readout, then the per-preset prices, then the wallet's own label, then the
+gaps. **Never** the pixel count, the
 total, or the Buy button — those are what the controls are for. The bottom bar
 runs out of width; the side panel runs out of height, and sheds the same things
 in the same order.

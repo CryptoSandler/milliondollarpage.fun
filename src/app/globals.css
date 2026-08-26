@@ -346,8 +346,22 @@ h3 {
     color: var(--ink);
   }
 
+  /* Disabled has to READ as disabled, not merely refuse the click. A + at the
+     top of the zoom ladder is the case this exists for: it is pressable-looking
+     and does nothing, which is the one thing a button must never be. So the
+     card back goes flat to the deep cream, the ink drops to mute, and the
+     cursor says so. Text on a disabled control is exempt from the 4.5:1 text
+     rule (WCAG 1.4.3, "Incidental"); mute on canvas-deep still clears 3:1, so
+     it stays legible rather than merely present. */
   .btn-quiet:disabled {
     cursor: not-allowed;
+    color: var(--mute);
+    background: var(--canvas-deep);
+    border-color: var(--hairline-strong);
+  }
+
+  .btn-quiet:disabled:hover {
+    border-color: var(--hairline-strong);
     color: var(--mute);
   }
 
@@ -540,13 +554,19 @@ h3 {
       overflow: visible;
     }
 
-    .board-controls .selection-readout {
+    /* Under the presets: both are about aiming at the board, and both come
+       before the money. */
+    .board-controls .selection-zoom {
       order: 2;
+    }
+
+    .board-controls .selection-readout {
+      order: 3;
       flex: 0 0 auto;
     }
 
     .board-controls .wallet-field {
-      order: 3;
+      order: 4;
     }
 
     .board-controls .wallet-field input {
@@ -554,7 +574,7 @@ h3 {
     }
 
     .board-controls .selection-buy {
-      order: 4;
+      order: 5;
       align-items: stretch;
     }
 
@@ -565,7 +585,7 @@ h3 {
 
     /* Room for it here, so the legend the bottom bar drops first comes back. */
     .board-controls .interaction-legend {
-      order: 5;
+      order: 6;
       display: flex;
       margin-top: auto;
     }

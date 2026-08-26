@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { PRESETS, type Selection } from "../lib/board/selection";
 import { formatUsdc } from "../lib/board/pricing";
+import type { ZoomState } from "./BoardCanvas";
 
 /**
  * What you are selecting, what it costs, and the one button that buys it.
@@ -23,22 +24,36 @@ import { formatUsdc } from "../lib/board/pricing";
  * The Buy button is disabled rather than hidden when the rectangle cannot be
  * bought, and `hint` underneath it always says why — or, when it can be
  * bought, exactly what pressing it will do.
+ *
+ * The zoom trio is here rather than floating over the board because it is a
+ * control, and every control on this page lives in this one block. It is the
+ * keyboard's and the trackpad-less mouse's way onto the same ladder the wheel
+ * and the pinch drive, and it steps that ladder rather than sliding: nothing
+ * here can put a board pixel on a fraction of a screen pixel. Below `sm` it
+ * gives way, after the legend and before anything else — a phone has a pinch,
+ * and the bottom bar at that width has no room for three more buttons.
  */
 export default function SelectionPanel({
   selection,
   perPixel,
   activePreset,
+  zoom,
   canBuy,
   hint,
   hintTone,
   onPresetChange,
   onClear,
   onBuy,
+  onZoomIn,
+  onZoomOut,
+  onZoomFit,
   children,
 }: {
   selection: Selection | null;
   perPixel: number;
   activePreset: number | null;
+  /** Which ends of the zoom ladder still have a rung, straight from the canvas. */
+  zoom: ZoomState;
   canBuy: boolean;
   hint: string;
   /** "refused" paints the hint in danger; the board has painted the offending blocks to match. */
@@ -46,6 +61,9 @@ export default function SelectionPanel({
   onPresetChange: (size: number | null) => void;
   onClear: () => void;
   onBuy: () => void;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onZoomFit: () => void;
   /**
    * Whatever else the controls carry — the legend, the wallet field —
    * rendered between the readout and the Buy button. DESIGN.md puts the
@@ -84,6 +102,39 @@ export default function SelectionPanel({
             {preset.label}
           </button>
         ))}
+      </div>
+
+      <div className="selection-zoom hidden shrink-0 items-center gap-1 sm:flex">
+        <button
+          type="button"
+          onClick={onZoomOut}
+          disabled={!zoom.canZoomOut}
+          aria-label="Zoom out one step"
+          title="Zoom out one step"
+          className="btn-quiet size-8 shrink-0 text-[16px] font-bold leading-none"
+        >
+          −
+        </button>
+        <button
+          type="button"
+          onClick={onZoomFit}
+          disabled={!zoom.canZoomOut}
+          aria-label="Fit the whole board on screen"
+          title="Fit the whole board on screen"
+          className="btn-quiet h-8 shrink-0 px-2 text-[12.5px] leading-none"
+        >
+          Fit
+        </button>
+        <button
+          type="button"
+          onClick={onZoomIn}
+          disabled={!zoom.canZoomIn}
+          aria-label="Zoom in one step"
+          title="Zoom in one step"
+          className="btn-quiet size-8 shrink-0 text-[16px] font-bold leading-none"
+        >
+          +
+        </button>
       </div>
 
       <div className="selection-readout flex min-w-0 flex-1 flex-col justify-center gap-0.5">
