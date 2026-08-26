@@ -144,7 +144,7 @@ the accent only says whose outline it is.
 **The accent deepened by six points of lightness, and that was measured rather
 than chosen.** It used to be `#dd4e22`. On-primary cream (`#fff8ef`) on that
 measures **3.84:1**, and the label on every Buy, Continue, Confirm and "Ask
-again" is 15px/700 — under 18.66px bold, so WCAG 1.4.3 asks 4.5:1. The board's
+again" is 14–15px at 700 — under 18.66px bold, so WCAG 1.4.3 asks 4.5:1. The board's
 selection tag sets the same cream at 11px/700 on the same fill, so one number
 failed in two places. `#c2451e` measures **4.79:1** on the same cream.
 

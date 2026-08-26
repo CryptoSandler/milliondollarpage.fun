@@ -13,9 +13,10 @@
    * It is six points darker than the terracotta this project started with
    * (#dd4e22), and that is a contrast fix rather than a taste one: cream
    * (#fff8ef) on #dd4e22 measures 3.84:1, and the label on every Buy,
-   * Continue, Confirm and "Ask again" is 15px/700 — under 18.66px bold, so
-   * WCAG 1.4.3 wants 4.5:1 and 3.84 is not it. The board's own selection tag
-   * sets the same cream at 11px/700 on the same fill, so it failed twice.
+   * Continue, Confirm and "Ask again" is 14 to 15px at 700 — under 18.66px
+   * bold, so WCAG 1.4.3 wants 4.5:1 and 3.84 is not it. The board's own
+   * selection tag sets the same cream at 11px/700 on the same fill, so one
+   * number was failing in two places.
    *
    * The hue and the saturation did NOT move: both tones are HSL 14deg at 73%,
    * only the lightness drops from 50% to 44%. That matters, because DESIGN.md
