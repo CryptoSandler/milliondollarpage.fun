@@ -31,3 +31,28 @@ export function formatUsdc(baseUnits: number): string {
   const padded = digits.length < 2 ? digits.padEnd(2, "0") : digits;
   return `$${grouped}.${padded}`;
 }
+
+/**
+ * A sold-percentage, as display text.
+ *
+ * Two decimals, not the four `percentSold` itself carries — the raw number
+ * stays that precise for anything that does math with it, but nobody reading
+ * the board needs "10.8100%". A whole percentage drops its decimals the same
+ * way `formatUsdc` drops cents on a whole dollar: "100%", not "100.00%".
+ *
+ * A board that has sold literally nothing reads as a plain "0%" rather than
+ * "0.00%" — the zero should look like a fact, not like a measurement that
+ * happens to round to nothing. But a board that HAS sold something can round
+ * to 0.00% at two decimals (a handful of pixels out of a million), and
+ * showing that as "0%" would be a lie in the other direction: it would claim
+ * the board is untouched when it is not. That case reads as "<0.01%" — a
+ * floor, not a rounding.
+ */
+export function formatPercentSold(percent: number): string {
+  if (percent === 0) return "0%";
+
+  const rounded = Math.round(percent * 100) / 100;
+  if (rounded === 0) return "<0.01%";
+
+  return `${Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(2)}%`;
+}
