@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { confirmOrder, createHold, fetchOrder, submitContent } from "../purchase-client";
+import { confirmOrder, createHold, fetchOrder, releaseHold, submitContent } from "../purchase-client";
 
 /**
  * `purchase-client.ts` does exactly one thing: turn a `fetch` response into
@@ -227,5 +227,60 @@ describe("confirmOrder", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.status).toBe(500);
+  });
+});
+
+describe("createHold, on a 409 carrying your own blocking holds", () => {
+  it("keeps yourOrderIds so the caller can offer to release them", async () => {
+    stubFetchOnce(
+      jsonResponse(409, {
+        message: "Part of this rectangle is a hold you started yourself and never finished.",
+        availableAt: "2026-08-25T12:30:00.000Z",
+        yourOrderIds: ["22222222-2222-2222-2222-222222222222"],
+      }),
+    );
+
+    const result = await createHold({ x: 0, y: 0, w: 10, h: 10 }, "buyer-pubkey-1");
+
+    expect(result.ok).toBe(false);
+    expect((result as { yourOrderIds?: string[] }).yourOrderIds).toEqual([
+      "22222222-2222-2222-2222-222222222222",
+    ]);
+  });
+
+  it("leaves yourOrderIds absent when none of the blockers are yours", async () => {
+    stubFetchOnce(jsonResponse(409, { message: "Someone is holding it.", availableAt: null, yourOrderIds: [] }));
+    const result = await createHold({ x: 0, y: 0, w: 10, h: 10 }, "buyer-pubkey-1");
+    expect((result as { yourOrderIds?: string[] }).yourOrderIds).toEqual([]);
+  });
+});
+
+describe("releaseHold", () => {
+  it("turns a 204 with no body into ok:true", async () => {
+    const stub = stubFetchOnce(new Response(null, { status: 204 }));
+    const result = await releaseHold("33333333-3333-3333-3333-333333333333", "buyer-pubkey-1");
+    expect(result).toEqual({ ok: true });
+
+    const [url, init] = stub.mock.calls[0];
+    expect(url).toBe("/api/orders/33333333-3333-3333-3333-333333333333");
+    expect(init.method).toBe("DELETE");
+    expect(JSON.parse(init.body as string)).toEqual({ buyerPubkey: "buyer-pubkey-1" });
+  });
+
+  it("keeps the server's message on a 403", async () => {
+    stubFetchOnce(jsonResponse(403, { message: "That order does not belong to you." }));
+    const result = await releaseHold("33333333-3333-3333-3333-333333333333", "someone-else");
+    expect(result).toEqual({
+      ok: false,
+      status: 403,
+      message: "That order does not belong to you.",
+    });
+  });
+
+  it("becomes ok:false, not a rejected promise, when the network throws", async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(new TypeError("Failed to fetch")) as unknown as typeof fetch;
+    const result = await releaseHold("33333333-3333-3333-3333-333333333333", "buyer-pubkey-1");
+    expect(result.ok).toBe(false);
+    expect((result as { status: number }).status).toBe(0);
   });
 });

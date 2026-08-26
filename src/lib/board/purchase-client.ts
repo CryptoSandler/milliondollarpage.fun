@@ -31,6 +31,13 @@ export type ClientFailure = {
   message: string;
   rejections?: ContentRejection[];
   retryAt?: string;
+  /**
+   * On a 409 from `/reserve`: the ids of blocking holds that belong to THIS
+   * buyer. Only ever their own — the server puts nobody else's row in here
+   * (see RectangleTaken in reserve.ts) — so a client may offer to release
+   * every id it finds without ever having learned anything about anyone else.
+   */
+  yourOrderIds?: string[];
 };
 
 export type ClientResult = { ok: true; order: ClientOrder } | ClientFailure;
@@ -103,10 +110,21 @@ async function send(
   const failure: ClientFailure = { ok: false, status: response.status, message };
   if (Array.isArray(record.rejections)) failure.rejections = record.rejections as ContentRejection[];
   if (typeof record.retryAt === "string") failure.retryAt = record.retryAt;
+  if (Array.isArray(record.yourOrderIds)) {
+    failure.yourOrderIds = record.yourOrderIds.filter((id): id is string => typeof id === "string");
+  }
   return failure;
 }
 
-/** Holds a rectangle for thirty minutes. 201 on success, 400/409/429 otherwise. */
+/**
+ * Holds a rectangle for thirty minutes. 201 on success, 400/409/429 otherwise.
+ *
+ * A 201 whose `id` the caller has seen before is a RESUMED hold, not a new
+ * one: the server hands an existing order back in the same shape rather than
+ * refusing a buyer their own pixels. Nothing on the wire marks it, and nothing
+ * needs to — the only party who can tell is the one who already knows the id,
+ * which is exactly the property that keeps this out of a stranger's reach.
+ */
 export function createHold(rect: Rect, buyerPubkey: string): Promise<ClientResult> {
   return send(
     () =>
@@ -143,4 +161,46 @@ export function confirmOrder(orderId: string, buyerPubkey: string): Promise<Clie
       body: JSON.stringify({ buyerPubkey }),
     }),
   );
+}
+
+/** A release either happened or it didn't; there is no order left to describe. */
+export type ReleaseResult = { ok: true } | ClientFailure;
+
+/**
+ * Hands a hold back before its thirty minutes are up.
+ *
+ * Its own function rather than another `send` call: the endpoint answers 204
+ * with no body, and `send` exists to turn a body into a `ClientOrder`. Forcing
+ * this through it would mean inventing an order that no longer exists.
+ *
+ * Like everything else here, a network failure comes back as `ok: false`
+ * rather than a rejected promise, so a caller never has to wrap it in a
+ * try/catch to keep a button from getting stuck.
+ */
+export async function releaseHold(orderId: string, buyerPubkey: string): Promise<ReleaseResult> {
+  let response: Response;
+  try {
+    response = await fetch(`/api/orders/${orderId}`, {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ buyerPubkey }),
+    });
+  } catch {
+    return { ok: false, status: 0, message: NETWORK_FAILURE_MESSAGE };
+  }
+
+  if (response.ok) return { ok: true };
+
+  let body: unknown = null;
+  try {
+    body = await response.json();
+  } catch {
+    body = null;
+  }
+  const record = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+  return {
+    ok: false,
+    status: response.status,
+    message: typeof record.message === "string" ? record.message : "That hold could not be released.",
+  };
 }
