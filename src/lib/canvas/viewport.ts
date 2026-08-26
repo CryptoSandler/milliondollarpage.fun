@@ -119,6 +119,22 @@ export function clampToBoard(v: Viewport, board: Size): Viewport {
  */
 const MIN_FIT_SCALE = 0.01;
 
+/**
+ * The paper the board keeps between itself and the bottom edge of the window.
+ *
+ * The sheet is pinned to a wall, and a sheet flush against the bottom of the
+ * frame reads as cropped rather than as hung. Every other edge already has
+ * something between the board and the window — the top bar, the side panel,
+ * the bottom bar — and this is the one that had nothing.
+ *
+ * It is an INSET, part of the chrome the free region is computed from, not a
+ * margin on the canvas. A margin would add to the page's height and the
+ * document is not allowed to scroll; an inset takes the room out of the
+ * board's share before the fit maths ever sees it. DESIGN.md's gutter is
+ * 16px and the brief asks for 16–24; 20 sits in the middle of both.
+ */
+export const BOARD_BOTTOM_GAP = 20;
+
 /** The rectangle of viewport the board may use: everything the chrome leaves. */
 export function freeRegion(screen: Size, chrome: Chrome): { x: number; y: number } & Size {
   return {

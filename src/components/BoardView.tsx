@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BoardStats, LiveBlock } from "../lib/board/blocks";
 import type { Point } from "../lib/board/geometry";
 import type { Selection } from "../lib/board/selection";
-import type { Chrome } from "../lib/canvas/viewport";
+import { BOARD_BOTTOM_GAP, type Chrome } from "../lib/canvas/viewport";
 import BoardCanvas from "./BoardCanvas";
 import BoardCounters from "./BoardCounters";
 import InteractionLegend from "./InteractionLegend";
@@ -19,8 +19,16 @@ type BoardPayload = {
 
 // Matches the --bar-top-h / --bar-bottom-h defaults in globals.css: the very
 // first paint, before the chrome exists to be measured, has to assume
-// something, and this is what the CSS assumes too.
-const FALLBACK_CHROME: Chrome = { top: 52, right: 0, bottom: 88, left: 0 };
+// something, and this is what the CSS assumes too. The bottom already carries
+// BOARD_BOTTOM_GAP, so the first paint leaves the same strip of paper under
+// the board that every later one does.
+const FALLBACK_BAR_BOTTOM = 88;
+const FALLBACK_CHROME: Chrome = {
+  top: 52,
+  right: 0,
+  bottom: FALLBACK_BAR_BOTTOM + BOARD_BOTTOM_GAP,
+  left: 0,
+};
 
 // Somebody else's hold, or your own abandoned attempt in another tab, is
 // invisible until the board refetches — the selector otherwise keeps
@@ -282,10 +290,20 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
       // A controls block narrower than the window is the side panel, anchored
       // to the left edge; one that spans the window is the bottom bar.
       const side = box.width > 0 && box.width < window.innerWidth - 1;
+      // BOARD_BOTTOM_GAP is added in both layouts, because in both of them
+      // the bottom is the edge the board would otherwise sit flush against:
+      // the window's own edge under a side panel, the bar's top edge under a
+      // bottom bar. It is part of the chrome, so the fit maths takes it out
+      // of the board's share rather than a margin adding it to the page.
       setChrome(
         side
-          ? { top, right: 0, bottom: 0, left: box.right }
-          : { top, right: 0, bottom: box.height || FALLBACK_CHROME.bottom, left: 0 },
+          ? { top, right: 0, bottom: BOARD_BOTTOM_GAP, left: box.right }
+          : {
+              top,
+              right: 0,
+              bottom: (box.height || FALLBACK_BAR_BOTTOM) + BOARD_BOTTOM_GAP,
+              left: 0,
+            },
       );
     }
 

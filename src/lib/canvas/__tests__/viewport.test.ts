@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  BOARD_BOTTOM_GAP,
   type Chrome,
   type Size,
   TAP_SLOP_PX,
@@ -219,19 +220,23 @@ describe("the board plus its chrome never needs more room than the viewport has"
   const SIDE_PANEL_MIN = 280;
   const SIDE_PANEL_MAX = 560;
 
+  // Mirrors BoardView's measurement, BOARD_BOTTOM_GAP included: the gap is
+  // part of the chrome, so the no-scroll arithmetic below has to be done with
+  // it rather than around it.
   function chromeFor(screen: Size): Chrome {
     const barTop = screen.width <= 640 ? 48 : 52;
     // The side panel takes over at 640px and a 5:4 aspect — see the `side`
     // variant in globals.css.
     const side = screen.width >= 640 && screen.width * 4 >= screen.height * 5;
     if (!side) {
-      return { top: barTop, right: 0, bottom: screen.width <= 640 ? 92 : 88, left: 0 };
+      const bar = screen.width <= 640 ? 92 : 88;
+      return { top: barTop, right: 0, bottom: bar + BOARD_BOTTOM_GAP, left: 0 };
     }
     // The panel absorbs whatever width the board does not need, between a
     // width its controls stay usable at and one they stop growing at.
     const wanted = screen.width - (screen.height - barTop);
     const panel = Math.min(SIDE_PANEL_MAX, Math.max(SIDE_PANEL_MIN, wanted));
-    return { top: barTop, right: 0, bottom: 0, left: Math.min(panel, screen.width) };
+    return { top: barTop, right: 0, bottom: BOARD_BOTTOM_GAP, left: Math.min(panel, screen.width) };
   }
 
   const viewports: Array<[string, Size]> = [
@@ -270,6 +275,30 @@ describe("the board plus its chrome never needs more room than the viewport has"
       expect(fitted.height + chrome.top + chrome.bottom).toBeLessThanOrEqual(screen.height + 1e-9);
     });
   }
+
+  // The board used to sit flush against the bottom of the window in the
+  // side-panel layout, which reads as a sheet cropped by the frame rather
+  // than one pinned to a wall. The gap is chrome, so it costs the board a
+  // little scale instead of costing the document its no-scroll contract —
+  // which every viewport above still keeps.
+  it("leaves a strip of paper under the board instead of letting it touch the bottom edge", () => {
+    for (const [name, screen] of viewports) {
+      const chrome = chromeFor(screen);
+      expect(chrome.bottom, name).toBeGreaterThanOrEqual(BOARD_BOTTOM_GAP);
+
+      const free = freeRegion(screen, chrome);
+      const fitted = fittedBoardSize(screen, chrome, board);
+      // Where the board's bottom edge lands: it is centred in the free
+      // region, so half the slack sits under it.
+      const bottomEdge = free.y + (free.height + fitted.height) / 2;
+      expect(screen.height - bottomEdge, name).toBeGreaterThanOrEqual(BOARD_BOTTOM_GAP - 1e-9);
+    }
+  });
+
+  it("keeps that strip between 16 and 24 pixels, which is the gutter the rest of the page uses", () => {
+    expect(BOARD_BOTTOM_GAP).toBeGreaterThanOrEqual(16);
+    expect(BOARD_BOTTOM_GAP).toBeLessThanOrEqual(24);
+  });
 
   it("names the one exception: a viewport with no room for a board at all", () => {
     // Below the fit scale's floor the board is 10px square and the free region
