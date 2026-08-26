@@ -106,9 +106,29 @@ const PAINT = {
   ruleCoarse: "#c9baa0",
   sold: "#443a2c",
   soldEdge: "#2b241c",
-  // The held treatment is the paper's own cream, drawn back OVER a solid
-  // block. It is a ruling, not a hue: see drawHeldHatch below.
-  heldRule: "rgba(243,237,224,0.62)",
+  /*
+   * HELD IS NOT SOLD, and it must not look like it at a glance.
+   *
+   * It used to: a hold painted the same near-black slab a sale does and put a
+   * cream hatch back over it, which at the scale a 10-pixel block occupies on
+   * a fitted board is a couple of strokes across eight pixels. Two states,
+   * one silhouette.
+   *
+   * So a hold gets its own value instead of a variation on the sale's. The
+   * base is the coarse rule's own tone — already on the board, no new colour
+   * — which is unmistakably lighter than a sale and unmistakably heavier than
+   * the paper, and the ruling that comes back over it is INK rather than
+   * cream, so it reads as pencil on card rather than as a scratch on ink. The
+   * edge is a broken ink one where a sale's is unbroken.
+   *
+   * None of it is a hue: value and pattern only, and a hold has no upload to
+   * clash with anyway — the image route serves paid and minted blocks alone,
+   * so there is nothing public to draw on these pixels and the whole rectangle
+   * is free for a treatment of its own.
+   */
+  held: "#c9baa0",
+  heldRule: "rgba(43,36,28,0.55)",
+  heldEdge: "#2b241c",
   chip: "#2b241c",
   chipText: "#f3ede0",
   lift: "rgba(255,252,245,0.16)",
@@ -423,17 +443,22 @@ export default function BoardCanvas({
       const h = block.h * scale;
       if (x + w < 0 || y + h < 0 || x > width || y > height) continue;
 
-      // The fallback, first and always: solid, opaque, edge to edge, so the
-      // ruling disappears underneath and the block reads as taken from the
-      // very first frame — before its bitmap has arrived, and permanently if
-      // that bitmap 404s.
-      context.fillStyle = PAINT.sold;
+      const held = block.status === "reserved";
+
+      // Opaque, edge to edge, so the ruling disappears underneath and the
+      // rectangle reads as not-for-sale from the very first frame. WHICH
+      // opaque is the whole distinction: a sale goes down in near-black, a
+      // hold in the coarse rule's own tone. For a sale this is also the
+      // fallback the block keeps if its bitmap never arrives.
+      context.fillStyle = held ? PAINT.held : PAINT.sold;
       context.fillRect(x, y, w, h);
 
       // The artwork, over the top, filling exactly the same rectangle. This
       // is what a sold block actually looks like; everything above is what it
-      // looks like for the moment before.
-      const image = block.hasImage ? images.current.get(block.id) : undefined;
+      // looks like for the moment before. A hold never reaches here — those
+      // pixels are unpaid and may never be bought, so there is nothing public
+      // to draw.
+      const image = !held && block.hasImage ? images.current.get(block.id) : undefined;
       if (image && image.complete && image.naturalWidth > 0) {
         // Cream first, then the bitmap. An upload with an alpha channel is
         // composited onto the paper's own colour rather than onto whatever
@@ -452,20 +477,16 @@ export default function BoardCanvas({
       }
 
       // A hairline ink edge, so two adjacent sold blocks stay separate even
-      // when their artwork is identical.
+      // when their artwork is identical. A hold overdraws it with a broken
+      // one below.
       context.strokeStyle = PAINT.soldEdge;
       context.lineWidth = 1;
       context.strokeRect(x + 0.5, y + 0.5, Math.max(0, w - 1), Math.max(0, h - 1));
 
-      // A hold is not a sale, and the board has to say so. It still paints
-      // solid — those pixels genuinely are not for sale right now — but the
-      // ruling comes back over the top as a hatch, and the ink edge is
-      // overdrawn with a broken one. Pencilled in, not inked.
-      //
-      // Structural, never a hue: the hatch is the paper's own cream and the
-      // edge is a dash pattern, so a hold reads the same whatever colour the
-      // buyer eventually uploads.
-      if (block.status === "reserved") {
+      // The rest of the hold: an ink ruling back over the card, a broken edge
+      // where a sale carries an unbroken one, and its own word for it wherever
+      // there is room to read one. Pencilled in, not inked.
+      if (held) {
         // Clamped to the viewport before hatching, so a block zoomed until it
         // is larger than the screen costs a screenful of strokes, not a
         // blockful.
@@ -476,11 +497,19 @@ export default function BoardCanvas({
         if (hw > 0 && hh > 0) drawHeldHatch(context, hx, hy, hw, hh);
 
         context.save();
-        context.strokeStyle = PAINT.heldRule;
+        context.strokeStyle = PAINT.heldEdge;
         context.lineWidth = 1;
         context.setLineDash([4, 4]);
-        context.strokeRect(x + 1.5, y + 1.5, Math.max(0, w - 3), Math.max(0, h - 3));
+        context.strokeRect(x + 0.5, y + 0.5, Math.max(0, w - 1), Math.max(0, h - 1));
         context.restore();
+
+        // Its own label, where a block is big enough to carry one. A hold has
+        // no caption to compete with — there is no content on it yet — so this
+        // sits exactly where a sold block's caption would, and says the one
+        // thing about this rectangle anybody needs.
+        if (w >= CHIP_MIN_BLOCK_PX && h >= CHIP_HEIGHT + 8) {
+          drawCaptionChip(context, "On hold", x + 4, y + h - 4 - CHIP_HEIGHT, w - 8, family);
+        }
 
         // Your own hold, marked harder, because it is the one held rectangle
         // on the board you can do something about — resume it or let it go.
@@ -511,7 +540,7 @@ export default function BoardCanvas({
         context.strokeRect(x + 1, y + 1, Math.max(0, w - 2), Math.max(0, h - 2));
       }
 
-      if (block.caption && w >= CHIP_MIN_BLOCK_PX && h >= CHIP_HEIGHT + 8) {
+      if (!held && block.caption && w >= CHIP_MIN_BLOCK_PX && h >= CHIP_HEIGHT + 8) {
         drawCaptionChip(context, block.caption, x + 4, y + h - 4 - CHIP_HEIGHT, w - 8, family);
       }
     }
@@ -902,6 +931,11 @@ function drawRules(
  * are laid out on an absolute SCREEN grid rather than per block, so two
  * adjacent holds read as one hatched region instead of two patterns that
  * happen to meet at a seam.
+ *
+ * Ink over the hold's own card tone, which is the pair that makes a hold
+ * legible at the size a 10-pixel block occupies on a fitted board: even where
+ * only one stroke crosses it, the slab underneath is already the wrong value
+ * to be a sale.
  */
 function drawHeldHatch(
   context: CanvasRenderingContext2D,
