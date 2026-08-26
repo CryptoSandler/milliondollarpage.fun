@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
+import { blockImageUrl } from "../lib/board/block-image";
 import type { LiveBlock } from "../lib/board/blocks";
 import { BLOCK_PIXELS, BOARD_PIXELS, rectContains, type Point } from "../lib/board/geometry";
 import { formatUsdc } from "../lib/board/pricing";
@@ -78,9 +79,14 @@ function steppedZoom(
  * nothing else; if one changes there, it changes here.
  *
  * THE RULE THAT OUTRANKS THE REST: state never depends on the buyer's colour.
- * A free cell keeps its ruling; a sold block paints solid and edge to edge and
- * the ruling vanishes under it. Ruled means available, solid means taken —
- * true whether the artwork is black, neon, or the same cream as the paper.
+ * A free cell keeps its ruling; a sold block covers its rectangle edge to edge
+ * and the ruling vanishes under it. Ruled means available, unruled means taken
+ * — true whether the artwork is black, neon, or the same cream as the paper.
+ *
+ * What covers a sold rectangle is the buyer's bitmap. `sold` below is what
+ * goes down UNDER it: the fallback a block shows while its image is in flight
+ * and the only thing it shows if that image never arrives. It is not the sold
+ * treatment; the artwork is.
  */
 const PAINT = {
   // The wall the sheet hangs on, and it is the SAME cream as the sheet. The
@@ -192,6 +198,49 @@ export default function BoardCanvas({
   useEffect(() => {
     chromeRef.current = chrome;
   }, [chrome]);
+
+  /**
+   * Every sold block's bitmap, decoded once and kept for the life of the page.
+   *
+   * A ref rather than state, because the map is not what the board renders
+   * from — it is a cache the draw effect reads. Panning and zooming redraw
+   * from it constantly and must never cause a refetch; the board also
+   * refetches its JSON every thirty seconds, which hands this effect a brand
+   * new `blocks` array each time, and an image already in the map is skipped.
+   *
+   * An entry goes in BEFORE the bytes arrive, which is what makes that
+   * skipping work. The draw loop therefore has to ask whether each image is
+   * actually decoded rather than merely present — see `complete &&
+   * naturalWidth` below, which is also exactly what tells a bitmap still
+   * loading apart from one whose request 404'd.
+   */
+  const images = useRef(new Map<string, HTMLImageElement>());
+  // Bumped by each image that finishes, purely to schedule a redraw: the
+  // board has to repaint when a bitmap lands, and the bitmap lands outside
+  // React.
+  const [imagesLoaded, setImagesLoaded] = useState(0);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    for (const block of blocks) {
+      if (!block.hasImage || images.current.has(block.id)) continue;
+      const image = new Image();
+      images.current.set(block.id, image);
+      // A failed load needs no handler: the image stays `complete` with a
+      // naturalWidth of 0, the draw loop skips it, and the block keeps the
+      // solid fallback. That is the whole 404 story.
+      image.onload = () => {
+        if (mounted.current) setImagesLoaded((n) => n + 1);
+      };
+      image.src = blockImageUrl(block.id);
+    }
+  }, [blocks]);
 
   const publish = useCallback(
     (next: Selection | null) => {
@@ -329,10 +378,33 @@ export default function BoardCanvas({
       const h = block.h * scale;
       if (x + w < 0 || y + h < 0 || x > width || y > height) continue;
 
-      // Solid, opaque, edge to edge: the ruling disappears underneath, and
-      // that disappearance — not any hue — is what reads as taken.
+      // The fallback, first and always: solid, opaque, edge to edge, so the
+      // ruling disappears underneath and the block reads as taken from the
+      // very first frame — before its bitmap has arrived, and permanently if
+      // that bitmap 404s.
       context.fillStyle = PAINT.sold;
       context.fillRect(x, y, w, h);
+
+      // The artwork, over the top, filling exactly the same rectangle. This
+      // is what a sold block actually looks like; everything above is what it
+      // looks like for the moment before.
+      const image = block.hasImage ? images.current.get(block.id) : undefined;
+      if (image && image.complete && image.naturalWidth > 0) {
+        // Cream first, then the bitmap. An upload with an alpha channel is
+        // composited onto the paper's own colour rather than onto whatever
+        // happens to be underneath — without this, a transparent PNG would
+        // let the graph paper's ruling show through a block that has been
+        // sold, and ruled means available.
+        context.fillStyle = PAINT.paper;
+        context.fillRect(x, y, w, h);
+        // Re-asserted immediately before the draw. It is set once per frame
+        // after setTransform and survives save/restore, so this is belt and
+        // braces — but interpolating somebody's 10×10 bitmap up to 160px is
+        // the one thing this board must never do, and it costs nothing to
+        // say so at the only place it could happen.
+        context.imageSmoothingEnabled = false;
+        context.drawImage(image, x, y, w, h);
+      }
 
       // A hairline ink edge, so two adjacent sold blocks stay separate even
       // when their artwork is identical.
@@ -444,7 +516,7 @@ export default function BoardCanvas({
         family,
       );
     }
-  }, [blocks, ownHoldIds, selection, viewport, resizeTick, ants, hoveredId, chrome.top]);
+  }, [blocks, ownHoldIds, selection, viewport, resizeTick, ants, hoveredId, chrome.top, imagesLoaded]);
 
   function pointerBoard(event: ReactPointerEvent<HTMLCanvasElement>): Point {
     const rect = event.currentTarget.getBoundingClientRect();
