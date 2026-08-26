@@ -1,19 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
   TAP_SLOP_PX,
+  backingStoreSize,
   boardToScreen,
   clampToBoard,
   clampToCover,
+  coverScale,
   initialViewport,
   isTap,
+  nextZoomScale,
   panBy,
   screenToBoard,
-  zoomAt,
+  zoomLadder,
+  zoomToScale,
 } from "../viewport";
 
 const SCREEN = { width: 800, height: 600 };
 const BOARD = { width: 200, height: 200 };
 const CENTRED = { centreX: 100, centreY: 100, scale: 2 };
+const BOARD_1000 = { width: 1000, height: 1000 };
 
 describe("viewport", () => {
   it("puts the viewport centre at the middle of the screen", () => {
@@ -30,7 +35,7 @@ describe("viewport", () => {
     // still under the pointer afterwards.
     const point = { x: 600, y: 200 };
     const before = screenToBoard(CENTRED, SCREEN, point);
-    const zoomed = zoomAt(CENTRED, SCREEN, point, 2, { min: 1, max: 64 });
+    const zoomed = zoomToScale(CENTRED, SCREEN, point, 4, { min: 1, max: 64 });
     const after = screenToBoard(zoomed, SCREEN, point);
 
     expect(after.x).toBeCloseTo(before.x, 6);
@@ -39,8 +44,8 @@ describe("viewport", () => {
   });
 
   it("refuses to zoom past its limits", () => {
-    expect(zoomAt(CENTRED, SCREEN, { x: 400, y: 300 }, 100, { min: 1, max: 8 }).scale).toBe(8);
-    expect(zoomAt(CENTRED, SCREEN, { x: 400, y: 300 }, 0.001, { min: 1, max: 8 }).scale).toBe(1);
+    expect(zoomToScale(CENTRED, SCREEN, { x: 400, y: 300 }, 100, { min: 1, max: 8 }).scale).toBe(8);
+    expect(zoomToScale(CENTRED, SCREEN, { x: 400, y: 300 }, 0.001, { min: 1, max: 8 }).scale).toBe(1);
   });
 
   it("pans in board units, so a drag moves the same board distance at any zoom", () => {
@@ -78,7 +83,7 @@ describe("the whole board fits and a single block is reachable", () => {
     const before = { centreX: 500, centreY: 500, scale: 0.9 };
     const cursor = { x: 200, y: 700 };
     const under = screenToBoard(before, screen, cursor);
-    const after = zoomAt(before, screen, cursor, 4, { min: 0.1, max: 40 });
+    const after = zoomToScale(before, screen, cursor, 3.6, { min: 0.1, max: 40 });
     expect(screenToBoard(after, screen, cursor).x).toBeCloseTo(under.x, 9);
     expect(screenToBoard(after, screen, cursor).y).toBeCloseTo(under.y, 9);
   });
@@ -209,5 +214,138 @@ describe("clampToCover keeps the board covering the free region", () => {
     const clamped = clampToCover(at(0, 200, 0.4), tall, bars, board);
     const centre = boardToScreen(clamped, tall, { x: 500, y: 500 });
     expect(centre.y).toBeCloseTo(bars.top + (tall.height - bars.top - bars.bottom) / 2, 6);
+  });
+});
+
+/**
+ * A canvas element has no intrinsic size: CSS gives it a box, and the backing
+ * store is a separate number. Getting that number wrong is what makes a board
+ * of small bitmaps look soft on a retina screen — the browser stretches half
+ * the pixels it should have allocated across the whole box.
+ */
+describe("backingStoreSize allocates real device pixels", () => {
+  it("is exactly double the CSS size in both dimensions at a ratio of 2", () => {
+    expect(backingStoreSize({ width: 1440, height: 900 }, 2)).toEqual({ width: 2880, height: 1800 });
+  });
+
+  it("matches the CSS size at a ratio of 1", () => {
+    expect(backingStoreSize({ width: 1440, height: 900 }, 1)).toEqual({ width: 1440, height: 900 });
+  });
+
+  it("triples it at a ratio of 3", () => {
+    expect(backingStoreSize({ width: 390, height: 844 }, 3)).toEqual({ width: 1170, height: 2532 });
+  });
+
+  it("rounds a fractional ratio to whole pixels rather than letting the browser truncate", () => {
+    // 1.5 is what Windows display scaling reports constantly.
+    expect(backingStoreSize({ width: 1281, height: 721 }, 1.5)).toEqual({ width: 1922, height: 1082 });
+    // 2.75 is a real Android ratio; 1080.75 must not become 1080.
+    expect(backingStoreSize({ width: 393, height: 851 }, 2.75)).toEqual({ width: 1081, height: 2340 });
+  });
+
+  it("falls back to 1 rather than allocating nothing when the ratio is missing", () => {
+    expect(backingStoreSize({ width: 800, height: 600 }, 0)).toEqual({ width: 800, height: 600 });
+  });
+});
+
+/**
+ * The zoom ladder. Its whole reason to exist is that a board pixel should
+ * cover a whole number of screen pixels, so a buyer's 10×10 bitmap reads as
+ * squares rather than as a smear — with the one rung that cannot be an
+ * integer, cover itself, at the bottom because the board must never show a
+ * margin down its sides.
+ */
+describe("zoomLadder", () => {
+  it("puts cover at the bottom and only the powers of two above it: 1440px wide", () => {
+    expect(zoomLadder(coverScale({ width: 1440, height: 900 }, BOARD_1000), 16)).toEqual([1.44, 2, 4, 8, 16]);
+  });
+
+  it("includes 1 as a rung once cover is below it: 900px wide", () => {
+    expect(zoomLadder(coverScale({ width: 900, height: 900 }, BOARD_1000), 16)).toEqual([0.9, 1, 2, 4, 8, 16]);
+  });
+
+  it("never lists a rung above maxZoom", () => {
+    expect(zoomLadder(1.44, 8)).toEqual([1.44, 2, 4, 8]);
+  });
+
+  it("drops an integer rung that is only equal to cover, not above it", () => {
+    // A 2000px viewport covers at exactly 2. Offering 2 twice would waste a
+    // wheel notch on a step that goes nowhere.
+    expect(zoomLadder(2, 16)).toEqual([2, 4, 8, 16]);
+  });
+});
+
+describe("nextZoomScale steps the ladder", () => {
+  const COVER_1440 = 1.44;
+  const COVER_900 = 0.9;
+  const MAX = 16;
+
+  it("steps up from cover to the first integer rung above it, not to 1", () => {
+    expect(nextZoomScale(COVER_1440, "in", COVER_1440, MAX)).toBe(2);
+  });
+
+  it("steps up to 1 first when cover is below 1", () => {
+    expect(nextZoomScale(COVER_900, "in", COVER_900, MAX)).toBe(1);
+  });
+
+  it("doubles on every further step up", () => {
+    let scale = nextZoomScale(COVER_1440, "in", COVER_1440, MAX);
+    const climbed = [scale];
+    for (let i = 0; i < 4; i += 1) {
+      scale = nextZoomScale(scale, "in", COVER_1440, MAX);
+      climbed.push(scale);
+    }
+    expect(climbed).toEqual([2, 4, 8, 16, 16]);
+  });
+
+  it("steps down from the lowest integer rung onto cover exactly", () => {
+    expect(nextZoomScale(2, "out", COVER_1440, MAX)).toBe(COVER_1440);
+    expect(nextZoomScale(1, "out", COVER_900, MAX)).toBe(COVER_900);
+  });
+
+  it("stays on cover when stepping down from cover", () => {
+    expect(nextZoomScale(COVER_1440, "out", COVER_1440, MAX)).toBe(COVER_1440);
+  });
+
+  it("halves on the way back down and lands on cover, never past it", () => {
+    let scale = 16;
+    const dropped = [];
+    for (let i = 0; i < 6; i += 1) {
+      scale = nextZoomScale(scale, "out", COVER_1440, MAX);
+      dropped.push(scale);
+    }
+    expect(dropped).toEqual([8, 4, 2, COVER_1440, COVER_1440, COVER_1440]);
+  });
+
+  it("never returns a scale below cover, from any starting point in either direction", () => {
+    for (const cover of [0.32, 0.9, 1, 1.44, 2.5, 3.84]) {
+      for (const start of [0.001, cover / 2, cover, 1, 3, 7.5, 16, 1000]) {
+        for (const direction of ["in", "out"] as const) {
+          expect(nextZoomScale(start, direction, cover, 16)).toBeGreaterThanOrEqual(cover);
+        }
+      }
+    }
+  });
+
+  it("never exceeds maxZoom", () => {
+    for (const start of [0.5, 1.44, 8, 16, 40]) {
+      expect(nextZoomScale(start, "in", 1.44, 16)).toBeLessThanOrEqual(16);
+      expect(nextZoomScale(start, "out", 1.44, 16)).toBeLessThanOrEqual(16);
+    }
+  });
+
+  it("steps from the nearest rung when a resize has left the scale off the ladder", () => {
+    // Cover was 1.44, the window narrowed, and clampToCover left the scale at
+    // an in-between value. The next notch is still a rung, not 1.15 × mush.
+    expect(nextZoomScale(3.1, "in", 1.44, 16)).toBe(4);
+    expect(nextZoomScale(3.1, "out", 1.44, 16)).toBe(2);
+  });
+
+  it("survives the float round trip a previous step leaves behind", () => {
+    // 1.44 * (2 / 1.44) is 2.0000000000000004 on this hardware. A step down
+    // from there must still be cover, not a no-op that lands on 2 again.
+    const drifted = 1.44 * (2 / 1.44);
+    expect(nextZoomScale(drifted, "out", 1.44, 16)).toBe(1.44);
+    expect(nextZoomScale(drifted, "in", 1.44, 16)).toBe(4);
   });
 });

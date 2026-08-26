@@ -7,6 +7,10 @@
  * This board is 1000x1000 pixels. It has to stay readable zoomed all the way
  * out to fit a laptop screen, and zoomable in far enough to pick out a single
  * 10-pixel block.
+ *
+ * The last section of the file is about crispness rather than position: the
+ * backing-store size and the zoom ladder that keep a board pixel sitting on a
+ * whole number of screen pixels instead of somewhere between two.
  */
 
 export type Size = { width: number; height: number };
@@ -39,15 +43,23 @@ export function screenToBoard(v: Viewport, screen: Size, point: Point): Point {
   };
 }
 
-/** Zooms about a screen point, leaving whatever is under it exactly where it is. */
-export function zoomAt(
+/**
+ * Zooms about a screen point, leaving whatever is under it exactly where it is.
+ *
+ * `target` is an ABSOLUTE scale, not a factor. That matters: the wheel snaps to
+ * the rungs of `zoomLadder` below, and a rung reached by multiplying by
+ * `rung / v.scale` arrives as 2.0000000000000004 rather than 2. The whole point
+ * of the ladder is that a board pixel lands on a whole number of screen pixels,
+ * so the exact value has to survive the trip.
+ */
+export function zoomToScale(
   v: Viewport,
   screen: Size,
   point: Point,
-  factor: number,
+  target: number,
   limits: { min: number; max: number },
 ): Viewport {
-  const scale = Math.min(limits.max, Math.max(limits.min, v.scale * factor));
+  const scale = Math.min(limits.max, Math.max(limits.min, target));
   if (scale === v.scale) return v;
 
   const anchor = screenToBoard(v, screen, point);
@@ -171,4 +183,118 @@ export function clampToCover(
   const centreY = min <= max ? Math.min(max, Math.max(min, v.centreY)) : centredInRegion(bars, board, v.scale);
 
   return { ...v, centreX, centreY };
+}
+
+/* ------------------------------------------------------------------------- *
+ * Crisp pixels
+ *
+ * Blocks are small bitmaps of somebody's artwork. They have to read as SHARP
+ * PIXELS at every scale the board offers, never as interpolated mush, which
+ * takes two things: a backing store measured in real device pixels, and a zoom
+ * that only ever stops where a board pixel covers a whole number of them.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * The canvas backing store for a CSS box at a given device pixel ratio.
+ *
+ * The canvas element has no intrinsic size — CSS gives it its box, and
+ * `canvas.width`/`canvas.height` are a separate thing entirely: the number of
+ * real pixels the browser allocates behind it. Leave them at the default 300×150
+ * and the browser stretches that postage stamp across the whole viewport, which
+ * is exactly the mush this board must not show. They must be the CSS size times
+ * the device pixel ratio, and the drawing context scaled by the same ratio so
+ * everything downstream can keep speaking CSS pixels.
+ *
+ * Rounded, because a backing store is a whole number of pixels: a 1440.5 CSS
+ * pixel box at a ratio of 1.5 wants 2160.75, and the browser would truncate
+ * silently. Rounding here makes the half-pixel a decision instead.
+ *
+ * A ratio of zero, NaN, or undefined (`window.devicePixelRatio` on an ancient
+ * browser) falls back to 1 rather than allocating a zero-sized store.
+ */
+export function backingStoreSize(css: Size, dpr: number): Size {
+  const ratio = dpr > 0 ? dpr : 1;
+  return {
+    width: Math.round(css.width * ratio),
+    height: Math.round(css.height * ratio),
+  };
+}
+
+/**
+ * The scales the wheel is allowed to stop on.
+ *
+ * The bottom rung is `cover` itself — the scale at which the board is exactly
+ * as wide as the viewport. It is almost never an integer (1440 / 1000 = 1.44)
+ * and it is not negotiable: anything below it opens cream margins down the
+ * sides of the artwork, which DESIGN.md forbids outright. So the ladder is not
+ * simply the powers of two.
+ *
+ * Above it are the powers of two STRICTLY GREATER than cover, up to `maxZoom`.
+ * Each doubles the screen pixels per board pixel, so a board pixel is a 2×2,
+ * 4×4, 8×8 or 16×16 square of screen pixels and every edge in the artwork lands
+ * on a pixel boundary.
+ *
+ *   1440px wide → cover 1.44 → [1.44, 2, 4, 8, 16]
+ *    900px wide → cover 0.90 → [0.9, 1, 2, 4, 8, 16]
+ *
+ * Note the 1440 case skips 1 entirely: 1 is below cover, so it is not a rung.
+ * `cover` outranks `maxZoom` if they ever conflict, because a board that does
+ * not cover is broken in a way that a board zoomed slightly too far is not.
+ */
+export function zoomLadder(cover: number, maxZoom: number): number[] {
+  const rungs = [cover];
+  for (let rung = 1; rung <= maxZoom; rung *= 2) {
+    if (above(rung, cover)) rungs.push(rung);
+  }
+  return rungs;
+}
+
+/**
+ * One step up or down the ladder from wherever the viewport currently sits.
+ *
+ * This replaces multiplying by a continuous 1.15 per wheel notch, which put a
+ * board pixel on 1.87 screen pixels far more often than on 2 and made every
+ * upload look soft.
+ *
+ * `current` is not assumed to be on a rung: a window resize recomputes cover
+ * and can leave the scale anywhere, so the step is always "the nearest rung in
+ * that direction" rather than an index.
+ *
+ * ONE HONEST CAVEAT, and it is not fixable from here. An integer CSS scale is
+ * only an integer number of DEVICE pixels when `devicePixelRatio` is itself an
+ * integer. At the 1.5 that Windows display scaling is full of, CSS scale 1 is
+ * 1.5 device pixels per board pixel; at the 2.75 some Android phones report,
+ * CSS scale 2 is 5.5. Snapping the ladder in device space instead would fix
+ * that and break something worse — the bottom rung must be exactly `cover`,
+ * an irrational-ish number fixed by the viewport width, and a device-space
+ * ladder cannot contain it. So this ladder is deliberately in CSS space, and
+ * on a fractional ratio the residual error is left to the nearest-neighbour
+ * sampling that BoardCanvas turns on: the artwork degrades to some rows of
+ * device pixels being one wider than their neighbours — hard edges, slightly
+ * uneven — rather than to a blur. Integer ratios (1, 2, 3) are exact.
+ */
+export function nextZoomScale(
+  current: number,
+  direction: "in" | "out",
+  cover: number,
+  maxZoom: number,
+): number {
+  const rungs = zoomLadder(cover, maxZoom);
+  const floor = rungs[0];
+  const top = rungs[rungs.length - 1];
+  // A scale that has drifted outside the ladder — a resize between wheel
+  // notches — steps from the nearest end rather than falling off.
+  const at = Math.min(top, Math.max(floor, current));
+
+  if (direction === "in") return rungs.find((rung) => above(rung, at)) ?? top;
+  const lower = rungs.filter((rung) => above(at, rung));
+  return lower.length > 0 ? lower[lower.length - 1] : floor;
+}
+
+/**
+ * `a > b`, with enough slack that a scale which has been through a float
+ * round trip does not read as a rung above itself and step nowhere.
+ */
+function above(a: number, b: number): boolean {
+  return a > b + 1e-9 * Math.max(1, Math.abs(b));
 }

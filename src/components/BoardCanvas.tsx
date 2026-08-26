@@ -8,17 +8,26 @@ import { formatUsdc } from "../lib/board/pricing";
 import { type Selection, selectionFromDrag, selectionFromPreset } from "../lib/board/selection";
 import {
   type Viewport,
+  backingStoreSize,
   boardToScreen,
   clampToCover,
   coverScale,
   initialViewport,
   isTap,
+  nextZoomScale,
   panBy,
   screenToBoard,
-  zoomAt,
+  zoomToScale,
 } from "../lib/canvas/viewport";
 
-const MAX_ZOOM = 24;
+/**
+ * The top rung of the zoom ladder: sixteen screen pixels per board pixel, so a
+ * 10-pixel block fills 160px and a single pixel of somebody's artwork is a
+ * 16×16 square. The ladder only ever stops on a power of two, so this is a rung
+ * and not a ceiling nothing reaches — it used to be 24, which the old
+ * continuous 1.15-per-notch zoom could land on and nothing now can.
+ */
+const MAX_ZOOM = 16;
 
 /**
  * The board's own palette, mirroring the tokens in globals.css.
@@ -197,12 +206,19 @@ export default function BoardCanvas({
     // Reassigning canvas.width reallocates the backing store and clears it, so
     // it happens only when the box actually changed size — the ants redraw the
     // whole board twenty times a second and must not reallocate each time.
+    //
+    // The store is the CSS box in REAL device pixels; the transform then scales
+    // the context by the same ratio so every coordinate below stays in CSS
+    // pixels. Skip this and a retina screen draws half the pixels it has and
+    // stretches them, which on a board made of 10-pixel bitmaps is the
+    // difference between artwork and mush.
     const ratio = window.devicePixelRatio || 1;
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
-    if (canvas.width !== Math.round(width * ratio) || canvas.height !== Math.round(height * ratio)) {
-      canvas.width = Math.round(width * ratio);
-      canvas.height = Math.round(height * ratio);
+    const store = backingStoreSize({ width, height }, ratio);
+    if (canvas.width !== store.width || canvas.height !== store.height) {
+      canvas.width = store.width;
+      canvas.height = store.height;
     }
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
 
@@ -497,10 +513,17 @@ export default function BoardCanvas({
 
       if (event.ctrlKey || event.metaKey) {
         const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-        const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15;
+        const direction = event.deltaY < 0 ? "in" : "out";
+        const cover = coverScale(screen, board);
+        // One notch is one rung of the ladder, never a 1.15 multiplier. A
+        // continuous zoom leaves a board pixel sitting on 1.87 screen pixels
+        // far more often than on 2, and every buyer's bitmap goes soft.
         setViewport((v) =>
           clampToCover(
-            zoomAt(v, screen, point, factor, { min: coverScale(screen, board), max: MAX_ZOOM }),
+            zoomToScale(v, screen, point, nextZoomScale(v.scale, direction, cover, MAX_ZOOM), {
+              min: cover,
+              max: Math.max(cover, MAX_ZOOM),
+            }),
             screen,
             barsRef.current,
             board,
