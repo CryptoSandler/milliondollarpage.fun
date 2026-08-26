@@ -1,15 +1,16 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // The dev-only route indicator defaults to the bottom-left corner, which in
-  // this layout lands squarely on the bottom bar's selection text. Both bars
-  // are left-aligned, so the top bar's right side is empty at every width
-  // this app supports — moving the indicator there keeps it off everything
-  // the bars actually say. (devIndicators only accepts a corner `position`
-  // or `false` to hide it entirely in this Next version; there is no way to
-  // offset it by a pixel amount.)
+  // The dev-only route indicator has to sit in one of four corners
+  // (devIndicators takes a corner `position` or `false`; there is no pixel
+  // offset in this Next version), and the redesigned bars now occupy all
+  // four: the wordmark, the counters, the presets and the Buy button. The
+  // top-left corner is the only one whose content never changes and never
+  // reports anything — the wordmark reads the same on every page — so the
+  // badge lands there rather than over a number, a price or the one button
+  // that matters.
   devIndicators: {
-    position: "top-right",
+    position: "top-left",
   },
 };
 

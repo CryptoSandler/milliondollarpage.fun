@@ -154,9 +154,11 @@ export default function ContentForm({
               // eslint-disable-next-line @next/next/no-img-element -- a local blob: URL, not something next/image can optimize.
               <img src={previewUrl} alt="" className="size-full" style={{ objectFit: draft.imageFit }} />
             ) : (
-              <span aria-hidden className="text-[18px] text-mute">
-                +
-              </span>
+              <svg aria-hidden viewBox="0 0 24 24" className="size-5 text-mute" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 16V5" />
+                <path d="m7 10 5-5 5 5" />
+                <path d="M4 19h16" />
+              </svg>
             )}
           </span>
           <span className="min-w-0 text-[13px] text-body">
@@ -253,10 +255,14 @@ export default function ContentForm({
       )}
 
       <div className="flex items-center justify-between gap-4 border-t border-hairline pt-4">
-        <p className={`text-[12.5px] ${ready ? "text-body" : "font-semibold text-danger"}`}>
-          {ready
-            ? "Nothing is charged yet — you get one more screen to check it all."
-            : `Still to add: ${listMissing(missing)}.`}
+        <p className="text-[12.5px] text-body">
+          {ready ? (
+            "Nothing is charged yet — you get one more screen to check it all."
+          ) : (
+            <>
+              <span className="font-bold text-ink">Still to add:</span> {listMissing(missing)}.
+            </>
+          )}
         </p>
         <button
           type="submit"
@@ -279,9 +285,9 @@ function listMissing(missing: string[]): string {
 function Permanence({ children }: { children: ReactNode }) {
   return (
     <p className="mt-1.5 flex gap-1.5 text-[11.5px] leading-snug text-mute">
-      <span aria-hidden className="shrink-0 text-primary-pressed">
-        ◆
-      </span>
+      <svg aria-hidden viewBox="0 0 8 8" className="mt-1 size-2 shrink-0 text-primary-pressed" fill="currentColor">
+        <path d="M4 0 8 4 4 8 0 4Z" />
+      </svg>
       <span>{children}</span>
     </p>
   );

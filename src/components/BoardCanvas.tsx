@@ -100,6 +100,9 @@ export default function BoardCanvas({
   // Kept here as well as reported upwards, because the lift is painted on the
   // board and a hover must not depend on a round trip through the parent.
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  // A board that covers the window looks like a board that ends at the window.
+  // One chip says otherwise, and disappears the first time anything is moved.
+  const [showPanHint, setShowPanHint] = useState(true);
   const drag = useRef<Drag>({ kind: "none" });
   // Set on the first pointerdown or wheel; once the user has zoomed or
   // panned, a resize must not throw that away by re-fitting the board.
@@ -157,11 +160,12 @@ export default function BoardCanvas({
 
   // Continuous motion, and the only continuous motion on the page: a drag in
   // progress is the one thing that genuinely differs from a thing at rest.
+  const hasSelection = selection !== null;
   useEffect(() => {
-    if (!selection) return;
+    if (!hasSelection) return;
     const interval = setInterval(() => setAnts((a) => (a + 1) % (ANTS_DASH * 2)), ANTS_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [selection]);
+  }, [hasSelection]);
 
   // Draw. Everything here is a rectangle; nothing here decides anything.
   useEffect(() => {
@@ -170,11 +174,16 @@ export default function BoardCanvas({
     const context = canvas.getContext("2d");
     if (!context) return;
 
+    // Reassigning canvas.width reallocates the backing store and clears it, so
+    // it happens only when the box actually changed size — the ants redraw the
+    // whole board twenty times a second and must not reallocate each time.
     const ratio = window.devicePixelRatio || 1;
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
-    canvas.width = width * ratio;
-    canvas.height = height * ratio;
+    if (canvas.width !== Math.round(width * ratio) || canvas.height !== Math.round(height * ratio)) {
+      canvas.width = Math.round(width * ratio);
+      canvas.height = Math.round(height * ratio);
+    }
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
 
     const family = getComputedStyle(canvas).fontFamily || "system-ui, sans-serif";
@@ -290,7 +299,12 @@ export default function BoardCanvas({
         family,
       );
     }
-  }, [blocks, selection, viewport, resizeTick, ants, hoveredId, bars.top]);
+
+    const freeRegion = height - bars.top - bars.bottom;
+    if (showPanHint && span > freeRegion && freeRegion > 80) {
+      drawPanHint(context, width / 2, height - bars.bottom - 20, family);
+    }
+  }, [blocks, selection, viewport, resizeTick, ants, hoveredId, showPanHint, bars.top, bars.bottom]);
 
   function pointerBoard(event: ReactPointerEvent<HTMLCanvasElement>): Point {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -303,6 +317,7 @@ export default function BoardCanvas({
 
   function onPointerDown(event: ReactPointerEvent<HTMLCanvasElement>) {
     hasInteracted.current = true;
+    setShowPanHint(false);
     event.currentTarget.setPointerCapture(event.pointerId);
     const at = pointerBoard(event);
     const touch = event.pointerType === "touch";
@@ -417,6 +432,7 @@ export default function BoardCanvas({
 
     function handler(event: WheelEvent) {
       hasInteracted.current = true;
+      setShowPanHint(false);
       event.preventDefault();
       const rect = canvas!.getBoundingClientRect();
       const screen = { width: rect.width, height: rect.height };
@@ -504,6 +520,26 @@ function drawRules(
   }
 
   context.stroke();
+}
+
+/** The one hint the board itself carries: there is more of it below. */
+function drawPanHint(context: CanvasRenderingContext2D, centreX: number, y: number, family: string) {
+  const text = "Scroll to see more of the board";
+  context.save();
+  context.font = `700 11.5px ${family}`;
+  const width = context.measureText(text).width + 28;
+  const height = 26;
+  const x = centreX - width / 2;
+  context.globalAlpha = 0.85;
+  context.fillStyle = PAINT.chip;
+  context.beginPath();
+  context.roundRect(x, y - height / 2, width, height, height / 2);
+  context.fill();
+  context.globalAlpha = 1;
+  context.fillStyle = PAINT.chipText;
+  context.textBaseline = "middle";
+  context.fillText(text, x + 14, y + 0.5);
+  context.restore();
 }
 
 /** A caption on its own opaque chip, never as free text over the artwork. */

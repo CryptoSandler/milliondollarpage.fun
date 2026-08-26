@@ -22,9 +22,17 @@ export default function BoardCounters({
 }) {
   return (
     <div className="flex min-w-0 items-center gap-x-3 overflow-hidden whitespace-nowrap text-[13px] text-body">
-      <p className="tabular">
+      <p className="tabular truncate">
         <span className="font-semibold text-ink">{stats.pixelsSold.toLocaleString("en-US")}</span>
-        <span className="text-body"> / {TOTAL_PIXELS.toLocaleString("en-US")} pixels sold</span>
+        {/* The denominator is the first thing to go on a phone: the numerator
+            and the percentage still say everything the headline needs to. */}
+        <span className="hidden text-body sm:inline">
+          {" "}
+          / {TOTAL_PIXELS.toLocaleString("en-US")}
+        </span>
+        <span className="text-body">
+          <span className="hidden sm:inline"> pixels</span> sold
+        </span>
       </p>
       <span
         className="tabular shrink-0 rounded-full bg-primary-soft px-2 py-0.5 text-[12px] font-bold text-primary-pressed"

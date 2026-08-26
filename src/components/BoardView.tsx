@@ -275,28 +275,28 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           onPresetChange={changePreset}
           onClear={clear}
           onBuy={handleBuy}
-        />
+        >
+          <InteractionLegend />
 
-        <label className="flex shrink-0 flex-col justify-center gap-1">
-          <span className="label-caps flex items-center gap-1.5">
-            Wallet
-            {walletNeeded && <span className="font-bold text-primary-pressed">needed</span>}
-          </span>
-          <input
-            type="text"
-            value={buyerPubkey}
-            onChange={(event) => setBuyerPubkey(event.target.value)}
-            placeholder="Paste your Solana address"
-            aria-label="Wallet address"
-            title="Where the block will be minted. A connected wallet replaces this field later."
-            disabled={purchaseSelection !== null}
-            className={`field-input w-32 shrink-0 py-1.5 text-[12.5px] sm:w-52 ${
-              walletNeeded ? "border-primary" : ""
-            }`}
-          />
-        </label>
-
-        <InteractionLegend />
+          <label className="flex shrink-0 flex-col justify-center gap-1">
+            <span className="label-caps hidden items-center gap-1.5 sm:flex">
+              Wallet
+              {walletNeeded && <span className="font-bold text-primary-pressed">needed</span>}
+            </span>
+            <input
+              type="text"
+              value={buyerPubkey}
+              onChange={(event) => setBuyerPubkey(event.target.value)}
+              aria-label="Wallet address"
+              title="Where the block will be minted. A connected wallet replaces this field later."
+              disabled={purchaseSelection !== null}
+              placeholder="Wallet"
+              className={`field-input w-20 shrink-0 py-1.5 text-[12.5px] sm:w-44 ${
+                walletNeeded ? "border-primary" : ""
+              }`}
+            />
+          </label>
+        </SelectionPanel>
       </div>
 
       {hovered && (

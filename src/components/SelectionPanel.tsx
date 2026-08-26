@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { PRESETS, type Selection } from "../lib/board/selection";
 import { formatUsdc } from "../lib/board/pricing";
 
@@ -28,6 +29,7 @@ export default function SelectionPanel({
   onPresetChange,
   onClear,
   onBuy,
+  children,
 }: {
   selection: Selection | null;
   perPixel: number;
@@ -39,10 +41,18 @@ export default function SelectionPanel({
   onPresetChange: (size: number | null) => void;
   onClear: () => void;
   onBuy: () => void;
+  /**
+   * Whatever else the bar carries — the legend, the wallet field — rendered
+   * between the readout and the Buy button. DESIGN.md puts the primary action
+   * at the end of the bar, so nothing is allowed to sit to the right of it.
+   */
+  children?: ReactNode;
 }) {
   return (
     <section className="flex min-w-0 flex-1 items-center gap-x-4">
-      <div className="scrollbar-none flex min-w-0 shrink items-center gap-1.5 overflow-x-auto">
+      <div className="scrollbar-none flex min-w-0 max-w-[5rem] shrink items-center gap-1.5 overflow-x-auto sm:max-w-none">
+        {/* Freehand is the default and, below `sm`, tapping the active preset
+            already returns to it — so this is the one control the phone drops. */}
         <button
           type="button"
           aria-pressed={activePreset === null}
@@ -50,7 +60,7 @@ export default function SelectionPanel({
             onPresetChange(null);
             onClear();
           }}
-          className="btn-quiet shrink-0 px-2.5 py-1.5 text-[12.5px]"
+          className="btn-quiet hidden shrink-0 px-2.5 py-1.5 text-[12.5px] sm:block"
         >
           Freehand
         </button>
@@ -73,17 +83,20 @@ export default function SelectionPanel({
       <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5">
         {selection === null ? (
           <>
-            <p className="truncate font-display text-[17px] font-semibold text-ink">
-              Nothing selected yet
+            <p className="truncate font-display text-[15px] font-semibold text-ink sm:text-[17px]">
+              <span className="sm:hidden">Nothing yet</span>
+              <span className="hidden sm:inline">Nothing selected yet</span>
             </p>
-            <p className="truncate text-[12.5px] text-body">
-              Drag or tap the board to outline a block, or pick a size on the left.
+            <p className="hidden truncate text-[12.5px] text-body sm:block">
+              Drag the board, or pick a size on the left.
             </p>
           </>
         ) : (
           <>
-            <p className="tabular truncate font-display text-[20px] font-bold leading-tight text-ink">
-              {selection.pixels.toLocaleString("en-US")} pixels
+            <p className="tabular truncate font-display text-[16px] font-bold leading-tight text-ink sm:text-[20px]">
+              {selection.pixels.toLocaleString("en-US")}
+              <span className="sm:hidden"> px</span>
+              <span className="hidden sm:inline"> pixels</span>
               <span className="text-hairline-strong"> · </span>
               {formatUsdc(selection.totalBaseUnits)}
             </p>
@@ -95,19 +108,21 @@ export default function SelectionPanel({
         )}
       </div>
 
+      {children}
+
       <div className="flex shrink-0 flex-col items-end gap-1">
         <button
           type="button"
           onClick={onBuy}
           disabled={!canBuy}
-          className="btn-primary shrink-0 whitespace-nowrap px-4 py-2.5 text-[14.5px] sm:px-6"
+          className="btn-primary shrink-0 whitespace-nowrap px-3 py-2.5 text-[14px] sm:px-6 sm:text-[14.5px]"
         >
           Buy<span className="hidden sm:inline"> these pixels</span>
           {selection && canBuy && <span className="tabular"> — {formatUsdc(selection.totalBaseUnits)}</span>}
         </button>
         <p
-          className={`max-w-[15rem] truncate text-right text-[11.5px] ${
-            hintTone === "refused" ? "font-semibold text-danger" : "text-body"
+          className={`line-clamp-2 max-w-[10rem] text-right text-[11.5px] leading-tight sm:max-w-[19rem] ${
+            hintTone === "refused" ? "font-semibold text-danger" : "hidden text-body sm:block"
           }`}
           title={hint}
         >
