@@ -50,6 +50,36 @@ describe("listLiveBlocks", () => {
     const [block] = await listLiveBlocks();
     expect(block).toMatchObject({ x: 120, y: 340, w: 50, h: 20 });
   });
+
+  it("says a sold block has no image when nobody uploaded one", async () => {
+    await insert(0, 0, 10, 10, "paid");
+    expect((await listLiveBlocks())[0].hasImage).toBe(false);
+  });
+
+  it("says a sold block has one once bytes are attached", async () => {
+    await insert(0, 0, 10, 10, "paid");
+    await execute(`UPDATE blocks SET pending_image = $1, pending_image_mime = 'image/webp'`, [
+      Buffer.from([0x52, 0x49, 0x46, 0x46]),
+    ]);
+    expect((await listLiveBlocks())[0].hasImage).toBe(true);
+  });
+
+  it("says a HELD block has none even when it does, because a hold publishes no pixels", async () => {
+    await insert(0, 0, 10, 10, "reserved", "2999-01-01T00:00:00Z");
+    await execute(`UPDATE blocks SET pending_image = $1, pending_image_mime = 'image/webp'`, [
+      Buffer.from([0x52, 0x49, 0x46, 0x46]),
+    ]);
+    expect((await listLiveBlocks())[0].hasImage).toBe(false);
+  });
+
+  it("never selects the bytes, or the buyer's wallet, into the public payload", async () => {
+    await insert(0, 0, 10, 10, "paid");
+    await execute(`UPDATE blocks SET buyer_pubkey = 'AWalletNobodyMayLearn'`);
+    const [block] = await listLiveBlocks();
+    expect(Object.keys(block).sort()).toEqual(
+      ["caption", "h", "hasImage", "id", "link", "status", "w", "x", "y"],
+    );
+  });
 });
 
 describe("boardStats", () => {

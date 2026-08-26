@@ -1,5 +1,6 @@
 import type { PoolClient } from "pg";
-import { execute, query } from "../db";
+import { execute, query, queryOne } from "../db";
+import { IMAGE_BEARING_STATUSES, hasPublicImageSql } from "./block-image";
 import { TOTAL_PIXELS } from "./geometry";
 
 /**
@@ -26,6 +27,19 @@ export type LiveBlock = {
   status: LiveStatus;
   caption: string | null;
   link: string | null;
+  /**
+   * Whether `/api/blocks/{id}/image` will answer with a bitmap.
+   *
+   * A boolean, never the bytes: a full board is a thousand images, and
+   * inlining even small ones would turn a payload the page refetches twice a
+   * minute into tens of megabytes. The canvas fetches each bitmap once, on
+   * its own URL, and the browser caches it from there.
+   *
+   * False is not "no image" so much as "nothing you may see yet" — it is
+   * false for a reservation whose buyer has already uploaded, because a hold
+   * publishes no pixels. See block-image.ts for why.
+   */
+  hasImage: boolean;
 };
 
 // Exported so reserve.ts can ask, after a 409, which rows are live over a
@@ -34,13 +48,61 @@ export type LiveBlock = {
 export const LIVE = `status IN ('reserved', 'paid', 'minted')
               AND (status <> 'reserved' OR (expires_at IS NOT NULL AND expires_at > now()))`;
 
+/**
+ * Every rectangle the board must draw.
+ *
+ * The column list is a whitelist and stays one. `buyer_pubkey` in particular
+ * must never join it: this payload is public and unauthenticated, and that
+ * column is the single credential `/content`, `/confirm` and the release
+ * endpoint trust. Adding it would hand every visitor the keys to every open
+ * hold. `pending_image` must never join it either — the bytes go out one
+ * block at a time, on their own route.
+ */
 export async function listLiveBlocks(): Promise<LiveBlock[]> {
   return query<LiveBlock>(
-    `SELECT id, x, y, w, h, status, caption, link
+    `SELECT id, x, y, w, h, status, caption, link,
+            ${hasPublicImageSql(1)} AS "hasImage"
        FROM blocks
       WHERE ${LIVE}
       ORDER BY created_at`,
+    [[...IMAGE_BEARING_STATUSES]],
   );
+}
+
+export type BlockImage = { bytes: Buffer; mime: string };
+
+type ImageRow = { pending_image: Buffer; pending_image_mime: string };
+
+/**
+ * The bytes of a sold block's image, or null if it has none to give.
+ *
+ * Lives here rather than in block-image.ts because it needs the pool, and
+ * that file is imported by the browser — see its header.
+ *
+ * Null covers every reason at once — no such block, a block still merely
+ * held, a sale whose buyer never uploaded anything — because the route
+ * answers all of them with the same 404 and must not let a caller tell them
+ * apart.
+ *
+ * Reads `pending_image` rather than Arweave: the upload is validated and
+ * stored there at purchase time, and the Arweave mirror arrives in a later
+ * batch. When it does, this is the one function that has to learn about it.
+ *
+ * A row with bytes but no mime is treated as having nothing: the correct
+ * `content-type` is not optional for user-supplied bytes, and guessing one
+ * (or letting a browser sniff) is how an upload gets to be treated as
+ * something it is not. `attachContent` always writes both columns together,
+ * so this guards a shape that should never exist rather than a real case.
+ */
+export async function getBlockImage(id: string): Promise<BlockImage | null> {
+  const row = await queryOne<ImageRow>(
+    `SELECT pending_image, pending_image_mime
+       FROM blocks
+      WHERE id = $1 AND ${hasPublicImageSql(2)}`,
+    [id, [...IMAGE_BEARING_STATUSES]],
+  );
+  if (!row) return null;
+  return { bytes: row.pending_image, mime: row.pending_image_mime };
 }
 
 export type BoardStats = { pixelsSold: number; blocksSold: number; percentSold: number };

@@ -10,7 +10,7 @@ import {
 const DOLLAR = 1_000_000;
 
 function sold(x: number, y: number, w: number, h: number, id = "sold-1"): LiveBlock {
-  return { id, x, y, w, h, status: "minted", caption: null, link: null };
+  return { id, x, y, w, h, status: "minted", caption: null, link: null, hasImage: false };
 }
 
 describe("PRESETS", () => {
