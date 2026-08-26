@@ -38,12 +38,10 @@ npm run lint
 npm run build
 ```
 
-`npm test` needs `TEST_DATABASE_URL` set and the test database reachable — `vitest.setup.ts`
-compares where that URL and `DATABASE_URL` actually POINT, not how they are spelled, and
-refuses to run when they address the same database. The suite truncates every table between
-tests, so that guard is the only thing standing between a hand-edited `.env.local` and
-TRUNCATE running against real data. If it aborts, that is a blocked close (see rule 2). Do
-not work around it by running a subset.
+`npm test` needs `TEST_DATABASE_URL` set and the test database reachable — `vitest.env.ts`
+asserts a sentinel marker before any test file is allowed to touch anything, so a missing
+or wrong test database aborts the run rather than quietly hitting the wrong one. If it
+aborts, that is a blocked close (see rule 2). Do not work around it by running a subset.
 
 Paste the parts that are not about your change too. A pre-existing failure you inherited is
 information the reader needs; hiding it makes the next batch debug it from scratch.

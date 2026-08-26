@@ -48,3 +48,10 @@ This repo has a worked example of rung 4 already: no two blocks may overlap, and
 Postgres exclusion constraint rather than a check in application code. See `DESIGN.md` for
 how the interface should look, and `.claude/commands/cierre.md` for what closing a batch
 requires.
+
+# Every module names its callers
+
+A new module's header comment says who calls it. Not what it does — the code says that —
+but which file reaches for it and why that file could not do the job itself. A module
+whose header cannot name a caller is a module nobody asked for, and the honest fix is to
+delete it rather than to write a paragraph explaining it.
