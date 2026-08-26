@@ -68,6 +68,22 @@ the hue and we do not.
   and vertical overflow is panned. Never letterboxed, never stretched, no dead
   margins at the sides. A 1000×1000 board at 1440px wide is 1440px tall and
   scrolls; that is correct.
+- **Sharp pixels, never interpolation.** Blocks are bitmaps, and a bitmap that
+  has been smoothed is no longer the picture the buyer uploaded. The canvas
+  allocates its backing store in real device pixels, draws with nearest-neighbour
+  sampling, and the element itself renders pixelated. There is no scale at which
+  the artwork is allowed to go soft.
+- **Zoom is a ladder, not a slider.** Every stop puts a board pixel on a whole
+  number of screen pixels. The bottom rung is the cover scale itself — whatever
+  irrational number the viewport width divided by 1000 produces — because
+  anything below it opens the margins the rule above forbids. Above it are the
+  powers of two greater than cover: at 1440px wide, 1.44 then 2, 4, 8, 16; at
+  900px wide, 0.9 then 1, 2, 4, 8, 16. Zooming out from the lowest integer rung
+  lands on cover and stops there. One honest limit: an integer scale is an
+  integer number of *device* pixels only when the device pixel ratio is itself
+  an integer, and on the fractional ratios Windows and some Android phones
+  report the ladder cannot fix that. Nearest-neighbour sampling is what makes
+  the remainder a hard edge instead of a blur.
 - **Two-tier graph paper.** A faint rule every 10 pixels — one block — and a
   stronger rule every 100. The fine tier says where a block would land; the coarse
   tier lets you navigate without counting.
