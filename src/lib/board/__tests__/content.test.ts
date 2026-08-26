@@ -152,11 +152,34 @@ describe("validateContent — the caption", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("trims whitespace and rejects a caption that is only whitespace", async () => {
+  // INVERTED, deliberately. This test used to assert that a whitespace-only
+  // caption was rejected. The caption is optional now, by the owner's
+  // decision, so the same input is accepted and stored as NULL — and the
+  // assertion is turned round rather than deleted, so the reversal is
+  // visible in the history instead of silently absent from it.
+  it("trims whitespace, and treats a whitespace-only caption as no caption at all", async () => {
     const spaced = await validateContent({ ...GOOD, caption: "  hello  ", bytes: await png(10, 10), declaredMime: "image/png" });
     if (spaced.ok) expect(spaced.content.caption).toBe("hello");
     const blank = await validateContent({ ...GOOD, caption: "   ", bytes: await png(10, 10), declaredMime: "image/png" });
-    expect(blank.ok).toBe(false);
+    expect(blank.ok).toBe(true);
+    if (blank.ok) expect(blank.content.caption).toBeNull();
+  });
+
+  it("accepts an empty caption and stores NULL, never an empty string", async () => {
+    const result = await validateContent({ ...GOOD, caption: "", bytes: await png(10, 10), declaredMime: "image/png" });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.content.caption).toBeNull();
+  });
+
+  it("still holds a caption that is present to the 32-character cap", async () => {
+    const result = await validateContent({
+      ...GOOD,
+      caption: "x".repeat(CONTENT_LIMITS.captionMaxLength + 1),
+      bytes: await png(10, 10),
+      declaredMime: "image/png",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.rejections.some((r) => r.field === "caption")).toBe(true);
   });
 });
 

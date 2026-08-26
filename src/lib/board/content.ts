@@ -55,7 +55,9 @@ export type ValidatedContent = {
   width: number;
   height: number;
   link: string;
-  caption: string;
+  // NULL when the buyer left it blank: the caption is optional, and a block
+  // without one shows no chip rather than an empty one.
+  caption: string | null;
   imageFit: ImageFit;
 };
 
@@ -174,10 +176,20 @@ function validateLink(link: string): { rejection: ContentRejection | null; trimm
   }
 }
 
-function validateCaption(caption: string): { rejection: ContentRejection | null; trimmed: string } {
+/**
+ * The caption is OPTIONAL, and this reverses what this module used to say.
+ *
+ * An empty caption — or one that is nothing but whitespace — is a valid
+ * answer to "what would you like written under this?", and it is stored as
+ * NULL rather than as an empty string, so there is exactly one way for a
+ * block to have no caption. `BoardCanvas` already draws the chip only for a
+ * truthy caption, so a NULL one paints nothing at all rather than an empty
+ * plate over the artwork.
+ */
+function validateCaption(caption: string): { rejection: ContentRejection | null; trimmed: string | null } {
   const trimmed = caption.trim();
   if (trimmed.length === 0) {
-    return { rejection: { field: "caption", reason: "The caption cannot be empty." }, trimmed };
+    return { rejection: null, trimmed: null };
   }
   if (trimmed.length > CONTENT_LIMITS.captionMaxLength) {
     return {

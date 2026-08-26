@@ -107,10 +107,13 @@ export default function ContentForm({
     };
   }, [previewUrl]);
 
+  // The caption is NOT in here. It is optional by the owner's decision: a
+  // blank one is a valid answer, stored as NULL, and a block without one
+  // simply shows no chip. Only the image and the link are genuinely still
+  // to add.
   const missing = [
     draft.file ? null : "an image",
     draft.link.trim() === "" ? "a link" : null,
-    draft.caption.trim() === "" ? "a caption" : null,
   ].filter((item): item is string => item !== null);
 
   const ready = missing.length === 0;
@@ -266,7 +269,7 @@ export default function ContentForm({
       <div>
         <div className="flex items-baseline justify-between gap-2">
           <label htmlFor={captionId} className="text-[13px] font-bold text-ink">
-            Caption
+            Caption <span className="font-normal text-body">— optional</span>
           </label>
           <span className="tabular text-[12px] text-mute">
             {draft.caption.length} / {CAPTION_MAX_LENGTH}
@@ -281,7 +284,10 @@ export default function ContentForm({
           placeholder="A short line about your block"
           className="field-input mt-1.5"
         />
-        <Permanence>Shown whenever someone points at your block. Set once, at payment.</Permanence>
+        <Permanence>
+          Shown whenever someone points at your block. Leave it blank and your block carries no
+          caption at all. Set once, at payment.
+        </Permanence>
         <FieldError message={fieldErrors.caption} />
       </div>
 

@@ -98,6 +98,18 @@ describe("POST /api/orders/:id/content", () => {
     expect(body.caption).toBe("A caption");
   });
 
+  // The caption is optional now. A buyer who leaves it blank gets a block
+  // with no caption at all, not one carrying an empty string that would draw
+  // an empty chip on the board.
+  it("accepts a blank caption and stores it as null", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    const response = await POST_CONTENT(await contentRequest({ caption: "   " }), ctx(held.id));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.hasContent).toBe(true);
+    expect(body.caption).toBeNull();
+  });
+
   it("reports EVERY rejected field at once, not just the first", async () => {
     const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
     const bad = await contentRequest(

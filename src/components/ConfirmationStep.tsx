@@ -78,7 +78,11 @@ export default function ConfirmationStep({
         </div>
         <div>
           <dt className="label-caps">Caption</dt>
-          <dd className="break-words text-ink">{draft.caption}</dd>
+          {/* Optional, so a blank one is a real answer and gets said out
+              loud — an empty line here would read as something lost. */}
+          <dd className={`break-words ${draft.caption.trim() === "" ? "text-body" : "text-ink"}`}>
+            {draft.caption.trim() === "" ? "None — your block carries no caption" : draft.caption}
+          </dd>
         </div>
       </dl>
 
