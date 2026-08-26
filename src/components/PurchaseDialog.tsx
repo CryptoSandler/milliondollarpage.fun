@@ -5,11 +5,54 @@ import { formatUsdc } from "../lib/board/pricing";
 import { confirmOrder, createHold, releaseHold, type ClientOrder } from "../lib/board/purchase-client";
 import type { Selection } from "../lib/board/selection";
 import { singleFlight } from "../lib/board/single-flight";
+import { TimedOut, withTimeout } from "../lib/board/with-timeout";
 import ConfirmationStep from "./ConfirmationStep";
 import ContentForm, { EMPTY_DRAFT, type ContentDraft } from "./ContentForm";
 import HoldTimer from "./HoldTimer";
 
 type Step = "holding" | "describing" | "confirming" | "paying" | "done";
+
+/** Which request ran past its ceiling. Not a step — see `stalled` below. */
+type Stalled = "hold" | "confirm" | "release";
+
+/**
+ * How long any one request in this dialog may keep the screen loading.
+ *
+ * Ten seconds is longer than every one of these calls takes when anything is
+ * working at all — the slowest is a reserve, which the exclusion constraint
+ * settles in under two — and short enough that a buyer has not yet decided the
+ * site is broken and closed the tab. See `with-timeout.ts` for what happens at
+ * the ceiling and why it is composed under `singleFlight` rather than over it.
+ */
+const STEP_CEILING_MS = 10_000;
+
+/**
+ * What the screen says when a request has run past the ceiling.
+ *
+ * One sentence per request, because what is unknown differs: a hold that may
+ * or may not exist reads nothing like a payment that may or may not have gone
+ * through. Each says what happened, what is genuinely uncertain, and what
+ * pressing the button will do about it — including the reassurance that
+ * matters most at that moment, which is that asking again cannot make things
+ * worse.
+ */
+const STALLED_MESSAGE: Record<Stalled, string> = {
+  hold:
+    "Ten seconds, and the server has not said whether these pixels are held for you. It may have " +
+    "taken them the moment you pressed Buy, or it may never have heard the question at all. Ask " +
+    "again and you will find out which — asking twice cannot land you two rectangles, because a " +
+    "hold you already have comes back to you rather than refusing you.",
+  confirm:
+    "Ten seconds, and the server has not said whether the payment went through. Ask again: if it " +
+    "already did, you will land straight on the receipt, and if it did not, this sends it once " +
+    "more. Either way these pixels stay held until the clock above runs out.",
+  release:
+    "Ten seconds, and the server has not said whether that hold was let go. Ask again — if it is " +
+    "already gone, there will be nothing left to release and this carries on to your rectangle.",
+};
+
+/** One label, because the answer to all three is the same: ask the server again. */
+const RETRY_LABEL = "Ask again";
 
 /**
  * The step machine a buyer walks through: holding -> describing -> confirming
@@ -36,7 +79,9 @@ type Step = "holding" | "describing" | "confirming" | "paying" | "done";
  *
  * Every request this dialog makes goes through `singleFlight`, so a
  * double-clicked button produces one request rather than two, the second of
- * which would lose the exclusion constraint to the first.
+ * which would lose the exclusion constraint to the first — and under a ten
+ * second ceiling, so no step of this dialog can load forever. `stalled` is the
+ * screen that ceiling leads to.
  */
 export default function PurchaseDialog({
   selection,
@@ -81,20 +126,30 @@ export default function PurchaseDialog({
   // returns a resumed hold in exactly the shape a fresh one takes — so it is
   // recognised by its id, which only the buyer who created it can know.
   const [resumed, setResumed] = useState(false);
+  // The request that ran past its ceiling, if one has. A screen rather than a
+  // step, like `fatalMessage`, and for the same reason: any step can reach it.
+  // Unlike a fatal message it is not a dead end — it exists to carry a retry.
+  const [stalled, setStalled] = useState<Stalled | null>(null);
   // Holds of the buyer's own that stood in the way of this rectangle. Only
   // ever their own ids: the 409 body carries nobody else's.
   const [releasable, setReleasable] = useState<string[]>([]);
   const [releasing, setReleasing] = useState(false);
   const [releaseError, setReleaseError] = useState<string | null>(null);
 
-  // One single-flight wrapper per dialog instance, built once by the lazy
+  // One wrapper per call per dialog instance, built once by the lazy
   // initialiser. This has to be an identity guarantee rather than a
   // performance hint: two wrappers would mean two in-flight slots, and the
   // double click this exists to stop would go straight through both.
+  //
+  // The ceiling goes INSIDE the single-flight, never outside it. That way the
+  // in-flight slot is freed the instant the ceiling fires, and the retry the
+  // buyer presses is a new request that reaches the network — rather than the
+  // stalled one handed straight back to them. The argument is written out in
+  // full in with-timeout.ts, and both orders are pinned by tests there.
   const [call] = useState(() => ({
-    hold: singleFlight(createHold),
-    confirm: singleFlight(confirmOrder),
-    release: singleFlight(releaseHold),
+    hold: singleFlight(withTimeout(createHold, STEP_CEILING_MS)),
+    confirm: singleFlight(withTimeout(confirmOrder, STEP_CEILING_MS)),
+    release: singleFlight(withTimeout(releaseHold, STEP_CEILING_MS)),
   }));
 
   // The holds this browser already had when the dialog opened. Snapshotted
@@ -115,13 +170,39 @@ export default function PurchaseDialog({
    * because a handler that fired from a live DOM node was called by a mounted
    * component and React 19 already makes a late `setState` on an unmounted one
    * a no-op rather than a warning.
+   *
+   * `afterTimeout` is set by the retry that follows a ceiling, and it changes
+   * one thing: the hold that comes back is presented as a RESUMED one. The
+   * request that timed out was never cancelled — a POST already sent is
+   * already sent — so it may well have created the very hold this attempt is
+   * now being handed. Since the server returns a resumed hold in exactly the
+   * shape of a fresh one, the id alone cannot tell us, and the honest default
+   * is the one that warns the buyer their clock did not start just now.
+   *
+   * // ponytail: guessed from "an attempt timed out", not known. In the rarer
+   * // case where the first request never reached the server at all, this
+   * // shows the resumed line over a hold that really is seconds old, and the
+   * // countdown reads about ten seconds short of thirty minutes. Knowing for
+   * // certain would mean following the abandoned request to see what it
+   * // returned and racing that against this one; if that ever becomes worth
+   * // the machinery, that is where it goes.
    */
-  const attemptHold = useCallback(async (isLive: () => boolean = () => true) => {
-    const result = await call.hold(selection.rect, ownerPubkey);
+  const attemptHold = useCallback(async (isLive: () => boolean = () => true, afterTimeout = false) => {
+    let result;
+    try {
+      result = await call.hold(selection.rect, ownerPubkey);
+    } catch (error) {
+      if (!isLive()) return;
+      // A rejection out of purchase-client has exactly one cause: the ceiling.
+      // Everything else, network failure included, comes back resolved.
+      if (!(error instanceof TimedOut)) throw error;
+      setStalled("hold");
+      return;
+    }
     if (!isLive()) return;
 
     if (result.ok) {
-      setResumed(holdIdsAtOpen.includes(result.order.id));
+      setResumed(afterTimeout || holdIdsAtOpen.includes(result.order.id));
       onHoldStarted(result.order.id);
       setOrder(result.order);
       setStep("describing");
@@ -189,7 +270,20 @@ export default function PurchaseDialog({
         // The sentence above promises the pixels come back now, so they do.
         // Leaving the row to expire would have made it a thirty-minute lie —
         // and the buyer's own next attempt the thing it blocked.
-        await call.release(order.id, ownerPubkey);
+        try {
+          await call.release(order.id, ownerPubkey);
+        } catch (error) {
+          if (!(error instanceof TimedOut)) throw error;
+          // A close that has already been agreed to must close. The hold is
+          // deliberately NOT forgotten here: it may still be standing, and
+          // leaving it marked as this buyer's is what lets them pick it back
+          // up from the board instead of being refused by their own rectangle.
+          onClose(
+            "That close did not get an answer in time, so these pixels may still be held for you. " +
+              "They are marked as yours on the board until the thirty minutes are up. Nothing was charged.",
+          );
+          return;
+        }
         onHoldEnded(order.id);
       }
       onClose(notice);
@@ -228,8 +322,20 @@ export default function PurchaseDialog({
     setReleaseError(null);
 
     for (const id of releasable) {
-      const result = await call.release(id, ownerPubkey);
-      if (!result.ok) {
+      let result;
+      try {
+        result = await call.release(id, ownerPubkey);
+      } catch (error) {
+        if (!(error instanceof TimedOut)) throw error;
+        setReleasing(false);
+        setStalled("release");
+        return;
+      }
+      // A hold that is not there is a hold that has been let go, so a 404 is
+      // this button's goal reached, not its failure. It is exactly what the
+      // retry after a ceiling gets back when the release it stopped waiting
+      // for had in fact gone through.
+      if (!result.ok && result.status !== 404) {
         setReleaseError(result.message);
         setReleasing(false);
         return;
@@ -249,7 +355,14 @@ export default function PurchaseDialog({
     if (!order) return;
     setStep("paying");
     setConfirmError(null);
-    const result = await call.confirm(order.id, ownerPubkey);
+    let result;
+    try {
+      result = await call.confirm(order.id, ownerPubkey);
+    } catch (error) {
+      if (!(error instanceof TimedOut)) throw error;
+      setStalled("confirm");
+      return;
+    }
     if (result.ok) {
       // Paid: this is a sale now, not a hold, and the board should stop
       // calling it one.
@@ -265,6 +378,30 @@ export default function PurchaseDialog({
     }
     setConfirmError(result.message);
     setStep("confirming");
+  }
+
+  /**
+   * Asks whatever ran past its ceiling one more time.
+   *
+   * It re-enters the very same function that stalled rather than a separate
+   * retry path, so a retry gets the identical handling of every answer — the
+   * resumed hold, the 409 with a release offered, the payment that turns out
+   * to have landed already. A second code path here would be a second place
+   * for those to be got wrong.
+   */
+  async function retryStalled() {
+    const which = stalled;
+    setStalled(null);
+    if (which === "hold") {
+      setStep("holding");
+      await attemptHold(undefined, true);
+      return;
+    }
+    if (which === "confirm") {
+      await handleConfirm();
+      return;
+    }
+    if (which === "release") await handleRelease();
   }
 
   const rect = order?.rect ?? selection.rect;
@@ -327,7 +464,34 @@ export default function PurchaseDialog({
           </p>
         )}
 
-        {fatalMessage ? (
+        {/* The ceiling's screen comes first: it is the one state that can sit on
+            top of any step, and the only one carrying something to press. */}
+        {stalled ? (
+          <div className="mt-4 flex flex-col gap-4">
+            <h3 className="font-display text-[17px] font-semibold text-ink">
+              No answer from the server yet
+            </h3>
+            <p className="rounded-xl border border-hairline-strong bg-card-warm px-4 py-3 text-[13.5px] leading-relaxed text-ink-soft">
+              {STALLED_MESSAGE[stalled]}
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => void requestClose()}
+                className="btn-quiet px-4 py-2 text-[13.5px]"
+              >
+                Back to the board
+              </button>
+              <button
+                type="button"
+                onClick={() => void retryStalled()}
+                className="btn-primary px-5 py-2.5 text-[14px]"
+              >
+                {RETRY_LABEL}
+              </button>
+            </div>
+          </div>
+        ) : fatalMessage ? (
           <div className="mt-4 flex flex-col gap-4">
             <h3
               className={`font-display text-[17px] font-semibold ${
