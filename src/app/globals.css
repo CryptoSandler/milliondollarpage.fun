@@ -79,6 +79,23 @@
 
   --danger: #a8371f;
   --danger-soft: #f1d4c8;
+
+  /*
+   * The line round a danger-soft box. It was a bare #e2b6a4 written into four
+   * components, which is the one thing the note at the top of this file says
+   * cannot happen, and nobody had ever measured it. Measured now: 1.31:1
+   * against the --danger-soft it encloses and 1.79:1 against the --card behind
+   * it.
+   *
+   * Both are under 3:1 and both are allowed to be. WCAG 1.4.11 covers what is
+   * needed to identify a control or to understand a graphic; an error box is
+   * neither. What identifies it is the sentence inside it, and that sentence
+   * is --ink-soft on --danger-soft at 7.94:1. This line only softens the join
+   * between the fill and the card. Raising it to 3:1 would put a saturated rule
+   * round every error in the product, which is a louder page than DESIGN.md
+   * asks for and a decision for the owner rather than for a contrast pass.
+   */
+  --danger-line: #e2b6a4;
   --ok: #4c7a4a;
 
   --radius-xs: 4px;
@@ -139,6 +156,7 @@
   --color-hairline-strong: var(--hairline-strong);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
+  --color-danger-line: var(--danger-line);
   --color-ok: var(--ok);
 
   --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;

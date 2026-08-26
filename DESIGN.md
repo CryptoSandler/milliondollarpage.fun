@@ -19,6 +19,7 @@ colors:
   hairline-strong: "#c9baa0"
   danger: "#a8371f"
   danger-soft: "#f1d4c8"
+  danger-line: "#e2b6a4"
   ok: "#4c7a4a"
 typography:
   display-lg: { fontFamily: "Bricolage Grotesque", fontSize: 34px, fontWeight: 700, lineHeight: 1.05, letterSpacing: -0.8px }

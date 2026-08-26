@@ -128,7 +128,20 @@ const PAINT = {
    * is free for a treatment of its own.
    */
   held: "#c9baa0",
-  heldRule: "rgba(43,36,28,0.55)",
+  /*
+   * The hatch is the load-bearing half of this treatment, not the tint. It is
+   * the "ruled back over a covered block" that DESIGN.md's one outranking rule
+   * uses to tell held from sold, so WCAG 1.4.11 reaches it at 3:1 against the
+   * fill it is drawn on — and at 0.55 alpha it measured 2.89:1 against
+   * #c9baa0. 0.62 measures 3.39:1. Nothing else about the treatment moved.
+   *
+   * For the record, the rest of it, measured: the held fill against the sold
+   * fallback is 5.84:1 and its broken ink edge against the paper is 13.12:1,
+   * so held is told from sold by value and from free by that edge. The fill
+   * alone against the paper is only 1.63:1, which is why the edge and the
+   * hatch have to carry it and why neither is allowed to go faint.
+   */
+  heldRule: "rgba(43,36,28,0.62)",
   heldEdge: "#2b241c",
   chip: "#2b241c",
   chipText: "#f3ede0",

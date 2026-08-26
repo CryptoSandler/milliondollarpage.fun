@@ -548,14 +548,14 @@ export default function PurchaseDialog({
               className={`rounded-xl px-4 py-3 text-[15px] leading-relaxed text-ink-soft ${
                 releasable.length > 0
                   ? "border border-hairline-strong bg-card-warm"
-                  : "border border-[#e2b6a4] bg-danger-soft"
+                  : "border border-danger-line bg-danger-soft"
               }`}
             >
               {fatalMessage}
             </p>
 
             {releaseError && (
-              <p className="rounded-lg border border-[#e2b6a4] bg-danger-soft px-3 py-2 text-[15px] text-ink-soft">
+              <p className="rounded-lg border border-danger-line bg-danger-soft px-3 py-2 text-[15px] text-ink-soft">
                 {releaseError}
               </p>
             )}

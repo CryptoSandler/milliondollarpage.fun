@@ -125,7 +125,7 @@ export default function ConfirmationStep({
       </p>
 
       {confirmError && (
-        <p className="rounded-lg border border-[#e2b6a4] bg-danger-soft px-3 py-2 text-[15px] text-ink-soft">
+        <p className="rounded-lg border border-danger-line bg-danger-soft px-3 py-2 text-[15px] text-ink-soft">
           {confirmError}
         </p>
       )}
