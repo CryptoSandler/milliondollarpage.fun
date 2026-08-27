@@ -5,6 +5,111 @@ two ancestors were built, it was approved with conditions, and this document
 exists so that nobody — including us, later — has to reconstruct the reasoning
 from the code.
 
+The first three sections are the promises the product makes to a buyer and the
+mechanisms that hold them up. Everything after them is about the key.
+
+## What a buyer is sold
+
+One sentence, and it is the product:
+
+> a sold pixel does not change owner or content without its owner's signature;
+> it never expires
+
+Each clause is held up by something, and this section says by what — including
+where the answer is "nothing yet", because a promise with no mechanism under it
+is the kind of thing this file exists to stop us believing.
+
+**Does not change owner.** A Postgres trigger, `blocks_owner_is_final`, added
+by `migrations/005_owner_is_final.sql`. It refuses any UPDATE that changes
+`buyer_pubkey` on a row that has been paid for — `paid`, `minted` or `removed`.
+This is the same family of control as 001's exclusion constraint and it is here
+for the same reason: the database refuses the write, so no route, no script and
+no console session can reassign a sold rectangle by forgetting a check.
+`blocks_owner_is_final` is the answer to "what stops somebody taking my
+pixels", and it is a mechanism rather than a policy.
+
+It forbids an unauthorised mutation, not the concept of transfer. Whether a
+block may change hands on a signature from its owner is an open decision — see
+below — and the trigger is deliberately compatible with either answer.
+
+**Does not change content — PARTLY BUILT, and this is the gap.** Today the
+guard is in the application: `attachContent` refuses once an order is paid, so
+the caption, the link, the image and the fit are writable up to the payment and
+not after. There is no database constraint behind that, unlike ownership, so
+the honest statement is that content immutability is currently a code path
+somebody could remove. When minting lands, the on-chain half becomes the real
+one: every asset carries `ImmutableMetadata`, which permanently locks its name
+and URI, and the metadata JSON on Arweave is content-addressed. See "What the
+key can and cannot do" below.
+
+**Never expires.** `blocks_paid_never_expires`, from `migrations/002_orders.sql`:
+a reserved row must carry an expiry and every other status must not have one. A
+paid row therefore has `expires_at IS NULL`, which makes it invisible to the
+sweep — and the sweep deletes reserved rows only. There is no rent, no renewal,
+no balance to maintain and no code path that can expire a sale. This is a
+deliberate divergence from one of the references, where a block stays live only
+while a token balance is held.
+
+## Takedown
+
+Content can have to come down. Ownership does not come with it.
+
+**Normal takedown is a visibility flag — SPECIFIED, NOT YET BUILT.** The block
+stops being published: the board does not draw it, the image route does not
+serve it, the caption and link are not returned. Nothing is deleted. It is
+reversible by clearing the flag, which matters because the common case is a
+report that turns out to be wrong, and an irreversible answer to a reversible
+question is how a mistake becomes permanent.
+
+**Legal purge is a deletion of bytes — SPECIFIED, NOT YET BUILT.** Where the
+law requires the material itself to be destroyed rather than hidden, the stored
+image and any text are actually erased. It is not reversible and it is not
+meant to be. It is a strictly rarer action than the flag and should be recorded
+as such wherever it is eventually built.
+
+**In neither case does ownership of the rectangle transfer or lapse.** A
+takedown is about what is displayed. The buyer still owns the pixels, is not
+refunded (moderation after publication is not refunded — see
+`docs/references.md`), and nobody else can buy those pixels.
+
+**What is built today contradicts that last paragraph, and it is the open
+question of this section.** `status = 'removed'` exists, and a removed row is
+outside the exclusion constraint's predicate on purpose: 001 says in as many
+words that a moderated block's rectangle goes back on sale. That is ownership
+lapsing. The visibility flag above is what resolves it — a flag is orthogonal
+to status, so a hidden block keeps holding its rectangle — and until that is
+built, `removed` should be treated as a status nothing in production sets.
+Which of the two wins is a product decision and is not made here.
+
+## Open decision: whether a block can change hands
+
+**Not decided. Not built. Not promised, in either direction.** It is written
+down here, with both outcomes spelled out, so that whoever picks it up sees the
+fork rather than working it out again from first principles — and so that
+nobody reads the trigger above as an answer to it.
+
+**If it ships.** A later migration teaches `blocks_refuse_owner_change` which
+mutation is authorised: an UPDATE carrying a signature from the current owner
+over a message naming this block and the new owner, verified in the same
+statement that writes it, the way `release_challenges` already does for giving
+a hold back. Nothing above has to be torn out first. On chain the ground is
+already prepared and was not prepared for this reason: a Core asset transfers
+on its owner's signature, our authority key cannot move one, and `AddBlocker`
+stops that ever changing. The consequences to accept are a secondary market to
+support, ownership that has to be read from the chain rather than from
+`buyer_pubkey`, and royalties that start to matter.
+
+**If it does not ship.** The trigger is the whole answer and `buyer_pubkey` is
+final for the life of the row. The consequences to accept are that a buyer
+cannot exit, that a mistyped wallet address at purchase is unrecoverable, and
+that the block is an NFT nobody can sell — which is a strange thing for an NFT
+to be, and is the strongest argument on the other side.
+
+**Until it is decided, no copy claims either.** Not the home page, not the FAQ,
+not the rules, not this file. `docs/references.md` used to record a competitor's
+choice here as our positioning handed to us; it has been corrected, because it
+was a claim about a decision nobody had made.
+
 ## The two wallets
 
 They are different things and must never be confused.

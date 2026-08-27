@@ -1,7 +1,7 @@
 ---
 version: alpha
 name: milliondollarpage.fun
-description: "A warm cream workshop wall for a permanent pixel canvas on Solana. Ruled graph paper (#f3ede0) holds a 1000x1000 board where every sold block paints solid edge-to-edge and every free cell keeps its ruling, so availability never depends on what colour a buyer uploaded. The whole board is always visible and the page never scrolls; the wall around it is the same cream as the sheet. Olive-brown ink (#2b241c) sets text on the cream instead of punching through it; a single terracotta (#c2451e) carries every primary action and every selection, and appears nowhere else. Bricolage Grotesque sets display, Karla sets everything else. The board and its blocks have zero radius because they are literally pixels; only the chrome rounds. A thin fixed top bar, and the rest of the controls in a side panel or a bottom bar depending on which shape of window they are in. The system reads as a workshop wall: warm, plainly labelled, and entirely subordinate to the artwork pinned to it."
+description: "A warm cream workshop wall for a permanent pixel canvas on Solana. Ruled graph paper (#f3ede0) holds a 1250x800 board where every sold block paints solid edge-to-edge and every free cell keeps its ruling, so availability never depends on what colour a buyer uploaded. The whole board is always visible and the page never scrolls; the wall around it is the same cream as the sheet. Olive-brown ink (#2b241c) sets text on the cream instead of punching through it; a single terracotta (#c2451e) carries every primary action and every selection, and appears nowhere else. Bricolage Grotesque sets display, Karla sets everything else. The board and its blocks have zero radius because they are literally pixels; only the chrome rounds. A thin fixed top bar, and the rest of the controls in a side panel or a bottom bar depending on which shape of window they are in. The system reads as a workshop wall: warm, plainly labelled, and entirely subordinate to the artwork pinned to it."
 colors:
   primary: "#c2451e"
   primary-pressed: "#9f3819"
@@ -43,12 +43,19 @@ motion:
 
 # milliondollarpage.fun
 
-A 1000×1000 canvas. One million pixels at a dollar each — that is the
-strapline, and it is never the offer, because **the unit of sale is a 10×10
-block at $100** and a single pixel cannot be bought. The header and the
-controls both say so in the same words. Paid in USDC on Solana. A buyer picks a rectangle, holds it for thirty minutes,
-uploads an image with a link and a caption, and the block is theirs — permanently,
-and as an NFT they can resell.
+A 1250×800 canvas, which is exactly one million pixels. **Every one of them is
+for sale on its own, at $1.** The strapline and the offer are the same sentence
+now: a purchase is any free rectangle, priced at its area, exact to the pixel,
+with no grid to snap to and no minimum size. The header and the controls both
+say so in the same words. Paid in USDC on Solana. A buyer picks a rectangle,
+holds it for thirty minutes, uploads an image with a link and a caption, and
+the block is theirs — permanently, and on the terms `SECURITY.md` states: it
+does not change owner or content without their signature, and it never expires.
+
+The wall was 1000×1000 and sold in 10×10 blocks at $100. Both went together:
+the square came from the 2005 original, and the block came from the original's
+own argument that a single pixel cannot display anything. That argument is
+about what a pixel can SHOW, and it was never a reason to refuse to sell one.
 
 **The artwork is the product. The interface is the wall it hangs on.** Every rule
 below exists to keep the chrome subordinate to a million pixels of other people's
@@ -72,8 +79,9 @@ the hue and we do not.
 - **Contain, not cover. The whole board is always visible.** It is scaled by
   its limiting dimension — whichever of the free region's width and height runs
   out first — so all four corners are on screen at once and pixels stay square.
-  In a landscape window that means it fits by height; in portrait and on phones
-  it fits by width.
+  Which dimension limits is not a property of the window's shape alone now that
+  the board is 1250×800: a landscape window with a wide side panel fits by
+  width, one with a narrow panel by height, and portrait and phones by width.
 - **The page never scrolls.** Not vertically, not horizontally, at any viewport
   size. `overflow: hidden` on the document, and the fit maths behind it, so
   there is nothing being hidden. The one box on the page allowed its own scroll
@@ -105,10 +113,11 @@ the hue and we do not.
   zoom about. Every stop
   puts a board pixel on a whole number of screen pixels, and every zoom is
   centred on the pointer. The bottom rung is the **fit scale** — whatever
-  irrational number the free region divided by 1000 produces. **"Zoom 1" means
+  irrational number the free region divided by the board produces. **"Zoom 1" means
   that rung, the whole board on screen, not one screen pixel per board pixel.**
-  Above it are the powers of two greater than fit: in an 848px-tall free region,
-  0.848 then 1, 2, 4, 8, 16; at 1400px, 1.4 then 2, 4, 8, 16. Zooming out from
+  Above it are the powers of two greater than fit: a 980×848 free region fits
+  at 0.784 and offers 0.784 then 1, 2, 4, 8, 16; a taller one fitting at 1.4
+  offers 1.4 then 2, 4, 8, 16 and skips 1 entirely. Zooming out from
   the lowest integer rung lands on fit and stops there. One honest limit: an
   integer scale is an integer number of *device* pixels only when the device
   pixel ratio is itself an integer, and on the fractional ratios Windows and
@@ -118,9 +127,11 @@ the hue and we do not.
   the scale is above the fit scale. At the bottom rung the whole board is on
   screen, so a drag has nowhere to take it and a wheel must not move it — and
   the wheel does not pan at all any more, it zooms.
-- **Two-tier graph paper.** A faint rule every 10 pixels — one block — and a
-  stronger rule every 100. The fine tier says where a block would land; the coarse
-  tier lets you navigate without counting.
+- **Two-tier graph paper, and it is ruling rather than grid.** A faint rule
+  every 10 pixels and a stronger one every 100. **Nothing snaps to either.** It
+  is there to be read, not obeyed: the fine tier gives the eye a smallest legible
+  step and the coarse tier lets you navigate without counting. A rectangle may
+  start and end anywhere.
 - **The board takes focus, and a keyboard drives it.** It is a canvas, so it
   is given a tab stop, an `application` role and its own keys; without them
   there is no way to select a rectangle without a pointer, and Buy can never
@@ -129,9 +140,12 @@ the hue and we do not.
   resizes it from its top-left anchor. Enter is the Buy button. Escape
   clears.** A preset moves but does not resize, because a preset's whole point
   is that it is the size the button named. Nothing here is a second geometry:
-  every rectangle still comes out of `snapRect` and `presetRect`, so the grid,
-  the half-open rule, the collision refusal and the slide-back near an edge
-  are the pointer's own. When the cursor is walked off the visible board the
+  every rectangle still comes out of `snapRect` and `presetRect`, so the
+  half-open rule, the collision refusal and the slide-back near an edge are
+  the pointer's own. **One honest gap:** a pointer can now draw a rectangle
+  the keyboard cannot — a 1×1 at an odd coordinate — because the cursor walks
+  the ruling and a finer step needs a third modifier nobody has chosen yet.
+  It is recorded in `keyboard-cursor.ts` rather than closed here. When the cursor is walked off the visible board the
   view follows it by panning, and only where a drag could have: above the fit
   rung, clamped by the same `clampToFit`.
 - **A canvas tells assistive technology nothing, so the cursor is mirrored in
@@ -284,8 +298,10 @@ puts in one of two places. It is one set of controls either way; there is never
 a second Buy button or a second wallet field for a screen reader to find.
 
 **In a landscape window it is a side panel**, a column down the left, filling
-the width the square board does not need. There is **no bottom bar** in that
-layout. Its width is the genuine leftover — `100vw - (100dvh - bar-top)` —
+the width the board does not need. There is **no bottom bar** in that layout.
+Its width is the genuine leftover — `100vw - 1.5625 × (100dvh - bar-top)`,
+where 1.5625 is 1250/800, the board's own aspect, because a board that fits by
+height is that much wider than it is tall —
 floored at 280px so the controls stay usable and capped at 560px so an
 ultrawide monitor does not hand five buttons half a screen. Past that cap the
 cream either side of the board is wall, not letterbox.
@@ -308,7 +324,10 @@ it.
 
 The crossover is 5:4 and 640px wide, not simply "landscape": the question is
 not which way the window is turned, it is which arrangement leaves a bigger
-board. At 1280×1024 a panel does; at 600×590 it does not.
+board. At 1280×1024 a panel does; at 600×590 it does not. **Both of those
+numbers were worked out against a square board and a wider one moves the
+crossover** — at 1024×768 the bottom bar now leaves the bigger board. Recorded
+here as an open layout question rather than changed on the way past.
 
 What gives way as room runs out, in order, in both layouts: **the interaction
 legend first**, then the zoom trio — a phone has a pinch, and the bottom bar at
