@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { TOTAL_PIXELS } from "../geometry";
 import {
   formatPercentSold,
   formatUsdc,
+  offerLine,
   totalBaseUnits,
   unitOfSale,
   USDC_DECIMALS,
@@ -104,6 +106,42 @@ describe("the unit of sale", () => {
       expect(said).not.toContain("block");
       expect(said).not.toContain("10×10");
       expect(said).not.toContain("minimum");
+    }
+  });
+});
+
+describe("the wall's own line", () => {
+  const DOLLAR = 1_000_000;
+
+  /**
+   * The one string in this product that is quoted exactly, because it is the
+   * product. A word moved here is a different offer.
+   */
+  it("is the offer, the price and the term, and nothing else", () => {
+    expect(offerLine(DOLLAR)).toBe("1,000,000 pixels · $1 per pixel · yours forever");
+  });
+
+  it("counts the board rather than restating a million somebody typed", () => {
+    expect(offerLine(DOLLAR)).toContain(TOTAL_PIXELS.toLocaleString("en-US"));
+  });
+
+  it("follows the per-pixel price, so the wall cannot disagree with the checkout", () => {
+    expect(offerLine(2_500_000)).toContain("$2.50 per pixel");
+    expect(offerLine(500_000)).toContain("$0.50 per pixel");
+  });
+
+  /**
+   * NOTHING PROMISES REVENUE. Not a million dollars, not a total, not an
+   * ending — and not an auction for whatever is left at the end, which is a
+   * settled decision recorded in DESIGN.md. A million pixels at a dollar is
+   * what is on offer; what it adds up to is arithmetic somebody else can do.
+   */
+  it("promises no money, no total and no ending", () => {
+    for (const perPixel of [DOLLAR, 2_500_000, 500_000]) {
+      const said = offerLine(perPixel).toLowerCase();
+      for (const forbidden of ["million dollar", "raise", "raising", "total", "auction", "sold out"]) {
+        expect(said, `the wall's line must not say "${forbidden}"`).not.toContain(forbidden);
+      }
     }
   });
 });

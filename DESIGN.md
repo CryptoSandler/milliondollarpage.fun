@@ -365,8 +365,20 @@ sentence.
 
 ## A bar, and either a panel or a second bar
 
-A thin fixed bar across the top, always: the wordmark and the counters. It is
-**one row and one fixed height**, and never wraps.
+A thin fixed bar across the top, always: the wordmark, the offer, and how much
+of it is left. It is **one row and one fixed height**, and never wraps.
+
+**The offer is one line and it is quoted exactly**: `1,000,000 pixels · $1 per
+pixel · yours forever`. The million is the board's own two dimensions
+multiplied, the price is the settings row the checkout charges from, and the
+term is the sentence `SECURITY.md` opens with. Beside it, **a plain count of
+the pixels remaining** — what is left, not what is gone, because a nearly full
+board says the useful thing that way round.
+
+**Nothing on the page promises revenue.** Not a million dollars raised, not a
+total, not an implied one. A million pixels at a dollar is the offer; what it
+adds up to is arithmetic a reader can do, and printing it would turn an offer
+into a forecast.
 
 Everything else — the size presets, the selection readout and price, the wallet
 field, the Buy button, the legend — is one block of controls that the layout
@@ -535,6 +547,25 @@ without asking.
 take it. The Buy button cannot: the same close that returns focus clears the
 selection that enabled it. So the board is the fallback — it is what the buyer
 was working on, and it is never disabled.
+
+## Settled decisions
+
+Decisions already taken, recorded so a later pass does not spend its time
+reopening them. Each one was decided by the owner; none of them is an
+invitation to weigh the alternative again.
+
+**The tail is a counter, not an auction.** As the board fills, the last pixels
+become the scarcest thing on it, and the obvious idea is to auction them. The
+answer is no, settled: what the wall shows is **a plain count of the pixels
+remaining**, all the way down to zero, and the price stays a dollar a pixel for
+the last one exactly as for the first. Every pixel is sold on the same terms as
+every other, and a buyer who arrives late pays what a buyer who arrived early
+paid. An auction would also be the first thing on this page whose price is not
+knowable before you press Buy, on a board whose whole readout is "these pixels,
+this many, this much".
+
+**No copy promises revenue.** See the top bar's section above. A total is not
+printed, implied, or counted towards.
 
 ## Settled colour decisions
 

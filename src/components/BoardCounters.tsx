@@ -1,24 +1,29 @@
 import { TOTAL_PIXELS } from "../lib/board/geometry";
 import type { BoardStats } from "../lib/board/blocks";
-import { formatPercentSold, unitOfSale } from "../lib/board/pricing";
+import { formatPercentSold, offerLine } from "../lib/board/pricing";
 
 /**
- * Three numbers, not one.
+ * The offer, and how much of it is left.
  *
- * Early on, "0.03%" is a more motivating number than "300 sold", and the
- * block count says something neither of the others does: how many separate
- * people are on the board.
+ * THE LINE IS THE PRODUCT, said in the wall's own words and nowhere else's:
+ * a million pixels, a dollar each, yours forever. Every clause of it has
+ * something under it — the million is `TOTAL_PIXELS`, which is the board's own
+ * two dimensions multiplied; the dollar is the settings row the checkout
+ * charges from; "yours forever" is the sentence `SECURITY.md` opens with and
+ * the trigger and the CHECK that hold it up. What it does not say is anything
+ * about money raised, a total, or an ending, because none of those is a
+ * promise this project has made.
  *
- * The top bar is one fixed row, so this gives way from the right as the
- * window narrows: the unit of sale goes first, then the block count, then the
- * percentage. The pixels-sold figure is the one that never leaves.
+ * WHAT IS LEFT, NOT WHAT IS GONE. The headline number counts pixels remaining.
+ * A board that is nearly empty says so either way; a board that is nearly full
+ * says the thing a buyer actually needs to know, which is how much chance they
+ * have left. It is a plain count and it stays one all the way to zero — see
+ * DESIGN.md's settled decisions for why the tail is not an auction.
  *
- * What the header says about price is the UNIT, and the unit is now the pixel:
- * "$1 a pixel · any rectangle, from one pixel up". It used to be forbidden
- * from saying a per-pixel price here, because a price beside a counter reads
- * as an offer and a single pixel was not one. It is one now, so the sentence
- * that would have been misleading is the accurate one. `unitOfSale` owns the
- * wording; this file only decides when there is room for it.
+ * The top bar is one fixed row that never wraps, so this gives way from the
+ * right as the window narrows: the share sold goes first, then the offer line
+ * itself, then the word "pixels". The remaining count is the one that never
+ * leaves.
  */
 export default function BoardCounters({
   stats,
@@ -27,32 +32,25 @@ export default function BoardCounters({
   stats: BoardStats;
   perPixel: number;
 }) {
+  const left = TOTAL_PIXELS - stats.pixelsSold;
+
   return (
     <div className="flex min-w-0 items-center gap-x-3 overflow-hidden whitespace-nowrap text-[13px] text-body">
+      {/* Below `sm` the wordmark and the count are all a phone has room for,
+          and the line is what gives way. It is the offer, not the state of
+          the board, and a buyer meets it again beside the Buy button. */}
+      <p className="hidden truncate text-ink sm:block">{offerLine(perPixel)}</p>
+      <span className="hidden text-hairline-strong sm:inline">·</span>
       <p className="tabular truncate">
-        <span className="font-semibold text-ink">{stats.pixelsSold.toLocaleString("en-US")}</span>
-        {/* The denominator is the first thing to go on a phone: the numerator
-            and the percentage still say everything the headline needs to. */}
-        <span className="hidden text-body sm:inline">
-          {" "}
-          / {TOTAL_PIXELS.toLocaleString("en-US")}
-        </span>
-        <span className="text-body">
-          <span className="hidden sm:inline"> pixels</span> sold
-        </span>
+        <span className="font-semibold text-ink">{left.toLocaleString("en-US")}</span>
+        <span className="text-body"> pixels left</span>
       </p>
       <span
-        className="tabular shrink-0 rounded-full bg-primary-soft px-2 py-0.5 text-[12px] font-bold text-primary-pressed"
+        className="tabular hidden shrink-0 rounded-full bg-primary-soft px-2 py-0.5 text-[12px] font-bold text-primary-pressed md:inline"
         title="Share of the board sold so far"
       >
-        {formatPercentSold(stats.percentSold)}
+        {formatPercentSold(stats.percentSold)} sold
       </span>
-      <span className="hidden text-hairline-strong sm:inline">·</span>
-      <p className="tabular hidden sm:inline">
-        <span className="font-semibold text-ink">{stats.blocksSold.toLocaleString("en-US")}</span> blocks
-      </p>
-      <span className="hidden text-hairline-strong md:inline">·</span>
-      <p className="tabular hidden md:inline">{unitOfSale(perPixel)}</p>
     </div>
   );
 }
