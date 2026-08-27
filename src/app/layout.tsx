@@ -24,12 +24,14 @@ const karla = Karla({
 
 export const metadata: Metadata = {
   title: "milliondollarpage.fun",
-  // The strapline is where a dollar a pixel belongs: it says what the board
-  // IS. What it is not is an offer, so the unit of sale — a 10×10 block at a
-  // hundred dollars — is said in the same breath, and nowhere in the app does
-  // a price stand next to a control implying a single pixel can be bought.
+  // A dollar a pixel is both the strapline and the offer now: the pixel is
+  // the unit, so this sentence and the one beside the Buy button finally say
+  // the same thing. What it deliberately does NOT say is anything about
+  // reselling. It used to end "yours to keep or resell", which promised a
+  // transfer nobody has decided to build — see SECURITY.md, where that is
+  // recorded as an open decision with neither answer claimed.
   description:
-    "A million pixels at a dollar each, sold in 10×10 blocks at $100 a block. Pick a rectangle, pay in USDC on Solana, and the block is yours to keep or resell.",
+    "A million pixels at a dollar each, on a wall 1250 by 800. Buy any free rectangle — one pixel or ten thousand — pay in USDC on Solana, and those pixels stay yours.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

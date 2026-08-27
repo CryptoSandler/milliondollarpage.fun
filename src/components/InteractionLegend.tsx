@@ -30,8 +30,8 @@ export default function InteractionLegend() {
           canvas itself, where focus lands. */}
       <p>
         <span className="font-semibold text-body">Tab</span> to the board ·{" "}
-        <span className="font-semibold text-body">arrows</span> to move a block ·{" "}
-        <span className="font-semibold text-body">shift</span> for ten ·{" "}
+        <span className="font-semibold text-body">arrows</span> to move ten pixels ·{" "}
+        <span className="font-semibold text-body">shift</span> for a hundred ·{" "}
         <span className="font-semibold text-body">alt-arrows</span> to resize ·{" "}
         <span className="font-semibold text-body">enter</span> to buy
       </p>
