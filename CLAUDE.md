@@ -101,3 +101,19 @@ forbids, build the mechanism that stays compatible with both futures, and
 record the policy as the owner's open decision with both outcomes written out.
 What is irreversible gets written once, and only when they ask for it in as
 many words.
+
+**Check a subagent's commit authorship the moment it hands back, not at the
+close.** A sibling repository shipped commits under a personal email, and every
+one of them came from a subagent: the subagent's process did not pick up the
+`includeIf` that governs the orchestrator's own commits, so identical work in
+the same tree was attributed two different ways. Run
+`git log <range> --format='%an <%ae>'` over each subagent's range as it reports,
+while the fix is still one `--amend` away. The pre-push author gate stays as the
+last net, but a gate that fires at the close is a gate that fires after twenty
+commits need rewriting.
+
+This repository is protected by a second thing worth keeping: `user.email` is
+set in `.git/config`, not only inherited from a conditional global include. A
+repo-local value is read by every process that touches the repository,
+subagents included. That is why the audit of every ref here returns one
+identity and no exceptions.
