@@ -63,19 +63,37 @@ describe("the blocks table", () => {
     expect(rows).toHaveLength(1);
   });
 
-  it("refuses blocks that are off the grid", async () => {
-    expect(await errorCodeOf(() => insertBlock(5, 0, 10, 10))).toBe("23514");
+  it("accepts a rectangle that lines up with no grid, because there is none", async () => {
+    // The exact insert the old blocks_on_grid CHECK would have refused.
+    await insertBlock(137, 41, 23, 7);
+    const rows = await query<Inserted>("SELECT x, y, w, h, x_range, y_range FROM blocks");
+    expect(rows[0]).toMatchObject({ x: 137, y: 41, w: 23, h: 7 });
+    expect(rows[0].x_range).toBe("[137,160)");
   });
 
-  it("refuses blocks smaller than one block", async () => {
-    // A zero-height row would also produce an EMPTY int4range, and an empty
-    // range conflicts with nothing — so this check is what keeps the overlap
+  it("accepts a single pixel, which is the smallest purchase there is", async () => {
+    await insertBlock(1249, 799, 1, 1);
+    const rows = await query<Inserted>("SELECT x, y, w, h, x_range, y_range FROM blocks");
+    expect(rows[0].x_range).toBe("[1249,1250)");
+    expect(rows[0].y_range).toBe("[799,800)");
+  });
+
+  it("refuses a rectangle with no area at all", async () => {
+    // A zero-height row would produce an EMPTY int4range, and an empty range
+    // conflicts with nothing — so this check is what keeps the overlap
     // constraint meaningful, not merely what keeps the UI tidy.
     expect(await errorCodeOf(() => insertBlock(0, 0, 10, 0))).toBe("23514");
+    expect(await errorCodeOf(() => insertBlock(0, 0, 0, 10))).toBe("23514");
   });
 
-  it("refuses blocks that leave the board", async () => {
-    expect(await errorCodeOf(() => insertBlock(990, 0, 20, 10))).toBe("23514");
+  it("refuses blocks that leave the wall, and the wall is 1250 by 800", async () => {
+    expect(await errorCodeOf(() => insertBlock(1240, 0, 20, 10))).toBe("23514");
+    expect(await errorCodeOf(() => insertBlock(0, 790, 10, 20))).toBe("23514");
+    // Wider than the old square board and still on the wall; well inside it
+    // across and off the bottom of it down. A single board size could not
+    // tell those two apart.
+    await insertBlock(1100, 0, 100, 10);
+    expect(await errorCodeOf(() => insertBlock(0, 900, 10, 10))).toBe("23514");
   });
 
   it("refuses a caption longer than 32 characters", async () => {
@@ -91,6 +109,110 @@ describe("the blocks table", () => {
 
   it("refuses a status nobody defined", async () => {
     expect(await errorCodeOf(() => insertBlock(0, 0, 10, 10, "sold"))).toBe("23514");
+  });
+});
+
+/**
+ * The one invariant the application is not allowed to be responsible for.
+ *
+ * These break the trigger on purpose. The UPDATE is issued straight at the
+ * table — no route, no library function, nothing that could be holding a check
+ * of its own — and the refusal has to come from the database, because a test
+ * that went through an API path would pass just as happily against a schema
+ * with no trigger in it at all. Each one also reads the row back afterwards:
+ * a statement that errors and still wrote is the failure mode worth naming.
+ */
+describe("the ownership trigger", () => {
+  const OWNER = "OwnerWalletAddress11111111111111";
+  const THIEF = "ThiefWallet2222222222222222";
+
+  async function soldTo(status: string, buyer = OWNER, x = 0): Promise<string> {
+    const rows = await query<{ id: string }>(
+      `INSERT INTO blocks (x, y, w, h, status, buyer_pubkey, price_per_pixel_usdc, total_usdc)
+       VALUES ($1, 0, 10, 10, $2, $3, 1000000, 100000000)
+       RETURNING id`,
+      [x, status, buyer],
+    );
+    return rows[0].id;
+  }
+
+  async function ownerOf(id: string): Promise<string | null> {
+    const rows = await query<{ buyer_pubkey: string | null }>(
+      "SELECT buyer_pubkey FROM blocks WHERE id = $1",
+      [id],
+    );
+    return rows[0].buyer_pubkey;
+  }
+
+  it("refuses an UPDATE that hands a paid block to somebody else", async () => {
+    const id = await soldTo("paid");
+    // 23001, restrict_violation: an integrity rule said no.
+    expect(
+      await errorCodeOf(() =>
+        execute("UPDATE blocks SET buyer_pubkey = $2 WHERE id = $1", [id, THIEF]),
+      ),
+    ).toBe("23001");
+    expect(await ownerOf(id)).toBe(OWNER);
+  });
+
+  it("refuses it for a minted block too", async () => {
+    const id = await soldTo("minted");
+    expect(
+      await errorCodeOf(() =>
+        execute("UPDATE blocks SET buyer_pubkey = $2 WHERE id = $1", [id, THIEF]),
+      ),
+    ).toBe("23001");
+    expect(await ownerOf(id)).toBe(OWNER);
+  });
+
+  it("refuses it for a removed block, because a takedown does not move ownership", async () => {
+    const id = await soldTo("removed");
+    expect(
+      await errorCodeOf(() =>
+        execute("UPDATE blocks SET buyer_pubkey = $2 WHERE id = $1", [id, THIEF]),
+      ),
+    ).toBe("23001");
+    expect(await ownerOf(id)).toBe(OWNER);
+  });
+
+  it("refuses to blank the owner, which is the same theft written differently", async () => {
+    const id = await soldTo("paid");
+    expect(
+      await errorCodeOf(() => execute("UPDATE blocks SET buyer_pubkey = NULL WHERE id = $1", [id])),
+    ).toBe("23001");
+    expect(await ownerOf(id)).toBe(OWNER);
+  });
+
+  it("refuses a blanket UPDATE over the table, and leaves every row as it was", async () => {
+    // The shape of the accident this exists for: one statement, no WHERE.
+    const first = await soldTo("paid", OWNER, 0);
+    const second = await soldTo("minted", "SecondOwner333333333333333", 100);
+    expect(await errorCodeOf(() => execute("UPDATE blocks SET buyer_pubkey = $1", [THIEF]))).toBe(
+      "23001",
+    );
+    expect(await ownerOf(first)).toBe(OWNER);
+    expect(await ownerOf(second)).toBe("SecondOwner333333333333333");
+  });
+
+  it("still lets a sold block change everything else about itself", async () => {
+    // The trigger guards one column. A mint landing, a moderation status, an
+    // image being attached: all still ordinary UPDATEs.
+    const id = await soldTo("paid");
+    await execute("UPDATE blocks SET status = 'minted', minted_at = now() WHERE id = $1", [id]);
+    const rows = await query<{ status: string }>("SELECT status FROM blocks WHERE id = $1", [id]);
+    expect(rows[0].status).toBe("minted");
+    expect(await ownerOf(id)).toBe(OWNER);
+  });
+
+  it("leaves a reservation's buyer alone, because a hold is not a sale", async () => {
+    const rows = await query<{ id: string }>(
+      `INSERT INTO blocks (x, y, w, h, status, buyer_pubkey, expires_at, price_per_pixel_usdc, total_usdc)
+       VALUES (0, 0, 10, 10, 'reserved', 'HolderWallet4444444444444444', now() + interval '30 minutes',
+               1000000, 100000000)
+       RETURNING id`,
+    );
+    await execute("UPDATE blocks SET buyer_pubkey = $2 WHERE id = $1", [rows[0].id, THIEF]);
+    expect(await ownerOf(rows[0].id)).toBe(THIEF);
   });
 });
 
