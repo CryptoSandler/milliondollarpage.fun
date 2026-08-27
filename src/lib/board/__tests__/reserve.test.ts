@@ -423,3 +423,73 @@ describe("resuming your own hold", () => {
     expect((error as RectangleTaken).yourOrderIds).not.toContain(theirs.id);
   });
 });
+
+/**
+ * How long a hold lasts, read off the row rather than recomputed.
+ *
+ * Every number here comes out of Postgres as `expires_at - created_at`, and the
+ * two minute-figures are written as literals. `holdMinutes` is the arithmetic
+ * under test, so a guard that called it would agree with a version of it that
+ * had been flattened back into a constant — which is exactly the regression
+ * this exists to catch.
+ */
+describe("a big hold expires sooner than a small one", () => {
+  /** The hold's own clock, as the database measures it. */
+  async function grantedMinutes(id: string): Promise<number> {
+    const rows = await query<{ minutes: string }>(
+      "SELECT (EXTRACT(EPOCH FROM (expires_at - created_at)) / 60)::text AS minutes FROM blocks WHERE id = $1",
+      [id],
+    );
+    return Number(rows[0].minutes);
+  }
+
+  it("gives one pixel the full half hour and the largest holdable rectangle ten minutes", async () => {
+    const small = await reserveRect({ x: 1200, y: 700, w: 1, h: 1 }, BUYER, CALLER);
+    const large = await reserveRect({ x: 0, y: 0, w: 100, h: 100 }, BUYER, CALLER);
+
+    expect(await grantedMinutes(small.id)).toBe(30);
+    expect(await grantedMinutes(large.id)).toBe(10);
+  });
+
+  it("shortens the clock as the rectangle grows, and never below ten minutes", async () => {
+    // Four sizes across the whole range, held at once so they share a clock.
+    const sizes = [1, 50, 70, 100];
+    const granted: number[] = [];
+    for (const [index, side] of sizes.entries()) {
+      const held = await reserveRect({ x: index * 110, y: 0, w: side, h: side }, BUYER, CALLER);
+      granted.push(await grantedMinutes(held.id));
+    }
+
+    for (let i = 1; i < granted.length; i++) {
+      expect(granted[i], `${sizes[i]} square must not last longer than ${sizes[i - 1]} square`)
+        .toBeLessThanOrEqual(granted[i - 1]);
+    }
+    expect(Math.min(...granted), "no hold may be too short to finish a purchase in").toBeGreaterThanOrEqual(10);
+    expect(Math.max(...granted), "and none may last longer than the half hour").toBeLessThanOrEqual(30);
+    expect(granted[granted.length - 1]).toBeLessThan(granted[0]);
+  });
+
+  it("charges the hold against its caller for exactly the clock the row was given", async () => {
+    // The ledger and the block must agree, or the budget is pricing a hold
+    // that is not the one standing.
+    const held = await reserveRect({ x: 0, y: 0, w: 100, h: 100 }, BUYER, CALLER);
+    const rows = await query<{ agrees: boolean; pixels: number }>(
+      `SELECT m.charged_until = b.expires_at AS agrees, m.pixels
+         FROM hold_meter m JOIN blocks b ON b.id = m.block_id
+        WHERE m.block_id = $1`,
+      [held.id],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].agrees).toBe(true);
+    expect(rows[0].pixels).toBe(10_000);
+  });
+
+  it("charges nothing to the caller who loses a race for the same pixels", async () => {
+    await seedBlock(0, 0, "minted", null);
+    await expect(reserveRect({ x: 0, y: 0, w: 20, h: 20 }, BUYER, CALLER)).rejects.toBeInstanceOf(
+      RectangleTaken,
+    );
+    const charges = await query("SELECT block_id FROM hold_meter WHERE ip_hash = $1", [CALLER]);
+    expect(charges, "a refused hold is a hold nobody had").toEqual([]);
+  });
+});

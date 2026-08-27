@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { execute } from "../../../lib/db";
+import { execute, query } from "../../../lib/db";
+import { hashIp } from "../../../lib/callers/client-ip";
 import { RESERVATION_LIMITS } from "../../../lib/callers/limits";
 import { POST } from "../reserve/route";
 
@@ -177,5 +178,70 @@ describe("POST /api/reserve", () => {
     });
     const response = await POST(anonymous);
     expect(response.status).toBe(400);
+  });
+});
+
+/**
+ * The ceiling on held area, driven through the route a script would drive.
+ *
+ * What is asserted is what Postgres says the caller ended up holding —
+ * `SUM(w * h)` over their live rows — not a total added up in the test from
+ * the rectangles it asked for. The sum is the thing the limit itself reads, so
+ * a guard that recomputed it from the requests would pass in exactly the case
+ * where the limit was counting the wrong rows.
+ */
+describe("POST /api/reserve, and how much one caller can take off the board", () => {
+  const GRIEFER = "198.51.100.77";
+
+  async function heldByGriefer(): Promise<number> {
+    const rows = await query<{ pixels: string }>(
+      `SELECT COALESCE(SUM(w * h), 0)::text AS pixels
+         FROM blocks
+        WHERE status = 'reserved' AND expires_at > now() AND ip_hash = $1`,
+      // The same hash the route stores, so this reads the rows the limit
+      // counted rather than every row on the board.
+      [hashIp(GRIEFER)],
+    );
+    return Number(rows[0].pixels);
+  }
+
+  it("answers 429, not 201, to a hold over the whole wall", async () => {
+    // This request used to succeed. One caller, one hold, a million pixels and
+    // a million dollars of inventory off sale for nothing.
+    const response = await POST(
+      request({ rect: { x: 0, y: 0, w: 1250, h: 800 }, buyerPubkey: BUYER }, GRIEFER),
+    );
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).not.toBeNull();
+
+    const rows = await query("SELECT id FROM blocks");
+    expect(rows, "and nothing was written").toEqual([]);
+  });
+
+  it("stops a caller assembling the same area out of several smaller holds", async () => {
+    // Three rectangles, each well within the row ceiling and each fine on its
+    // own; together they ask for more than one visitor may hold.
+    const statuses: number[] = [];
+    for (const x of [0, 200, 400]) {
+      const response = await POST(
+        request({ rect: { x, y: 0, w: 70, h: 70 }, buyerPubkey: BUYER }, GRIEFER),
+      );
+      statuses.push(response.status);
+    }
+
+    expect(statuses.slice(0, 2), "the first two are ordinary purchases").toEqual([201, 201]);
+    expect(statuses[2], "the third crosses the ceiling").toBe(429);
+    expect(await heldByGriefer()).toBeLessThanOrEqual(RESERVATION_LIMITS.heldPixelsPerCaller);
+  });
+
+  it("lets a 100 by 100 purchase be held in one request, because that is a real one", async () => {
+    const response = await POST(
+      request({ rect: { x: 100, y: 100, w: 100, h: 100 }, buyerPubkey: BUYER }, GRIEFER),
+    );
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.pixels).toBe(10_000);
+    expect(body.totalBaseUnits).toBe(10_000_000_000);
+    expect(await heldByGriefer()).toBe(RESERVATION_LIMITS.heldPixelsPerCaller);
   });
 });
