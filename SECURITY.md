@@ -80,9 +80,22 @@ not reversible and it is not meant to be. `blocks_purged_keeps_nothing` is the
 CHECK that says what "erased" means, so a purge that missed a column is a
 statement the database refuses rather than a residue nobody notices.
 
-Both levels are operator statements run by hand. There is no moderation console
-in this repository, and a route for one nobody has asked for would be a route
-with no caller.
+**Both levels are also operator statements run by hand, and that has not
+changed.** The SQL above is the definition; everything else is a caller of it.
+What did change is that the owner asked for a console, so there is now one: a
+token-gated admin surface that performs exactly these two statements and lists
+what is currently hidden. It adds no third level and no new semantics — a route
+that could hide something this section does not describe would be a route
+contradicting its own specification.
+
+The console is off by default. With `ADMIN_TOKEN` unset there is no admin
+surface at all, and clearing it is how an operator takes the surface down in a
+hurry: sessions already signed in stop resolving with it.
+
+**What is deliberately not written here: any deadline.** This document does not
+say how quickly a report is looked at, how long a takedown takes, or what an
+appeal returns, and neither does the product copy. Those are promises, and the
+owner has not made them.
 
 **In neither case does ownership of the rectangle transfer or lapse.** A
 takedown is about what is displayed. The buyer still owns the pixels, is not

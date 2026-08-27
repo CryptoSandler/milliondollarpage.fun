@@ -6,6 +6,7 @@ import { GET as imageRoute } from "../../../app/api/blocks/[id]/image/route";
 import { getBlockImage } from "../blocks";
 import { ensureWall, wallPng } from "../composite";
 import { reserveRect } from "../reserve";
+import { hide, listHidden, purge, unhide } from "../takedown";
 
 /**
  * What a takedown does, and — far more importantly — what it does not do.
@@ -43,7 +44,8 @@ async function sold(x = 0): Promise<string> {
   return row!.id;
 }
 
-async function hide(id: string): Promise<void> {
+/** The visibility flag, written as SECURITY.md writes it. Not the module. */
+async function hideWithSql(id: string): Promise<void> {
   await execute("UPDATE blocks SET hidden_at = now(), takedown_reason = $2 WHERE id = $1", [
     id,
     "a report we are still checking",
@@ -76,13 +78,13 @@ describe("a normal takedown", () => {
   it("stops the image route serving the bytes", async () => {
     const id = await sold();
     expect((await fetchImage(id)).status).toBe(200);
-    await hide(id);
+    await hideWithSql(id);
     expect((await fetchImage(id)).status).toBe(404);
   });
 
   it("stops the words being published, without deleting them", async () => {
     const id = await sold();
-    await hide(id);
+    await hideWithSql(id);
     expect(await getBlockImage(id)).toBeNull();
 
     // Still in the row, untouched. This is the half that makes it reversible,
@@ -100,7 +102,7 @@ describe("a normal takedown", () => {
     const before = await fetchImage(id);
     const bytesBefore = Buffer.from(await before.arrayBuffer());
 
-    await hide(id);
+    await hideWithSql(id);
     expect((await fetchImage(id)).status).toBe(404);
 
     await execute("UPDATE blocks SET hidden_at = NULL, takedown_reason = NULL WHERE id = $1", [id]);
@@ -113,7 +115,7 @@ describe("a normal takedown", () => {
   it("stops the words being served by the route that hands them out one at a time", async () => {
     const id = await sold();
     expect((await fetchDetails(id)).status).toBe(200);
-    await hide(id);
+    await hideWithSql(id);
     const raw = await (await fetchDetails(id)).text();
     expect(raw).not.toContain("My shop");
     expect(raw).not.toContain("example.com");
@@ -133,7 +135,7 @@ describe("a normal takedown", () => {
     ]);
     expect(await wallPixelAt(10, 10)).toMatchObject({ r: 250, g: 0, b: 250, a: 255 });
 
-    await hide(id);
+    await hideWithSql(id);
     expect((await wallPixelAt(10, 10)).a).toBe(0);
 
     // And it comes back, unchanged, when the flag is cleared.
@@ -143,7 +145,7 @@ describe("a normal takedown", () => {
 
   it("leaves the rectangle sold, so nobody else can reserve it", async () => {
     const id = await sold();
-    await hide(id);
+    await hideWithSql(id);
     await expect(
       reserveRect({ x: 0, y: 0, w: 20, h: 20 }, "SomebodyElse2222222222", "d".repeat(64)),
     ).rejects.toThrow();
@@ -232,5 +234,100 @@ describe("a legal purge", () => {
       [held.id],
     );
     expect(rows[0]).toEqual({ status: "reserved", purged_at: null });
+  });
+});
+
+/**
+ * The module the console calls, and the one property the routes cannot express
+ * on their own: EVERY FUNCTION RETURNS THE ROW IT CHANGED, OR NULL.
+ *
+ * The tests above prove what a takedown does to the render. These prove the
+ * caller is told the truth about whether it happened — a route handed `void`
+ * would report a successful hide of an id that names nothing, of a hold, or of
+ * a row whose bytes were destroyed last week, and an operator would believe it.
+ */
+describe("what the takedown module reports back", () => {
+  it("hides a sale and hands back the row it changed", async () => {
+    const id = await sold();
+    const state = await hide(id, "a report we are still checking");
+    expect(state).toMatchObject({ id, x: 0, y: 0, w: 20, h: 20, purgedAt: null });
+    expect(state!.hiddenAt).toBeInstanceOf(Date);
+    expect(state!.takedownReason).toBe("a report we are still checking");
+    // Read from the endpoint rather than from the row: the return value is
+    // only worth anything if it describes something that actually took effect.
+    expect(await getBlockImage(id)).toBeNull();
+  });
+
+  it("reports nothing for an id that names nothing, and for a hold", async () => {
+    expect(await hide("00000000-0000-0000-0000-000000000000", "why")).toBeNull();
+    expect(await unhide("00000000-0000-0000-0000-000000000000")).toBeNull();
+    expect(await purge("00000000-0000-0000-0000-000000000000", "a court order")).toBeNull();
+
+    // A hold has nothing anybody bought — `blocks_takedown_only_when_sold`
+    // refuses the flag, so this must be a null rather than a constraint
+    // violation surfacing as a 500.
+    const held = await reserveRect({ x: 100, y: 100, w: 10, h: 10 }, OWNER, "e".repeat(64));
+    expect(await hide(held.id, "why")).toBeNull();
+    expect(await purge(held.id, "a court order")).toBeNull();
+    const rows = await query<{ status: string; hidden_at: Date | null }>(
+      "SELECT status, hidden_at FROM blocks WHERE id = $1",
+      [held.id],
+    );
+    expect(rows[0]).toEqual({ status: "reserved", hidden_at: null });
+  });
+
+  it("reports nothing for an unhide of a block that was never hidden", async () => {
+    const id = await sold();
+    expect(await unhide(id)).toBeNull();
+  });
+
+  it("amends the reason on a second hide without moving when it came down", async () => {
+    const id = await sold();
+    const first = await hide(id, "a report we are still checking");
+    const second = await hide(id, "the report was about the link");
+    expect(second!.hiddenAt!.toISOString()).toBe(first!.hiddenAt!.toISOString());
+    expect(second!.takedownReason).toBe("the report was about the link");
+  });
+
+  it("refuses to hide or unhide a purged block, so its record stands", async () => {
+    const id = await sold();
+    const purged = await purge(id, "a court order");
+    expect(purged!.purgedAt).toBeInstanceOf(Date);
+    expect(purged!.hiddenAt).toBeInstanceOf(Date);
+
+    // Not reversible, and not re-labellable: the second level is final.
+    expect(await unhide(id)).toBeNull();
+    expect(await hide(id, "actually it was fine")).toBeNull();
+    expect(await purge(id, "another order")).toBeNull();
+
+    const row = await queryOne<{ takedown_reason: string; purged_at: Date; caption: string | null }>(
+      "SELECT takedown_reason, purged_at, caption FROM blocks WHERE id = $1",
+      [id],
+    );
+    expect(row).toMatchObject({ takedown_reason: "a court order", caption: null });
+    expect(row!.purged_at.toISOString()).toBe(purged!.purgedAt!.toISOString());
+    expect(await getBlockImage(id)).toBeNull();
+  });
+
+  it("lists what is hidden, newest first, without the words it took down", async () => {
+    const hidden = await sold(0);
+    const purged = await sold(40);
+    const untouched = await sold(80);
+
+    await hide(hidden, "a report we are still checking");
+    await purge(purged, "a court order");
+
+    const listed = await listHidden();
+    expect(listed.map((entry) => entry.id).sort()).toEqual([hidden, purged].sort());
+    expect(listed.map((entry) => entry.id)).not.toContain(untouched);
+
+    // Newest first: the purge happened second.
+    expect(listed[0].id).toBe(purged);
+    expect(listed[0].purgedAt).toBeInstanceOf(Date);
+    expect(listed[1]).toMatchObject({ id: hidden, x: 0, w: 20, purgedAt: null });
+
+    // The caption and the link are deliberately not on it — see `listHidden`.
+    expect(JSON.stringify(listed)).not.toContain("My shop");
+    expect(JSON.stringify(listed)).not.toContain("example.com");
   });
 });
