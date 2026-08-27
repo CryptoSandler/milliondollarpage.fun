@@ -100,6 +100,9 @@ const FIELD_SENTENCES: Record<RejectionCode | ImageProblem, string> = {
     "the front for you.",
   caption_too_long: "The caption has to be 32 characters or fewer.",
   fit_unknown: "Choose how the picture should fill the rectangle.",
+  fit_impossible:
+    "Fitting inside would leave a border too thin for this rectangle to draw. Choose Fill " +
+    "completely.",
 };
 
 /** Used when a field is refused for a reason this build has never heard of. */

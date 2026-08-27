@@ -5,7 +5,9 @@
  * `placeImage` returns into the nine-argument form of `drawImage`; by
  * `./image-plan.ts`, which shares `centredCrop` so the crop applied when an
  * image is STORED and the crop applied when it is DRAWN can never be two
- * different crops; and by `./__tests__/image-fit.test.ts`.
+ * different crops; by `./content.ts` and `src/components/ContentForm.tsx`,
+ * which ask `canHonourContain` whether `contain` is a fit this purchase can
+ * actually be given; and by `./__tests__/image-fit.test.ts`.
  *
  * WHY THIS IS NOT INLINE IN THE CANVAS. The board used to call
  * `drawImage(image, x, y, w, h)` — five arguments, which stretches whatever
@@ -110,4 +112,56 @@ export function placeImage(source: Box, block: Rect, fit: Fit): Placement {
       height,
     },
   };
+}
+
+/**
+ * How close to zero a bar has to be before it counts as no bar at all, in
+ * block pixels.
+ *
+ * `min(w/sw, h/sh)` is a division and a multiplication away from an exact
+ * match, so a source that genuinely has the block's own shape can come back a
+ * few ulps short of filling it. A millionth of a pixel is not a bar on any
+ * wall.
+ */
+const NO_BAR_AT_ALL = 1e-6;
+
+/**
+ * Whether `contain` is a fit this purchase can actually be GIVEN, rather than
+ * only promised.
+ *
+ * IT ASKS `placeImage`, IT DOES NOT RESTATE IT. With the block put at the
+ * origin, the destination's own x and y ARE the bars — the left one and the
+ * top one — so "how much of the block is left over" is answered by the very
+ * call the board draws with. Change the placement and this changes with it;
+ * that is the whole reason it lives in this file rather than beside either
+ * caller.
+ *
+ * THE INPUT IS (SOURCE, BLOCK), NOT THE BLOCK ALONE. A block-only threshold
+ * would have to assume a source, and the source is half the answer: a 200×50
+ * rectangle letterboxes a square photograph with enormous bars and cannot
+ * letterbox a 4:1 banner at all. The buyer's picture is known at both call
+ * sites — the browser has already decoded it for the thumbnail, and the
+ * server reads its size off the stored bytes with `sharp` — so the answer is
+ * exact rather than a guess about what somebody might upload.
+ *
+ * THREE OUTCOMES, AND ONLY THE MIDDLE ONE IS A LIE.
+ *   - Bars of at least one whole block pixel per side: the wall draws them,
+ *     and `contain` means what it says.
+ *   - No bars at all, because the picture already has the block's shape:
+ *     `contain` and `cover` are then the same picture and both are honoured.
+ *     A rule that demanded VISIBLE bars would refuse this one, which is the
+ *     wide logo in the wide rectangle the owner's verdict said not to touch.
+ *   - Bars thinner than a whole block pixel: `composite.ts` resizes to whole
+ *     pixels and pads with what is left over, so a thin bar is rounded away
+ *     or rounded into existence rather than drawn at the size it was
+ *     computed. A buyer who picked "Fit inside" would be looking at a fill,
+ *     permanently. That is the promise this refuses to let anybody make, and
+ *     the whole band is refused rather than the half of it that rounds down:
+ *     a bar a buyer was promised should be a bar a buyer was shown, not one
+ *     the renderer happened to round into existence.
+ */
+export function canHonourContain(source: Box, block: Box): boolean {
+  const { dest } = placeImage(source, { x: 0, y: 0, width: block.width, height: block.height }, "contain");
+  const bar = Math.max(dest.x, dest.y);
+  return bar < NO_BAR_AT_ALL || bar >= 1;
 }

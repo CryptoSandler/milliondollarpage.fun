@@ -89,7 +89,17 @@ export async function POST(
   const caption = readString(form.get("caption"));
   const imageFit = readString(form.get("imageFit"));
 
-  const validated = await validateContent({ bytes, declaredMime, link, caption, imageFit });
+  // The block comes off the ORDER, never off the form: it is what decides
+  // whether a `contain` fit can actually be drawn, and a caller who could
+  // name their own rectangle could name one that lets any fit through.
+  const validated = await validateContent({
+    bytes,
+    declaredMime,
+    link,
+    caption,
+    imageFit,
+    block: { width: order.rect.w, height: order.rect.h },
+  });
   if (!validated.ok) {
     return problem(422, "That content could not be accepted.", { rejections: validated.rejections });
   }

@@ -209,6 +209,7 @@ describe("a genuinely large photograph", () => {
       link: "https://example.com/",
       caption: "",
       imageFit: "cover",
+      block: { width: 60, height: 40 },
     });
     expect(raw.ok).toBe(false);
 
@@ -224,6 +225,7 @@ describe("a genuinely large photograph", () => {
       link: "https://example.com/",
       caption: "",
       imageFit: "cover",
+      block: { width: 60, height: 40 },
     });
     expect(accepted.ok, "the shrunk photograph must be accepted").toBe(true);
   });
@@ -260,5 +262,57 @@ describe("the caps the purchase path is allowed to enforce", () => {
     // afterwards, and the reason the gate is in front of the parser.
     const response = await submitContent(held.id, oversized);
     expect(response.status).toBe(413);
+  });
+});
+
+/**
+ * The fit a rectangle is too small to draw, refused where refusing counts.
+ *
+ * The form stops offering "Fit inside" on a purchase like the first one below
+ * (see `FitChoice` in ContentForm.tsx), but a hidden radio is not a boundary:
+ * these submissions go straight at the route with a hand-built body, which is
+ * exactly what a caller who never loaded the form would send. Content is
+ * immutable once paid, so a stored `contain` that draws as a fill would be
+ * permanent.
+ */
+describe("a contain the rectangle cannot letterbox", () => {
+  it("is refused on a 1x1, however it is submitted, and the same bytes go on as a fill", async () => {
+    const held = await reserveRect({ x: 700, y: 500, w: 1, h: 1 }, BUYER, CALLER);
+    // 4:3, so the picture and the pixel are not the same shape. What it
+    // stores is 4x3 — and one pixel has nowhere to put the bars.
+    const prepared = await shrink(await solid(400, 300, { r: 20, g: 80, b: 200 }), { width: 1, height: 1 }, "contain");
+
+    const refused = await submitContent(held.id, prepared.bytes, "contain");
+    expect(refused.status).toBe(422);
+    // Read the answer the caller actually receives, not the validator's.
+    const body = (await refused.json()) as { rejections: { field: string; code: string }[] };
+    expect(body.rejections.map((r) => [r.field, r.code])).toEqual([["imageFit", "fit_impossible"]]);
+
+    // And nothing about the picture itself was wrong: the fill is accepted on
+    // the very same bytes.
+    expect((await submitContent(held.id, prepared.bytes, "cover")).status).toBe(200);
+  });
+
+  it("leaves contain on a large rectangle, and the wall draws the bars", async () => {
+    const held = await reserveRect({ x: 400, y: 600, w: 100, h: 100 }, BUYER, CALLER);
+    const blue = { r: 20, g: 80, b: 200 };
+    const prepared = await shrink(await solid(1200, 300, blue), { width: 100, height: 100 }, "contain");
+
+    expect((await submitContent(held.id, prepared.bytes, "contain")).status).toBe(200);
+    expect((await confirm(held.id)).status).toBe(200);
+
+    // READ THE WALL. A 4:1 picture contained in a 100x100 rectangle is
+    // twenty-five pixels tall and centred, so the top of the block is bar and
+    // the middle of it is picture. Nothing here recomputes where the edge
+    // falls; both samples are well inside their own band.
+    const bar = await wallPixel(450, 610);
+    // The sheet's own cream, `--canvas` in DESIGN.md and `PAPER` in
+    // composite.ts, which is what a contain fit's bars are made of.
+    expect(bar).toEqual({ r: 0xf3, g: 0xed, b: 0xe0, a: 255 });
+
+    const picture = await wallPixel(450, 650);
+    expect(Math.abs(picture.r - blue.r)).toBeLessThanOrEqual(3);
+    expect(Math.abs(picture.g - blue.g)).toBeLessThanOrEqual(3);
+    expect(Math.abs(picture.b - blue.b)).toBeLessThanOrEqual(3);
   });
 });

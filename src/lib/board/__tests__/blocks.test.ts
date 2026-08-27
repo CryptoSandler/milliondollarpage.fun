@@ -223,6 +223,7 @@ describe("sweepExpiredReservations", () => {
       link: "https://example.com/secret",
       caption: "Their caption",
       imageFit: "contain",
+      block: { width: 10, height: 10 },
     });
     if (!validated.ok) throw new Error("the fixture content should validate");
     await attachContent(held.id, "BuyerPubkey1111", validated.content);
