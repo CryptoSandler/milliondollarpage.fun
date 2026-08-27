@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { execute, query } from "../../db";
+import { formatUsdc } from "../pricing";
 import { RectangleInvalid, RectangleTaken, reserveRect } from "../reserve";
 
 const BUYER = "BuyerPubkey1111111111111111111111111111111";
@@ -100,15 +101,28 @@ describe("reserveRect", () => {
   });
 
   it("refuses a malformed rectangle before touching the database", async () => {
-    await expect(reserveRect({ x: 5, y: 0, w: 10, h: 10 }, BUYER, CALLER)).rejects.toBeInstanceOf(
-      RectangleInvalid,
-    );
+    // No area.
     await expect(reserveRect({ x: 0, y: 0, w: 0, h: 10 }, BUYER, CALLER)).rejects.toBeInstanceOf(
       RectangleInvalid,
     );
+    // Off the right edge, and off the bottom one.
     await expect(
-      reserveRect({ x: 990, y: 0, w: 20, h: 10 }, BUYER, CALLER),
+      reserveRect({ x: 1240, y: 0, w: 20, h: 10 }, BUYER, CALLER),
     ).rejects.toBeInstanceOf(RectangleInvalid);
+    await expect(
+      reserveRect({ x: 0, y: 790, w: 10, h: 20 }, BUYER, CALLER),
+    ).rejects.toBeInstanceOf(RectangleInvalid);
+    // Not made of whole pixels. Postgres would have ROUNDED this into its
+    // integer columns and sold a rectangle nobody asked for.
+    await expect(
+      reserveRect({ x: 137.5, y: 0, w: 10, h: 10 }, BUYER, CALLER),
+    ).rejects.toBeInstanceOf(RectangleInvalid);
+  });
+
+  it("holds a rectangle that lines up with nothing, because that is the model now", async () => {
+    const held = await reserveRect({ x: 137, y: 41, w: 23, h: 7 }, BUYER, CALLER);
+    expect(held.rect).toEqual({ x: 137, y: 41, w: 23, h: 7 });
+    expect(held.pixels).toBe(161);
   });
 
   it("lets exactly one of two concurrent overlapping reservations win", async () => {
@@ -178,9 +192,9 @@ describe("reserveRect", () => {
   });
 
   it.each([
-    [990, 990],
-    [0, 990],
-    [990, 0],
+    [1240, 790],
+    [0, 790],
+    [1240, 0],
   ])("REGRESSION: the board's other corners also succeed: (%i, %i)", async (x, y) => {
     const held = await reserveRect({ x, y, w: 10, h: 10 }, BUYER, CALLER);
     expect(held.rect).toEqual({ x, y, w: 10, h: 10 });
@@ -206,6 +220,71 @@ describe("reserveRect", () => {
       survivors,
       "the expired hold must survive a failed reservation, or the sweep is not in the transaction",
     ).toHaveLength(1);
+  });
+});
+
+/**
+ * A dollar a pixel, and a million dollars for the wall.
+ *
+ * Every number here is read back OUT of the database — `total_usdc` as it was
+ * stored, and `w * h` as Postgres computes it — rather than recomputed in the
+ * test from pixels times price. That multiplication is the one `reserveRect`
+ * itself does, and a guard that repeated it would agree with the bug it was
+ * supposed to catch. The dollar figures are written out as literals for the
+ * same reason.
+ */
+describe("the price is the area", () => {
+  type Charged = { pixels: string; total_usdc: string };
+
+  async function chargedFor(rect: { x: number; y: number; w: number; h: number }): Promise<Charged> {
+    const held = await reserveRect(rect, BUYER, CALLER);
+    const rows = await query<Charged>(
+      "SELECT (w * h)::text AS pixels, total_usdc::text FROM blocks WHERE id = $1",
+      [held.id],
+    );
+    return rows[0];
+  }
+
+  it.each([
+    [1, 1, 1, "$1"],
+    [1, 7, 7, "$7"],
+    [37, 11, 407, "$407"],
+    [23, 100, 2300, "$2,300"],
+  ])("charges a %i by %i rectangle for its %i pixels", async (w, h, pixels, price) => {
+    const charged = await chargedFor({ x: 0, y: 0, w, h });
+    expect(Number(charged.pixels)).toBe(pixels);
+    expect(formatUsdc(Number(charged.total_usdc))).toBe(price);
+  });
+
+  it("prices the whole wall at exactly one million dollars", async () => {
+    const charged = await chargedFor({ x: 0, y: 0, w: 1250, h: 800 });
+    expect(Number(charged.pixels)).toBe(1_000_000);
+    expect(formatUsdc(Number(charged.total_usdc))).toBe("$1,000,000");
+  });
+
+  it("still comes to a million when the wall is sold off in odd pieces", async () => {
+    // Six rectangles that tile 1250 x 800 exactly and share edges without
+    // overlapping — including a strip one pixel tall, which the old board
+    // could not have sold at all. The exclusion constraint accepting all six
+    // is half the assertion; the sum is the other half.
+    const strips = [
+      { x: 0, y: 0, w: 137, h: 1 },
+      { x: 137, y: 0, w: 613, h: 1 },
+      { x: 750, y: 0, w: 500, h: 1 },
+      { x: 0, y: 1, w: 137, h: 799 },
+      { x: 137, y: 1, w: 613, h: 799 },
+      { x: 750, y: 1, w: 500, h: 799 },
+    ];
+    // Together rather than in turn: six round trips to a hosted Postgres is
+    // slower than this file's budget, and nothing here needs them ordered.
+    await Promise.all(strips.map((strip) => reserveRect(strip, BUYER, CALLER)));
+
+    const [total] = await query<{ blocks: string; pixels: string; usdc: string }>(
+      "SELECT COUNT(*)::text AS blocks, SUM(w * h)::text AS pixels, SUM(total_usdc)::text AS usdc FROM blocks",
+    );
+    expect(total.blocks).toBe("6");
+    expect(Number(total.pixels)).toBe(1_000_000);
+    expect(formatUsdc(Number(total.usdc))).toBe("$1,000,000");
   });
 });
 

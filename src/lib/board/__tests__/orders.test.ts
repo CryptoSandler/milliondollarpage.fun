@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import * as db from "../../db";
 import { execute, query } from "../../db";
+import { boardStats, listLiveBlocks } from "../blocks";
 import type { ValidatedContent } from "../content";
 import {
   OrderExpired,
@@ -14,6 +15,7 @@ import {
   markPaid,
   releaseOwnReservation,
 } from "../orders";
+import { formatPercentSold, formatUsdc } from "../pricing";
 import { reserveRect } from "../reserve";
 
 const BUYER = "BuyerPubkey1111111111111111111111111111111";
@@ -44,6 +46,51 @@ async function hold(x = 0, y = 0, w = 10, h = 10) {
 async function expire(id: string): Promise<void> {
   await execute("UPDATE blocks SET expires_at = now() - interval '1 minute' WHERE id = $1", [id]);
 }
+
+/**
+ * One pixel, one dollar, all the way through.
+ *
+ * The headline of the whole model, and the case every rule used to forbid: a
+ * 10-pixel grid, a 10x10 minimum and a $100 unit each made this purchase
+ * impossible on their own. It runs the real path — hold, content, payment —
+ * and then reads what the PAGE would draw rather than what the functions
+ * returned, because the board renders from `listLiveBlocks` and `boardStats`
+ * and a sale nobody can see is not a sale.
+ */
+describe("a single pixel, bought end to end", () => {
+  it("is held, filled in, paid for, and shows on the board as one pixel for one dollar", async () => {
+    const held = await reserveRect({ x: 137, y: 41, w: 1, h: 1 }, BUYER, CALLER);
+    expect(held.pixels).toBe(1);
+    expect(formatUsdc(held.totalBaseUnits)).toBe("$1");
+
+    await attachContent(held.id, BUYER, content());
+    const paid = await markPaid(held.id, BUYER, "sig-one-pixel");
+    expect(paid.status).toBe("paid");
+
+    // The row itself: one pixel, a dollar, and no expiry left to sweep.
+    const [row] = await query<{
+      w: number;
+      h: number;
+      status: string;
+      total_usdc: string;
+      expires_at: Date | null;
+    }>("SELECT w, h, status, total_usdc::text, expires_at FROM blocks WHERE id = $1", [held.id]);
+    expect(row).toMatchObject({ w: 1, h: 1, status: "paid", expires_at: null });
+    expect(formatUsdc(Number(row.total_usdc))).toBe("$1");
+
+    // And what a visitor sees: the board draws it, and the counters count it.
+    const [drawn] = await listLiveBlocks();
+    expect(drawn).toMatchObject({ x: 137, y: 41, w: 1, h: 1, status: "paid" });
+    expect(drawn.caption).toBe("A caption");
+
+    const stats = await boardStats();
+    expect(stats.pixelsSold).toBe(1);
+    expect(stats.blocksSold).toBe(1);
+    // One millionth of the wall rounds to nothing at two decimals, and the
+    // counter is required to say so as a floor rather than as a zero.
+    expect(formatPercentSold(stats.percentSold)).toBe("<0.01%");
+  });
+});
 
 describe("getOrder", () => {
   it("returns null for an id that does not exist", async () => {
