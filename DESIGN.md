@@ -121,6 +121,26 @@ the hue and we do not.
 - **Two-tier graph paper.** A faint rule every 10 pixels — one block — and a
   stronger rule every 100. The fine tier says where a block would land; the coarse
   tier lets you navigate without counting.
+- **The board takes focus, and a keyboard drives it.** It is a canvas, so it
+  is given a tab stop, an `application` role and its own keys; without them
+  there is no way to select a rectangle without a pointer, and Buy can never
+  be enabled at all. **Arrows move the cursor one block. Shift moves it ten —
+  which is one coarse rule, not an arbitrary "faster". Alt with an arrow
+  resizes it from its top-left anchor. Enter is the Buy button. Escape
+  clears.** A preset moves but does not resize, because a preset's whole point
+  is that it is the size the button named. Nothing here is a second geometry:
+  every rectangle still comes out of `snapRect` and `presetRect`, so the grid,
+  the half-open rule, the collision refusal and the slide-back near an edge
+  are the pointer's own. When the cursor is walked off the visible board the
+  view follows it by panning, and only where a drag could have: above the fit
+  rung, clamped by the same `clampToFit`.
+- **A canvas tells assistive technology nothing, so the cursor is mirrored in
+  words.** A polite live region beside the board says the rectangle, its
+  pixels, its price, what block is under it — caption and all, which is the
+  hover card's information reaching a keyboard for the first time — and then
+  the very sentence printed under the Buy button. It waits for the cursor to
+  settle before it speaks, because a held arrow key repeats thirty times a
+  second and a mirror that narrated that would be unusable.
 - **Zero radius on the board and on every block.** They are pixels. Rounding them
   lies about what they are. Only chrome rounds.
 - **Sold blocks** carry a 1px ink border, so the boundary between two adjacent
@@ -141,6 +161,30 @@ The selection outline is terracotta over an ink core with a cream ring, so it
 survives any artwork underneath without depending on contrast with it. That
 sandwich, not the terracotta, is what makes the outline visible over an upload;
 the accent only says whose outline it is.
+
+**The focus ring is the third thing terracotta means, and it is the same
+claim.** A focused control is a control the keyboard has selected, so it takes
+the accent: 2px of `primary` at a 2px offset, which puts the ring on the
+surface behind the control rather than on the control's own fill. Measured
+against the four surfaces a focusable thing lands on: **4.32:1** on `canvas`,
+**4.92:1** on `card`, **4.64:1** on `card-warm`, **3.81:1** on `canvas-deep` —
+the last being a ring beside a disabled neighbour, which is a real background
+even though the neighbour is exempt. WCAG 1.4.11 asks 3:1.
+
+**Two focusable things cannot take that ring, and both are answered rather
+than excused.** A control whose real input is hidden — the image dropzone's
+file input, the fit chooser's radios — would put a ring on a one-pixel box, so
+the ring goes on the visible box that stands for it. And the board is a canvas
+the size of the whole viewport, so an outline at a 2px offset is drawn outside
+the window: its ring is **painted into the board**, hugging the sheet's edge
+and clamped into the free region so a board zoomed past its own edges still
+shows one. That ring is the selection's own sandwich — cream, ink, terracotta —
+because zoomed in it lands on somebody's artwork, and no single colour survives
+that.
+
+**A focus ring never fades in.** Anywhere a colour transition covers
+`outline-color`, the ring spends its first 160ms measuring under 3:1 while the
+stylesheet still reads as `primary`. Transition the border, never the ring.
 
 **The accent deepened by six points of lightness, and that was measured rather
 than chosen.** It used to be `#dd4e22`. On-primary cream (`#fff8ef`) on that
@@ -251,6 +295,17 @@ never wrapping — because the board's fit maths reads its measured box, and a
 bar that can grow to two rows is a bar that can cover the board it was measured
 against.
 
+**Tab order is the board, then the controls, and it ends on Buy.** One DOM
+tree serves both layouts, so one source order has to answer for both. In the
+bottom bar it matches the visual order exactly: the board, then the row left to
+right. In the side panel the board comes before the panel drawn over its left
+third — the canvas's own box starts at the window's origin, the board is the
+thing the panel is about, and the sequence a keyboard walks is then the
+sequence a purchase takes: pick the rectangle, price it, type the address,
+press Buy. Reordering to satisfy the panel would satisfy it by breaking the
+bar, and would leave Buy in the middle of the walk rather than at the end of
+it.
+
 The crossover is 5:4 and 640px wide, not simply "landscape": the question is
 not which way the window is turned, it is which arrangement leaves a bigger
 board. At 1280×1024 a panel does; at 600×590 it does not.
@@ -314,6 +369,12 @@ from a thing at rest.
 
 The Buy button lifts 2px on hover and presses to 0.97. Nothing else lifts.
 
+**`prefers-reduced-motion` stops all of it, the ants included.** The stylesheet
+reaches every animation and transition on the page, and it cannot reach the
+marching ants: those are an interval redrawing a canvas, so the board asks the
+media query itself. The dashes still draw — the outline still says a selection
+is live — they simply stop moving.
+
 ## Voice
 
 Plain, warm, specific. Say what happened and what to do about it.
@@ -331,6 +392,53 @@ to hand it back. That is not a disclosure and cannot become one: the browser
 recognises an order id it created itself, and the server puts nobody else's id,
 key or count on the wire. "Someone is holding this" stays the only thing anyone
 ever learns about anyone else.
+
+## What gets said out loud, and what gets to interrupt
+
+Four things are announced, and **polite or assertive is a decision per case,
+not a default**. Assertive cuts across whatever somebody is being read, which
+is right for something that invalidates what they are doing and rude
+otherwise.
+
+**Assertive** — every refusal that makes the buyer's current belief wrong: a
+field's error and the form's, which arrive because Continue did not continue;
+the payment's error, which arrives after the button that spends money; and the
+fatal screen, which is the hold that expired, the rectangle somebody else took,
+or the order that stopped being ours. Everything queued behind those is about a
+purchase that is no longer happening.
+
+**Polite** — the rest, and all of it for the same reason: it confirms what the
+buyer already set out to do. The reservation arriving. The receipt, which is
+announced as itself rather than duplicated into a hidden region. The stalled
+screen, because no answer is not the same as a bad one — the styling already
+said so. And the board's cursor readout, which is a mirror of the user's own
+keyboard: a readout that interrupts is the definition of a rude one.
+
+**The hold clock is the one that needed a rule rather than a role.** It redraws
+ten times a second in the last minute, and *a clock that announces every second
+is worse than one that never announces at all*. The final stretch is the last
+**two minutes** — the same threshold at which the number already turns
+danger-coloured, so the colour and the voice cannot disagree about when it
+began — and inside it the clock speaks exactly **four times**: at two minutes,
+one minute, thirty seconds and ten. Each gap is roughly half the last: time to
+finish a sentence after the first, time to do nothing but save after the last.
+Zero says nothing, because what is needed then is not a countdown; the hold
+ending is the fatal screen's, and that one interrupts.
+
+## The purchase dialog is a real modal
+
+`showModal()` on a native `<dialog>`, not a hand-written focus trap. Focus
+starts inside it and on the card rather than on the close button — a dialog
+that opens by announcing "Close" tells a buyer the least useful sentence it
+has. Tab cannot leave. The board behind it is inert to a pointer and to
+assistive technology alike. Escape asks the same question the × does, because
+closing may throw a hold away and Escape must not be the one route that does it
+without asking.
+
+**Closing hands focus back**, and to the opener wherever the opener can still
+take it. The Buy button cannot: the same close that returns focus clears the
+selection that enabled it. So the board is the fallback — it is what the buyer
+was working on, and it is never disabled.
 
 ## Settled colour decisions
 
