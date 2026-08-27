@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchBlockDetails } from "../lib/board/block-details";
+import { blockImageUrl } from "../lib/board/block-image";
 import type { BlockDetails, BoardRect, BoardStats } from "../lib/board/blocks";
 import type { Wall } from "../lib/board/composite";
 import type { Point } from "../lib/board/geometry";
 import type { Selection } from "../lib/board/selection";
 import { BOARD_BOTTOM_GAP, type Chrome } from "../lib/canvas/viewport";
+import BlockCard from "./BlockCard";
 import BoardCanvas, { type ZoomControls, type ZoomState } from "./BoardCanvas";
 import BoardCounters from "./BoardCounters";
 import InteractionLegend from "./InteractionLegend";
@@ -480,46 +482,36 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
 
       {hovered && (
         <div
-          className="floating-card pointer-events-none fixed z-20 w-52 p-3"
+          className="floating-card pointer-events-none fixed z-20 w-56 p-3"
           style={{
-            left: Math.min(hovered.at.x + 14, (typeof window === "undefined" ? 1200 : window.innerWidth) - 224),
-            top: Math.max(chrome.top + 8, hovered.at.y - 88),
+            left: Math.min(hovered.at.x + 14, (typeof window === "undefined" ? 1200 : window.innerWidth) - 240),
+            top: Math.max(chrome.top + 8, hovered.at.y - 96),
           }}
         >
           {/*
             The rectangle and its state come off the board payload and are
             there the instant the pointer arrives. The caption and the link do
-            not: they are fetched for this one rectangle, so the card says
-            what it knows first and fills the words in when they land. A hold
-            publishes neither, and never will.
+            not: they are fetched for this one rectangle, so the card says what
+            it knows first and fills the words in when they land. A hold
+            publishes neither, and never will — and it has no picture either,
+            so it gets no frame rather than an empty one.
+
+            The card itself is BlockCard, which the checkout also renders. That
+            is the whole point: what a buyer is shown before paying and what a
+            visitor is shown afterwards are one component, so they cannot come
+            to disagree about how a rectangle looks.
           */}
-          <p className="truncate font-display text-[14.5px] font-bold text-ink">
-            {hovered.rect.status === "reserved"
-              ? "On hold"
-              : (details.get(hovered.rect.id)?.caption ?? "No caption")}
-          </p>
-          {details.get(hovered.rect.id)?.link && (
-            <p className="truncate text-[12.5px] font-semibold text-primary-pressed">
-              {details.get(hovered.rect.id)!.link}
-            </p>
-          )}
-          <p className="tabular mt-1 text-[11px] text-body">
-            {hovered.rect.w} × {hovered.rect.h} at ({hovered.rect.x}, {hovered.rect.y}) ·{" "}
-            {(hovered.rect.w * hovered.rect.h).toLocaleString("en-US")} px
-          </p>
-          <p
-            className={`mt-1 text-[11px] font-semibold ${
-              hovered.rect.status === "reserved" && ownHoldIds.includes(hovered.rect.id)
-                ? "text-primary-pressed"
-                : "text-body"
-            }`}
-          >
-            {hovered.rect.status !== "reserved"
-              ? "Sold — not for sale"
-              : ownHoldIds.includes(hovered.rect.id)
-                ? "Your hold. Select it and press Buy to carry on, or to let it go."
-                : "On hold mid-purchase — not for sale right now"}
-          </p>
+          <BlockCard
+            imageSrc={hovered.rect.status === "reserved" ? null : blockImageUrl(hovered.rect.id)}
+            caption={details.get(hovered.rect.id)?.caption ?? null}
+            link={details.get(hovered.rect.id)?.link ?? null}
+            rect={hovered.rect}
+            state={
+              hovered.rect.status === "reserved"
+                ? { kind: "held", own: ownHoldIds.includes(hovered.rect.id) }
+                : { kind: "sold" }
+            }
+          />
         </div>
       )}
 

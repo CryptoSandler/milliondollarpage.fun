@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useId, useMemo, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
-import { prepareImage } from "../lib/board/image-encode";
-import { MAX_INPUT_BYTES } from "../lib/board/image-plan";
+import { prepareImage, type PreparedImage } from "../lib/board/image-encode";
+import { MAX_INPUT_BYTES, targetBox } from "../lib/board/image-plan";
 import { checkLink, normaliseLink } from "../lib/board/link";
 import { submitContent, type ClientOrder } from "../lib/board/purchase-client";
 import { singleFlight } from "../lib/board/single-flight";
@@ -83,11 +83,18 @@ export default function ContentForm({
   onDraftChange: (patch: Partial<ContentDraft>) => void;
   /**
    * Everything is attached and this order is ready for the confirmation
-   * screen. `stillFromAnimation` rides along because the confirmation screen
-   * has to say so BEFORE the payment, and this is the only place that knows:
-   * it comes out of the shrinking, which happens here.
+   * screen.
+   *
+   * Two things ride along, and both for the same reason: the confirmation
+   * screen has to have them BEFORE the payment, and this is the only place
+   * that knows either. `stillFromAnimation` comes out of the shrinking, and
+   * `prepared` IS the shrink — the exact bytes the block will carry, which is
+   * what the next screen renders instead of the buyer's original file.
    */
-  onSubmitted: (order: ClientOrder, notes: { stillFromAnimation: boolean }) => void;
+  onSubmitted: (
+    order: ClientOrder,
+    notes: { stillFromAnimation: boolean; prepared: PreparedImage },
+  ) => void;
   onFatalError: (message: string) => void;
 }) {
   const [stage, setStage] = useState<Stage>("idle");
@@ -123,6 +130,15 @@ export default function ContentForm({
   // being the one in use — on every change of `draft.file`, and again on
   // unmount.
   const previewUrl = useMemo(() => (draft.file ? URL.createObjectURL(draft.file) : null), [draft.file]);
+
+  // What this rectangle will actually keep of whatever the buyer picks. Pure
+  // arithmetic out of image-plan.ts, which is also what `prepareImage` aims
+  // at below — so the number printed under the field and the number the
+  // encoder targets cannot be two numbers.
+  const storedBox = useMemo(
+    () => targetBox({ width: order.rect.w, height: order.rect.h }),
+    [order.rect.w, order.rect.h],
+  );
 
   useEffect(() => {
     return () => {
@@ -256,7 +272,10 @@ export default function ContentForm({
     setStage("idle");
 
     if (result.ok) {
-      onSubmitted(result.order, { stillFromAnimation: prepared.stillFromAnimation });
+      onSubmitted(result.order, {
+        stillFromAnimation: prepared.stillFromAnimation,
+        prepared: prepared.image,
+      });
       return;
     }
 
@@ -346,9 +365,22 @@ export default function ContentForm({
           aria-describedby={messages.fields.image ? `${imageId}-error` : undefined}
           className="sr-only"
         />
+        {/*
+          WHAT THIS RECTANGLE ACTUALLY STORES, SAID BEFORE THE MONEY.
+
+          Every purchase carries an image, a link and a caption — a 1×1 for a
+          dollar as much as a 100×100 — and nothing about that is a tier. What
+          DOES follow the size is the resolution: four stored pixels per pixel
+          bought (`targetBox`), so a 1×1 keeps 4×4. The card somebody sees when
+          they point at a small rectangle is therefore visibly pixelated, and a
+          buyer must be told that here rather than discover it after paying.
+          Visibility is bought with area; it is never withheld as a feature.
+        */}
         <Permanence>
-          We resize it to fit your block, so bring the picture you want rather than one you have
-          shrunk. Locked to the block the moment you pay: there is no later swap or crop.
+          Stored at {storedBox.width} × {storedBox.height} — four stored pixels for every pixel you
+          buy. A small rectangle keeps a small picture, so it will look pixelated close up and on the
+          card; that is the picture itself, not a rough preview of it. Bring the photograph you want
+          and we shrink it. Locked to the block the moment you pay: there is no later swap or crop.
         </Permanence>
         <FieldError id={`${imageId}-error`} message={messages.fields.image} />
       </div>

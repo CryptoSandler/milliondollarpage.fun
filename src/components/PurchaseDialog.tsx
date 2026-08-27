@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { RefObject } from "react";
+import type { PreparedImage } from "../lib/board/image-encode";
 import { formatUsdc } from "../lib/board/pricing";
 import {
   confirmOrder,
@@ -148,6 +149,12 @@ export default function PurchaseDialog({
   // submission, so going back to swap the picture cannot leave a stale notice
   // about a GIF that is no longer the one being bought.
   const [stillFromAnimation, setStillFromAnimation] = useState(false);
+  // The exact bytes the block will carry, handed up by the shrink in
+  // ContentForm. The confirmation screen renders THESE rather than the
+  // buyer's original file, which is the difference between previewing the
+  // purchase and previewing the upload. Replaced on every submission, so
+  // going back to swap the picture cannot leave the old render on screen.
+  const [prepared, setPrepared] = useState<PreparedImage | null>(null);
   const [fatalMessage, setFatalMessage] = useState<string | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   // True when the hold that came back is one this browser already had, rather
@@ -715,6 +722,7 @@ export default function PurchaseDialog({
               onSubmitted={(updated, notes) => {
                 setOrder(updated);
                 setStillFromAnimation(notes.stillFromAnimation);
+                setPrepared(notes.prepared);
                 setStep("confirming");
               }}
               onFatalError={setFatalMessage}
@@ -726,6 +734,7 @@ export default function PurchaseDialog({
             <ConfirmationStep
               order={order}
               draft={draft}
+              prepared={prepared}
               stillFromAnimation={stillFromAnimation}
               confirming={step === "paying"}
               confirmError={confirmError}

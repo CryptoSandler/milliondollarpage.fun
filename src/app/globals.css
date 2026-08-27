@@ -679,6 +679,45 @@ h3 {
     animation: dialog-in var(--dur-enter) var(--ease);
   }
 
+  /*
+   * The picture inside a BlockCard, and the one place its rules live.
+   *
+   * Zero radius, like every block on the board: it is a rectangle of pixels,
+   * not a card. A 1px ink edge, for the same reason a sold rectangle carries
+   * one on the wall — a buyer may upload the paper's own cream, and without an
+   * edge the frame would vanish. And PIXELATED, always: a rectangle stores
+   * four image pixels per pixel bought, so a small purchase's thumbnail is a
+   * handful of pixels blown up, and smoothing it would show a buyer a picture
+   * nobody stored.
+   */
+  .block-card-thumb {
+    display: block;
+    overflow: hidden;
+    border: 1px solid var(--ink);
+    background-color: var(--canvas-deep);
+    background-repeat: no-repeat;
+    /* The bitmap fills the frame exactly, because the frame is already the
+       rectangle's own shape and the bitmap is already the rectangle's own
+       pixels — the fit was applied when the image was stored, not here. */
+    background-size: 100% 100%;
+    image-rendering: pixelated;
+  }
+
+  /*
+   * A page that is prose rather than a board.
+   *
+   * The document still never scrolls — `overflow: hidden` on html and body is
+   * untouched, because the board depends on it and a wheel over the board must
+   * never rubber-band the page. So the FAQ scrolls INSIDE one full-height box,
+   * which is the same exemption the side panel already has: one box on the
+   * page may scroll, and only one.
+   */
+  .prose-page {
+    height: 100%;
+    overflow-y: auto;
+    background: var(--canvas);
+  }
+
   .floating-card {
     background: var(--card);
     border: 1px solid var(--hairline-strong);
