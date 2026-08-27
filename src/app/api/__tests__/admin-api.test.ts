@@ -459,6 +459,7 @@ describe("signing in and out", () => {
   });
 
   it("signs out on the server, not only in the browser", async () => {
+    const id = await sold();
     const cookie = cookieFrom(await signIn(TOKEN))!;
     expect((await takedowns({ cookie })).status).toBe(200);
 
@@ -473,6 +474,18 @@ describe("signing in and out", () => {
     // The browser was asked to drop the cookie; the revocation is what holds
     // if it does not.
     expect((await takedowns({ cookie })).status).toBe(401);
+
+    // READING is refused above. This is the half that would actually cost
+    // something: a revoked cookie must not be able to CHANGE anything either.
+    // Self-service revocation is the only revocation this product has (see
+    // `admin.ts`), so "signed out" has to mean the session cannot act, not
+    // merely that it cannot look.
+    const acted = await act(id, { action: "hide", reason: REASON }, { cookie });
+    expect(acted.status).toBe(401);
+
+    // And the block it tried to hide is still published, so the refusal was a
+    // refusal rather than a failure that happened to also do the work.
+    expect(await servedBytes(id)).not.toBeNull();
   });
 
   /**
