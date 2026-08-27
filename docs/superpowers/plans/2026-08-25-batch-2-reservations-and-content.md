@@ -1,5 +1,15 @@
 # Batch 2 — Reservations and Content Implementation Plan
 
+> **HISTORICAL. This plan was executed, and the product has since moved past it.**
+> It is the record of what was planned and built in that batch, kept unrewritten
+> because a plan edited after the fact is no longer evidence of anything.
+>
+> **What in it is now false:** the board is 1250×800, the block grid is gone, and the minimum purchase is one pixel — so the paragraph telling an implementer to use `BOARD_PIXELS` and `BLOCK_PIXELS` names two constants that no longer exist. The reservation and content machinery it describes is otherwise still what runs.
+>
+> The current design is `DESIGN.md`; what a buyer is sold and what is still
+> undecided is `SECURITY.md`. The spec this plan cites carries its own banner
+> saying the same thing.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A buyer can pick a rectangle, hold it for 30 minutes, supply an image, link and caption that are validated before any money is asked for, see a final confirmation of everything that is about to become permanent, and watch the hold expire. No wallet, no USDC, no chain, no Arweave — the payment verifier is a stub that a human toggles.

@@ -216,7 +216,7 @@ We should not try to out-narrate them. We should out-build them.
 | wall | Rules as titled cards, one claim each | Same conclusion `pixelwar` reached from its own references |
 | mdsp | Red overlay marking collisions with sold pixels | Answers "why not here?" without an error message |
 | mdsp | A persistent interaction legend, plus a touch variant | Cheap, and drag-to-size is not self-evident |
-| mdsp | Three counters: absolute, percentage, blocks | Early on, a four-decimal percentage is more motivating than a raw count |
+| mdsp | ~~Three counters: absolute, percentage, blocks~~ — **partly adopted** | Adopted as three, and since reduced to the offer plus one number. The bar states `1,000,000 pixels · $1 per pixel · yours forever` and counts the pixels REMAINING, with the share sold kept as a quiet pill where there is room. Remaining rather than sold, because a nearly full board says the useful thing that way round; and no fourth number, because the bar is one row that never wraps |
 
 ### Don't adopt
 
@@ -224,11 +224,11 @@ We should not try to out-narrate them. We should out-build them.
 | --- | --- | --- |
 | original | Manual placement with a multi-day turnaround | The buyer picks their own rectangle; that *is* the interaction |
 | original | Exact-dimension image requirement | We scale and fit server-side; demanding exact pixel dimensions in 2026 is hostile |
-| original | Banning animation outright | We sell animated GIF as a paid upgrade; the original's objection was aesthetic, and a per-block opt-in bounded by size, dimension and duration limits is a different thing |
+| original | Banning animation outright | The original's objection was aesthetic, and a per-block opt-in bounded by size, dimension and duration limits is a different thing. **How animation is paid for is an OPEN PRODUCT DECISION and this row must not be read as settling it.** An earlier draft said "we sell animated GIF as a paid upgrade", which collides with what the owner has since settled about content: every purchase, from 1×1 at a dollar, carries an image, a link and a caption, with no threshold and no tier — visibility is bought with area, never with features. What is built today is neither: an animated GIF that already fits is stored untouched, one that does not is shrunk to a still and the checkout says so before the money. Whether animation ever becomes something bought separately is for the owner |
 | 1mp | Committing in writing to whether a block can ever be resold | Not because we take the other side — we have not decided, and it is recorded as an open decision in `SECURITY.md`. What we decline is publishing an answer we do not have |
-| 1mp | Fill once, lock, auction the board as a single artwork | A fine story, but it makes the product an event with an end date. We are building a live board with a secondary market |
+| 1mp | Fill once, lock, auction the board as a single artwork | A fine story, but it makes the product an event with an end date. Ours is a live board that stays live, and the last pixels are sold at the same dollar as the first — the tail is a plain remaining-pixels counter, settled in `DESIGN.md`, not an auction. This row used to end "we are building a live board with a secondary market", which was a claim about resale that nobody had decided; see "On positioning" |
 | 1mp | A first-person confessional as the pitch | Not our voice, and imitating it would be transparent |
-| 1mp | A very large upload cap | Too generous for a block that renders at most 1000×1000. Ours is stricter and enforced by dimensions as well as bytes |
+| 1mp | A very large upload cap | Ours is stricter and enforced by dimensions as well as bytes: a rectangle stores four image pixels per pixel bought, capped at 1024 on the long edge, and the stored payload stays under 100 KiB so an Irys upload is free and the signing key stays unfundable. What the buyer meets is not a cap at all — the page shrinks whatever they pick, in their own browser, so nobody is told their photograph is too heavy |
 | wall | Token-gated, hold-to-keep-it-live blocks | We have no token. Ours is bought outright and stays bought |
 | wall | Pasting an address instead of connecting a wallet | We need a real signature: the buyer signs the payment and the mint |
 | wall | One block per wallet | An arbitrary cap on revenue for a board this size |
@@ -264,8 +264,11 @@ enough to be worth attacking.
    is simply unavailable while the selection intersects one.
 3. **A persistent interaction legend ships with the board**, in pointer and
    touch variants. Not polish; drag-to-size is not discoverable.
-4. **The counter becomes three numbers, not one**: pixels sold, percentage to
-   four decimals, and block count.
+4. ~~**The counter becomes three numbers, not one**: pixels sold, percentage to
+   four decimals, and block count.~~ **Superseded.** The bar carries the offer
+   in one line — `1,000,000 pixels · $1 per pixel · yours forever` — and a
+   plain count of the pixels remaining, with the share sold as a quiet pill
+   where the row has room. See `DESIGN.md`.
 5. **Per-field permanence warnings are required copy**, rendered under each
    input rather than collected in a terms section.
 6. **A final confirmation step is added to checkout**, listing image, link,

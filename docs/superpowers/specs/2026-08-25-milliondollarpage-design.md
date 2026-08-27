@@ -1,5 +1,43 @@
 # milliondollarpage.fun — design
 
+> **HISTORICAL. This is the batch-1 spec, kept as the record of what was
+> decided in August 2026 and deliberately not rewritten.** Several of its
+> central numbers and one of its claims are no longer true, and rewriting them
+> here would erase the reasoning that was actually followed — including the
+> reasoning that was later overturned, which is the part worth keeping.
+>
+> **What is current lives elsewhere.** `DESIGN.md` is the design authority,
+> `SECURITY.md` states what a buyer is sold and what is still undecided, and
+> `docs/references.md` records the reading behind both. Where this document and
+> those disagree, those win.
+>
+> **Superseded, specifically:**
+>
+> - **The canvas is 1250×800, not 1000×1000.** Still exactly 1,000,000 pixels;
+>   the shape changed so the board sits in a landscape window without dead
+>   margin beside it. Migration `004_pixel_wall.sql` is where it moved.
+> - **There is no grid and no minimum.** A purchase is any free rectangle,
+>   exact to the pixel, priced at its area, from 1×1 at a dollar. The "10×10
+>   minimum" and everything that snapped to it are gone. The ten-pixel ruling
+>   survives only as a navigation aid the board is drawn with, and nothing
+>   snaps to it.
+> - **The board is not one bitmap per block.** It is one composite PNG of
+>   exactly the wall, versioned by its own sha256, plus a rectangle list with no
+>   content in it and one rectangle's words fetched on demand.
+> - **"Sold once, resold freely" is not a claim this project makes.** The
+>   opening paragraph here says a buyer "can resell" and the table below says
+>   "Transferable, sellable". **Whether a block can ever change hands is an
+>   OPEN DECISION**, recorded in `SECURITY.md` with both outcomes written out.
+>   Nothing is built either way, no page says either, and this banner is the
+>   correction rather than a second answer. The on-chain ground the spec
+>   describes — `AddBlocker`, an authority that cannot move an asset — is
+>   compatible with both futures, which is why it did not have to change.
+> - **A takedown does not put a rectangle back on sale.** `status = 'removed'`
+>   was retired by `006_takedown.sql`. A takedown hides content, or where the
+>   law requires it erases the bytes; ownership neither transfers nor lapses.
+>
+> Read on for the reasoning. Do not read on for the numbers.
+
 A Million Dollar Homepage on Solana. One 1000×1000 canvas, 1,000,000 pixels,
 sold once, in USDC, at a flat configurable price. Every purchased block is a
 Metaplex Core NFT the buyer owns and can resell. The image, link and caption of

@@ -1,5 +1,15 @@
 # Batch 1 — The Board and the Selector Implementation Plan
 
+> **HISTORICAL. This plan was executed, and the product has since moved past it.**
+> It is the record of what was planned and built in that batch, kept unrewritten
+> because a plan edited after the fact is no longer evidence of anything.
+>
+> **What in it is now false:** the board is 1250×800 rather than 1000×1000; there is no block grid, no `BLOCK_PIXELS` and no minimum purchase, so `snapRect`, `presetRect` and `rectIsValid` no longer work the way the code in here does; the three counters have become the offer line plus a count of the pixels remaining; and the seeded board was retired rather than reworded.
+>
+> The current design is `DESIGN.md`; what a buyer is sold and what is still
+> undecided is `SECURITY.md`. The spec this plan cites carries its own banner
+> saying the same thing.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A board you can open in a local browser: a 1000×1000 grid with seeded blocks on it, a selector you can click or drag to pick a rectangle that snaps to the 10-pixel grid, a red overlay when that rectangle hits something already sold, a live "N pixels · $X" total, and the three counters. No wallet, no payment, no mint, no image upload.
