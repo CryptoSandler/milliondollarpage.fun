@@ -1,4 +1,5 @@
 import { requireAdmin } from "../../../../../lib/admin-guard";
+import { purgeConfirmation } from "../../../../../lib/board/admin-client";
 import { hide, purge, unhide } from "../../../../../lib/board/takedown";
 import { NO_STORE, isUuid, json } from "../../../../../lib/http";
 
@@ -52,7 +53,8 @@ function badRequest(message: string): Response {
 }
 
 /**
- * What a purge demands in the body, and why it is here rather than in a dialog.
+ * What a purge demands in the body, and why it is enforced here rather than in
+ * a dialog.
  *
  * A browser confirm() is one `curl` away from not existing. This is the same
  * confirmation, enforced where it cannot be skipped: the operator has to type
@@ -62,10 +64,15 @@ function badRequest(message: string): Response {
  * Compared exactly, with no trimming and no case folding, against the id as it
  * appears in the URL. A confirmation that quietly accepts something other than
  * what it asked for is a confirmation that has started guessing at intent.
+ *
+ * `purgeConfirmation` itself moved to `src/lib/board/admin-client.ts` when the
+ * `/admin` page arrived (Task 4), because the page has to OFFER the string this
+ * route DEMANDS, and two literals in two files agree only until somebody edits
+ * one. That module is the one describing these endpoints that pulls in neither
+ * `pg` nor a node built-in, so both halves of the wire can import it — the same
+ * arrangement `BUYER_PUBKEY_HEADER` already has in `purchase-client.ts`. The
+ * check below is unchanged; only where the string is written down moved.
  */
-function purgeConfirmation(id: string): string {
-  return `PURGE ${id}`;
-}
 
 export async function POST(
   request: Request,
