@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
 import { prepareImage, type PreparedImage } from "../lib/board/image-encode";
+import { canHonourContain, type Box } from "../lib/board/image-fit";
 import { MAX_INPUT_BYTES, targetBox } from "../lib/board/image-plan";
 import { checkLink, normaliseLink } from "../lib/board/link";
 import { submitContent, type ClientOrder } from "../lib/board/purchase-client";
@@ -140,11 +141,55 @@ export default function ContentForm({
     [order.rect.w, order.rect.h],
   );
 
+  /**
+   * The picture's own shape, read off the thumbnail the form already draws.
+   *
+   * No second decode: the `<img>` below has to load the file anyway, and
+   * `naturalWidth` is what it loaded. Kept WITH the url it came from and
+   * compared against the current one, because a bare box in state would be
+   * the previous file's shape for the frame after a replacement — which on
+   * this field would mean answering the question below about a picture the
+   * buyer has already swapped out.
+   */
+  const [loaded, setLoaded] = useState<{ url: string; box: Box } | null>(null);
+  const sourceBox = loaded && loaded.url === previewUrl ? loaded.box : null;
+
+  /**
+   * Whether "Fit inside" is a fit this purchase can actually be given.
+   *
+   * TRUE UNTIL THE PICTURE IS KNOWN: with no file, or with one still
+   * decoding, there is no question to answer yet and the choice stays exactly
+   * as it has always been. `canHonourContain` is the board's own placement
+   * arithmetic (image-fit.ts) and the server asks it the same question of the
+   * bytes that arrive, so the option this form hides is the option that would
+   * have been refused.
+   *
+   * ponytail: this measures the picture the buyer PICKED and the server
+   * measures the bytes that were STORED. A `contain` encode keeps the
+   * source's shape to within the rounding of one stored pixel, and the
+   * answer depends on that shape alone, so the two can only disagree about a
+   * picture sitting on the boundary itself. There the server's answer
+   * governs and says so in its own sentence (`fit_impossible` in
+   * upload-errors.ts). Measuring the encoded bytes here instead would mean
+   * shrinking the image before the buyer has chosen the fit it is shrunk
+   * for.
+   */
+  const canFitInside =
+    sourceBox === null || canHonourContain(sourceBox, { width: order.rect.w, height: order.rect.h });
+
   useEffect(() => {
     return () => {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
   }, [previewUrl]);
+
+  // The picture is known and this rectangle cannot draw the bars: "Fit
+  // inside" is not one of the answers here, so the draft moves to the fit
+  // that will actually be drawn rather than carrying one the server is about
+  // to refuse. It runs once — after it, `draft.imageFit` is "cover".
+  useEffect(() => {
+    if (!canFitInside && draft.imageFit === "contain") onDraftChange({ imageFit: "cover" });
+  }, [canFitInside, draft.imageFit, onDraftChange]);
 
   // The caption is NOT in here. It is optional by the owner's decision: a
   // blank one is a valid answer, stored as NULL, and a block without one
@@ -327,7 +372,21 @@ export default function ContentForm({
           <span className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-hairline-strong bg-canvas-deep">
             {previewUrl ? (
               // eslint-disable-next-line @next/next/no-img-element -- a local blob: URL, not something next/image can optimize.
-              <img src={previewUrl} alt="" className="size-full" style={{ objectFit: draft.imageFit }} />
+              <img
+                src={previewUrl}
+                alt=""
+                className="size-full"
+                style={{ objectFit: draft.imageFit }}
+                onLoad={(event) =>
+                  setLoaded({
+                    url: previewUrl,
+                    box: {
+                      width: event.currentTarget.naturalWidth,
+                      height: event.currentTarget.naturalHeight,
+                    },
+                  })
+                }
+              />
             ) : (
               // The last thing in the product still set in --mute, and it is
               // aria-hidden decoration standing in for a thumbnail that has
@@ -445,20 +504,12 @@ export default function ContentForm({
         aria-describedby={messages.fields.imageFit ? `${fitId}-error` : undefined}
       >
         <legend className="text-[15px] font-bold text-ink">How the image fills the rectangle</legend>
-        <div className="mt-1.5 flex gap-2">
-          <FitOption
-            checked={draft.imageFit === "contain"}
-            onChange={() => edit({ imageFit: "contain" })}
-            label="Fit inside"
-            detail="may leave space"
-          />
-          <FitOption
-            checked={draft.imageFit === "cover"}
-            onChange={() => edit({ imageFit: "cover" })}
-            label="Fill completely"
-            detail="may crop edges"
-          />
-        </div>
+        <FitChoice
+          rect={order.rect}
+          fit={draft.imageFit}
+          canFitInside={canFitInside}
+          onChange={(imageFit) => edit({ imageFit })}
+        />
         <Permanence>Baked in with everything else the moment you pay.</Permanence>
         <FieldError id={`${fitId}-error`} message={messages.fields.imageFit} />
       </fieldset>
@@ -549,6 +600,61 @@ function FieldError({ id, message }: { id: string; message?: string }) {
     <p id={id} role="alert" className="mt-1.5 text-[14px] font-semibold text-danger">
       {message}
     </p>
+  );
+}
+
+/**
+ * The two ways an image can meet a rectangle — or, where only one of them can
+ * be drawn, the sentence saying which one it is.
+ *
+ * Exported so a guard can render both states from props alone: that the
+ * refused case offers no radio at all is a fact about the markup, and a test
+ * on the predicate behind it would pass while the control it is supposed to
+ * remove was still on screen.
+ *
+ * AN OPTION THAT CANNOT BE HONOURED IS NOT OFFERED, and the ones that can are
+ * untouched. Where the bars fit, this is the same pair of radios in the same
+ * order with the same words as before. Where they do not, there is no choice
+ * to make and nothing is dressed up as one — DESIGN.md: "a button that does
+ * nothing is broken". The buyer sees the result of the only fit there is on
+ * the next screen, drawn at the size the wall will draw it.
+ */
+export function FitChoice({
+  rect,
+  fit,
+  canFitInside,
+  onChange,
+}: {
+  rect: { w: number; h: number };
+  fit: ImageFit;
+  canFitInside: boolean;
+  onChange: (fit: ImageFit) => void;
+}) {
+  if (!canFitInside) {
+    return (
+      <p className="mt-1.5 text-[15px] leading-relaxed text-ink-soft">
+        <span className="font-bold text-ink">Fills the rectangle completely.</span> Fitting it
+        inside would leave a border thinner than one pixel on a {rect.w} × {rect.h} rectangle, so
+        that is the only fit here.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-1.5 flex gap-2">
+      <FitOption
+        checked={fit === "contain"}
+        onChange={() => onChange("contain")}
+        label="Fit inside"
+        detail="may leave space"
+      />
+      <FitOption
+        checked={fit === "cover"}
+        onChange={() => onChange("cover")}
+        label="Fill completely"
+        detail="may crop edges"
+      />
+    </div>
   );
 }
 
