@@ -69,6 +69,17 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
   const topBarRef = useRef<HTMLElement>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
   /**
+   * The board canvas, held here rather than inside BoardCanvas.
+   *
+   * Only one thing out here needs the node, and it needs it badly: when the
+   * purchase dialog closes, the Buy button that opened it is disabled — its
+   * selection has just been cleared — so the focus the platform tries to hand
+   * back has nowhere to land, and a keyboard user is dropped at the top of the
+   * page. The board is where the rectangle was and where they carry on, so it
+   * is the answer, and PurchaseDialog is handed this to fall back on.
+   */
+  const boardRef = useRef<HTMLCanvasElement>(null);
+  /**
    * The board's zoom, reachable from the panel.
    *
    * The viewport stays inside BoardCanvas — it is the only thing that knows
@@ -142,7 +153,10 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
     if (!selection) {
       return {
         canBuy: false,
-        hint: "Pick a size or drag the board to start.",
+        // Both ways in, because there are two now: a drag, and the arrow keys
+        // on a board that can take focus. A hint that names only the pointer
+        // is a hint that tells half the people reading it nothing.
+        hint: "Pick a size, or outline one on the board with a drag or the arrow keys.",
         tone: "info",
       };
     }
@@ -351,9 +365,12 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
         perPixel={board.pricePerPixelBaseUnits}
         chrome={chrome}
         zoomControlsRef={zoomControlsRef}
+        boardRef={boardRef}
         onSelectionChange={setSelection}
         onHoverChange={handleHover}
         onZoomStateChange={handleZoomStateChange}
+        onActivate={handleBuy}
+        activateHint={buyState.hint}
       />
 
       <header ref={topBarRef} className="board-bar board-bar--top">
@@ -396,6 +413,15 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
               type="text"
               value={buyerPubkey}
               onChange={(event) => setBuyerPubkey(event.target.value)}
+              // The one field on the page that is not inside a form, so
+              // nothing would otherwise happen when a buyer finishes pasting
+              // an address and presses the key that means "done". `handleBuy`
+              // refuses on its own if the rectangle is not buyable yet.
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") return;
+                event.preventDefault();
+                handleBuy();
+              }}
               aria-label="Wallet address"
               title="Where the block will be minted. A connected wallet replaces this field later."
               disabled={purchaseSelection !== null}
@@ -471,6 +497,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           onPurchased={handlePurchased}
           onRefresh={refreshBoard}
           onGateChange={setDialogBlocksRefresh}
+          returnFocusRef={boardRef}
         />
       )}
     </div>

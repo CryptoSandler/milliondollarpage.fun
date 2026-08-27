@@ -1,14 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent, RefObject } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, RefObject } from "react";
 import { blockImageUrl } from "../lib/board/block-image";
 import type { LiveBlock } from "../lib/board/blocks";
-import { BLOCK_PIXELS, BOARD_PIXELS, rectContains, type Point } from "../lib/board/geometry";
+import { BLOCK_PIXELS, BOARD_PIXELS, rectContains, type Point, type Rect } from "../lib/board/geometry";
 import { placeImage } from "../lib/board/image-fit";
+import { describeCursor, keyToCommand, nextCursor } from "../lib/board/keyboard-cursor";
 import { formatUsdc } from "../lib/board/pricing";
 import {
   type Selection,
+  describeSelection,
   presetSelectionForMove,
   selectionFromDrag,
   selectionFromPreset,
@@ -21,6 +23,7 @@ import {
   canPan,
   clampToFit,
   fitScale,
+  freeRegion,
   initialViewport,
   isTap,
   nextZoomScale,
@@ -181,6 +184,33 @@ const ANTS_INTERVAL_MS = 50;
 const ANTS_DASH = 6;
 
 /**
+ * How long the cursor has to sit still before it is read out.
+ *
+ * A held arrow key repeats about thirty times a second, and a live region
+ * wired straight to it would read thirty rectangles nobody asked about. This
+ * is the pause that turns a run of key presses into one sentence about where
+ * the cursor came to rest. Short enough that a single press still feels
+ * immediate; long enough that key repeat says nothing until it stops.
+ */
+const MIRROR_SETTLE_MS = 350;
+
+/** How much board is kept beside the cursor when the view has to follow it. */
+const CURSOR_MARGIN_PX = 8;
+
+/**
+ * How far a span has to move, in screen pixels, to sit inside a window.
+ *
+ * The leading edge wins when the span is larger than the window: a cursor
+ * wider than the free region shows its top-left corner, which is the corner
+ * every rectangle on this board is anchored by.
+ */
+function overhang(low: number, high: number, min: number, max: number): number {
+  if (low < min) return low - min;
+  if (high > max) return high - max;
+  return 0;
+}
+
+/**
  * The board's zoom, driven from outside the canvas.
  *
  * The panel's +, - and Fit press these. The viewport itself stays here — the
@@ -215,10 +245,37 @@ type Props = {
   chrome: Chrome;
   /** Filled in with the three zoom commands while this canvas is mounted, and emptied when it is not. */
   zoomControlsRef: RefObject<ZoomControls | null>;
+  /**
+   * The canvas element itself, held by BoardView.
+   *
+   * It is the parent's rather than this component's because the board is where
+   * focus has to come back to when the purchase dialog closes — the Buy button
+   * that opened it is disabled by then, and a keyboard user would otherwise be
+   * dropped at the top of the page. Nothing else about the node crosses this
+   * boundary: everything that reads it still reads it in here.
+   */
+  boardRef: RefObject<HTMLCanvasElement | null>;
   onSelectionChange: (selection: Selection | null) => void;
   onHoverChange: (block: LiveBlock | null, at: Point | null) => void;
   /** Reports which ends of the ladder still have a rung, so the buttons can be disabled at the ends. */
   onZoomStateChange: (state: ZoomState) => void;
+  /**
+   * Enter on the board: the same primary action the Buy button carries.
+   *
+   * BoardView passes its own Buy handler, which already refuses when the
+   * rectangle cannot be bought — so there is one decision about whether a
+   * purchase may start, not a keyboard copy of it that could disagree.
+   */
+  onActivate: () => void;
+  /**
+   * The sentence already printed under the Buy button, for the live mirror.
+   *
+   * Passed in rather than written again here: it is the only place that knows
+   * about the wallet field, and two wordings of "why can you not buy this"
+   * would drift until the one a screen reader hears is the one nobody was
+   * reading when they wrote it.
+   */
+  activateHint: string;
 };
 
 type Drag =
@@ -234,11 +291,26 @@ export default function BoardCanvas({
   perPixel,
   chrome,
   zoomControlsRef,
+  boardRef,
   onSelectionChange,
   onHoverChange,
   onZoomStateChange,
+  onActivate,
+  activateHint,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Two refs, one node. Everything in this file reads `canvasRef`, and
+  // BoardView is handed the same node through `boardRef` so it has somewhere
+  // to send focus when the purchase dialog closes. Memoised so React is not
+  // detaching and reattaching the ref on every draw.
+  const attachCanvas = useCallback(
+    (node: HTMLCanvasElement | null) => {
+      canvasRef.current = node;
+      boardRef.current = node;
+    },
+    [boardRef],
+  );
+  const helpId = useId();
   // The canvas has no size before layout runs, so this starts from the
   // function's zero-screen answer and gets re-fit once the ResizeObserver
   // below reports the real size.
@@ -247,6 +319,18 @@ export default function BoardCanvas({
   );
   const [resizeTick, setResizeTick] = useState(0);
   const [ants, setAnts] = useState(0);
+  /**
+   * Whether the board is showing a KEYBOARD focus ring.
+   *
+   * `:focus-visible` decides, not the focus itself, because a click on the
+   * board already says where it went. The CSS pseudo-class cannot draw this
+   * one — the canvas element is the whole viewport, so an outline on it lands
+   * outside the window entirely — so the ring is painted with the rest of the
+   * board and this is the flag that turns it on.
+   */
+  const [focusRing, setFocusRing] = useState(false);
+  /** The cursor, in words, for the live region under the canvas. */
+  const [mirror, setMirror] = useState("");
   // Kept here as well as reported upwards, because the lift is painted on the
   // board and a hover must not depend on a round trip through the parent.
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -373,9 +457,17 @@ export default function BoardCanvas({
 
   // Continuous motion, and the only continuous motion on the page: a drag in
   // progress is the one thing that genuinely differs from a thing at rest.
+  //
+  // AND IT IS THE ONE PIECE OF MOTION THE STYLESHEET CANNOT REACH. globals.css
+  // stops every animation and transition under prefers-reduced-motion, but
+  // these ants are an interval redrawing a canvas, so the media query has to be
+  // asked here instead. Asked in an effect rather than at render, so the server
+  // and the first client paint agree; the dashes still draw, they simply stop
+  // marching.
   const hasSelection = selection !== null;
   useEffect(() => {
     if (!hasSelection) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const interval = setInterval(() => setAnts((a) => (a + 1) % (ANTS_DASH * 2)), ANTS_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [hasSelection]);
@@ -639,7 +731,59 @@ export default function BoardCanvas({
         family,
       );
     }
-  }, [blocks, ownHoldIds, selection, viewport, resizeTick, ants, hoveredId, chrome.top, imagesLoaded]);
+
+    /*
+     * THE BOARD'S OWN FOCUS RING, painted rather than outlined.
+     *
+     * `:focus-visible` puts a 2px terracotta outline on every other control on
+     * the page and it cannot put one here: this canvas IS the viewport, so an
+     * outline at a 2px offset is drawn two pixels outside the window and
+     * nobody ever sees it. So the ring goes on with the rest of the board.
+     *
+     * It hugs the sheet's edge, which is what a focused board should look
+     * focused around — and it is clamped into the free region, so a board
+     * zoomed in far enough for its own edges to be off screen still shows a
+     * ring, at the boundary of the space the board is allowed to use.
+     *
+     * Three tones, in the same order and for the same reason as the selection
+     * outline: cream, then ink, then terracotta. At the bottom rung the ring
+     * lands on the cream wall and the accent alone would do (4.32:1 against
+     * --canvas, WCAG 1.4.11's 3:1 with room), but zoomed in it lands on
+     * whatever somebody uploaded, and no single colour survives arbitrary
+     * artwork. The sandwich does.
+     */
+    if (focusRing) {
+      const free = freeRegion(screen, chrome);
+      const left = Math.max(free.x + 2, origin.x - 3);
+      const top = Math.max(free.y + 2, origin.y - 3);
+      const right = Math.min(free.x + free.width - 2, origin.x + span + 3);
+      const bottom = Math.min(free.y + free.height - 2, origin.y + span + 3);
+      if (right > left && bottom > top) {
+        const w = right - left;
+        const h = bottom - top;
+        context.strokeStyle = PAINT.cream;
+        context.lineWidth = 1;
+        context.strokeRect(left - 2.5, top - 2.5, w + 5, h + 5);
+        context.strokeStyle = PAINT.soldEdge;
+        context.lineWidth = 4;
+        context.strokeRect(left, top, w, h);
+        context.strokeStyle = PAINT.selection;
+        context.lineWidth = 2;
+        context.strokeRect(left, top, w, h);
+      }
+    }
+  }, [
+    blocks,
+    ownHoldIds,
+    selection,
+    viewport,
+    resizeTick,
+    ants,
+    hoveredId,
+    chrome,
+    imagesLoaded,
+    focusRing,
+  ]);
 
   function pointerBoard(event: ReactPointerEvent<HTMLCanvasElement>): Point {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -911,19 +1055,156 @@ export default function BoardCanvas({
     return () => window.removeEventListener("keydown", onKey);
   }, [publish]);
 
+  /**
+   * Brings the cursor back into view after a key press moved it out of one.
+   *
+   * It pans and it never zooms, and it obeys the same rule a drag does: above
+   * the fit rung there is somewhere for the board to go, and at the fit rung
+   * the whole board is already on screen so the cursor cannot be off it and
+   * `canPan` refuses. `clampToFit` then has the last word, exactly as it does
+   * for a mouse, so nothing here can push the artwork somewhere a drag could
+   * not have.
+   */
+  const revealCursor = useCallback((rect: Rect) => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const screen = { width: el.clientWidth, height: el.clientHeight };
+    const board = { width: BOARD_PIXELS, height: BOARD_PIXELS };
+    const chromeNow = chromeRef.current;
+    setViewport((v) => {
+      if (!canPan(v.scale, fitScale(screen, chromeNow, board))) return v;
+      const free = freeRegion(screen, chromeNow);
+      const near = boardToScreen(v, screen, { x: rect.x, y: rect.y });
+      const far = boardToScreen(v, screen, { x: rect.x + rect.w, y: rect.y + rect.h });
+      const dx = overhang(
+        near.x - CURSOR_MARGIN_PX,
+        far.x + CURSOR_MARGIN_PX,
+        free.x,
+        free.x + free.width,
+      );
+      const dy = overhang(
+        near.y - CURSOR_MARGIN_PX,
+        far.y + CURSOR_MARGIN_PX,
+        free.y,
+        free.y + free.height,
+      );
+      if (dx === 0 && dy === 0) return v;
+      return clampToFit(panBy(v, dx / v.scale, dy / v.scale), screen, chromeNow, board);
+    });
+  }, []);
+
+  /**
+   * THE ONLY WAY TO SELECT A RECTANGLE WITHOUT A POINTER.
+   *
+   * Arrows move the cursor one block, shift moves it ten — one coarse rule of
+   * the graph paper — and alt turns the same arrows into a resize from the
+   * rectangle's top-left anchor. Enter is the primary action, which is the Buy
+   * button's, and Escape clears. Which key means what is `keyToCommand`'s
+   * decision and where the rectangle lands is `nextCursor`'s; both are pure and
+   * both are tested, and both build every rectangle out of the same `snapRect`
+   * and `presetRect` a drag and a click use. There is one geometry on this
+   * board and this is not a second one.
+   *
+   * A modified key that the browser owns is left alone: ctrl and meta are how
+   * a page is zoomed, a tab is closed and a bookmark is opened, and no board
+   * gets to take those. Everything this DOES claim is prevented, which is also
+   * what stops alt-arrow from walking Chrome's history back on Windows.
+   */
+  function onKeyDown(event: ReactKeyboardEvent<HTMLCanvasElement>) {
+    if (event.ctrlKey || event.metaKey) return;
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      onActivate();
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      publish(null);
+      return;
+    }
+
+    const command = keyToCommand(event.key, event);
+    if (!command) return;
+    event.preventDefault();
+    setFocusRing(true);
+    // A preset that has been arrowed is a preset that has been PUT DOWN: the
+    // preview must not be picked back up by the next stray mouse move.
+    presetPlaced.current = true;
+    const rect = nextCursor(selection?.rect ?? null, command, activePreset);
+    publish(describeSelection(rect, blocks, perPixel));
+    revealCursor(rect);
+  }
+
+  /**
+   * The cursor's live text mirror, settled before it speaks.
+   *
+   * A canvas exposes nothing of what it has drawn, so without this a screen
+   * reader can be told that the board has focus and nothing whatsoever about
+   * the million pixels on it. Polite, always: this is a readout of where the
+   * user has just put their own cursor, and a readout that interrupts is the
+   * definition of a rude one.
+   *
+   * Only while the board holds keyboard focus. A drag reaches the same
+   * `selection`, and narrating somebody's mouse back to them is noise.
+   */
+  useEffect(() => {
+    if (!focusRing) return;
+    const timer = setTimeout(
+      () => setMirror(describeCursor(selection, blocks, activateHint)),
+      MIRROR_SETTLE_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [focusRing, selection, blocks, activateHint]);
+
   return (
-    <canvas
-      ref={canvasRef}
-      className="board-canvas"
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerCancel}
-      onPointerLeave={() => {
-        setHoveredId(null);
-        onHoverChange(null, null);
-      }}
-    />
+    <>
+      <canvas
+        ref={attachCanvas}
+        className="board-canvas"
+        /*
+         * A canvas is not focusable, has no role and hears no keys unless it
+         * is told to. Without these three attributes there is no keyboard path
+         * to a selection at all, and Buy can never be enabled without a mouse.
+         *
+         * `application` rather than `img` or nothing: it is the role that tells
+         * a screen reader to stop intercepting the arrow keys for its own
+         * browse mode and hand them to the page, which is the whole point.
+         * What that costs is the reading a canvas cannot give anyway, and the
+         * live region below pays it back in words.
+         */
+        tabIndex={0}
+        role="application"
+        aria-label="Pixel board, 1000 by 1000"
+        aria-describedby={helpId}
+        onKeyDown={onKeyDown}
+        onFocus={(event) => setFocusRing(event.currentTarget.matches(":focus-visible"))}
+        onBlur={() => {
+          setFocusRing(false);
+          // Emptied here rather than in the effect that fills it: a live
+          // region that still holds a sentence is a live region that reads it
+          // again the next time anything near it moves.
+          setMirror("");
+        }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
+        onPointerLeave={() => {
+          setHoveredId(null);
+          onHoverChange(null, null);
+        }}
+      />
+      <p id={helpId} className="sr-only">
+        Arrow keys move the selection one block. Hold shift to move ten blocks at a time. Hold alt
+        with an arrow key to resize it from its top-left corner. Enter buys the selected pixels.
+        Escape clears the selection.
+      </p>
+      <p className="sr-only" role="status" aria-live="polite">
+        {mirror}
+      </p>
+    </>
   );
 }
 

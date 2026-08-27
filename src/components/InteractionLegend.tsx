@@ -23,6 +23,18 @@ export default function InteractionLegend() {
         <span className="font-semibold text-body">shift-drag</span> to move once zoomed in ·{" "}
         <span className="font-semibold text-body">esc</span> to clear
       </p>
+      {/* The third line, and it belongs beside the other two rather than in a
+          help panel: the board takes focus, so there is a way through this
+          product without a pointer, and a way nobody is told about is a way
+          nobody uses. The screen-reader wording of the same keys lives on the
+          canvas itself, where focus lands. */}
+      <p>
+        <span className="font-semibold text-body">Tab</span> to the board ·{" "}
+        <span className="font-semibold text-body">arrows</span> to move a block ·{" "}
+        <span className="font-semibold text-body">shift</span> for ten ·{" "}
+        <span className="font-semibold text-body">alt-arrows</span> to resize ·{" "}
+        <span className="font-semibold text-body">enter</span> to buy
+      </p>
     </div>
   );
 }

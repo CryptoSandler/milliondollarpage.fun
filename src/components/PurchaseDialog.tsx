@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import type { RefObject } from "react";
 import { formatUsdc } from "../lib/board/pricing";
 import {
   confirmOrder,
@@ -110,6 +111,7 @@ export default function PurchaseDialog({
   onPurchased,
   onRefresh,
   onGateChange,
+  returnFocusRef,
 }: {
   selection: Selection;
   buyerPubkey: string;
@@ -125,6 +127,8 @@ export default function PurchaseDialog({
   onRefresh: () => void;
   /** Tell BoardView whether its background poll should skip a refresh right now: true from the moment content is on screen (describing/confirming/paying/done) until either a fatal message appears or this dialog unmounts. */
   onGateChange: (blocked: boolean) => void;
+  /** Where focus goes if the control that opened this dialog cannot take it back — see the mount effect. */
+  returnFocusRef: RefObject<HTMLElement | null>;
 }) {
   // Snapshotted at open time: the order this dialog holds belongs to this
   // exact address for its whole life. If the buyer edits the wallet field
@@ -132,6 +136,10 @@ export default function PurchaseDialog({
   // address the hold was created with, or attachContent/markPaid would see a
   // mismatch and answer 403 "not yours" against their own hold.
   const [ownerPubkey] = useState(buyerPubkey);
+
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
 
   const [step, setStep] = useState<Step>("holding");
   const [order, setOrder] = useState<ClientOrder | null>(null);
@@ -345,13 +353,56 @@ export default function PurchaseDialog({
     return () => onGateChange(false);
   }, [step, fatalMessage, onGateChange]);
 
+  /**
+   * OPENED AS A REAL MODAL, because the platform already owns this problem.
+   *
+   * `showModal` is four things this dialog would otherwise have had to build:
+   * focus starts inside, Tab cannot leave, everything behind it goes inert to
+   * a pointer and to assistive technology alike, and closing hands focus back
+   * to whatever opened it. A hand-rolled focus trap is a list of focusable
+   * selectors that goes stale the first time somebody adds a control — see
+   * CLAUDE.md's fourth rung, a native platform feature over app code — and the
+   * brief forbids a library for it anyway.
+   *
+   * Focus is then moved off the close button, which is what the spec would
+   * otherwise pick as the first focusable thing in here. A dialog that opens
+   * by announcing "Close" tells a buyer the least useful sentence available;
+   * the card itself is what carries the heading, the rectangle and the price.
+   */
   useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") void requestClose();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [requestClose]);
+    const el = dialogRef.current;
+    if (!el) return;
+    const opener = document.activeElement;
+    // Read at mount, not at cleanup: the board outlives this dialog, so the
+    // node is the same one either way, and reading a ref in a cleanup is the
+    // shape that goes stale in general even where it does not here.
+    const fallback = returnFocusRef.current;
+    el.showModal();
+    cardRef.current?.focus();
+    return () => {
+      el.close();
+      /*
+       * The one half of this the platform cannot finish.
+       *
+       * `close()` is supposed to hand focus back to whatever opened the
+       * dialog, and here it never gets the chance twice over: React has
+       * already detached this element by the time an effect cleanup runs, and
+       * the Buy button that opened it is disabled in the same commit, its
+       * selection having just been cleared. Focus would land on the document
+       * and a keyboard user would be back at the top of the page with the
+       * board unreachable except by tabbing round it.
+       *
+       * So the opener is taken back if it can still hold focus, and the board
+       * is the fallback if it cannot: the board is what the buyer was working
+       * on and what they carry on with, and it is never disabled.
+       */
+      const back =
+        opener instanceof HTMLElement && opener.isConnected && !opener.matches(":disabled")
+          ? opener
+          : fallback;
+      back?.focus();
+    };
+  }, [returnFocusRef]);
 
   const handleExpired = useCallback(() => {
     if (order) onHoldEnded(order.id);
@@ -453,17 +504,52 @@ export default function PurchaseDialog({
   const total = order?.totalBaseUnits ?? selection.totalBaseUnits;
   const showTimer = order !== null && fatalMessage === null && step !== "done";
 
+  /**
+   * The reservation, said out loud the moment it exists — and POLITELY.
+   *
+   * A hold arriving is the answer to a button the buyer pressed on purpose. It
+   * confirms what they are already doing rather than contradicting it, so it
+   * waits its turn; assertive here would cut across the form they are being
+   * read. The two refusals that DO contradict — an expired hold and a
+   * rectangle somebody else took — are `role="alert"` further down, because
+   * those invalidate everything the buyer is in the middle of.
+   *
+   * Empty at mount and empty in every screen that has its own announcement, so
+   * the region only ever changes when the reservation state does.
+   */
+  const reservationSaid =
+    fatalMessage !== null || stalled !== null || order === null || step === "done"
+      ? ""
+      : resumed
+        ? "Carrying on with the hold you already had on these pixels. The clock has been running since you first pressed Buy."
+        : "These pixels are held for you for thirty minutes. Nobody else can buy them while this is open.";
+
   return (
-    <div
+    <dialog
+      ref={dialogRef}
       className="dialog-scrim"
+      aria-labelledby={titleId}
+      // Escape reaches a native dialog as `cancel`, and it is cancelled here so
+      // the same confirmation a buyer gets from the × runs first: closing may
+      // throw a hold away, and Escape must not be the one route that does it
+      // without asking.
+      onCancel={(event) => {
+        event.preventDefault();
+        void requestClose();
+      }}
       onClick={(event) => {
         if (event.target === event.currentTarget) void requestClose();
       }}
     >
-      <div className="dialog-card p-6" role="dialog" aria-modal="true" aria-label="Buy these pixels">
+      <div className="dialog-card p-6" ref={cardRef} tabIndex={-1}>
+        <p className="sr-only" role="status">
+          {reservationSaid}
+        </p>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <h2 className="font-display text-[21px] font-bold">Buy this block</h2>
+            <h2 id={titleId} className="font-display text-[21px] font-bold">
+              Buy this block
+            </h2>
             <p className="tabular mt-0.5 truncate text-[15px] text-body">
               {rect.w} × {rect.h} at ({rect.x}, {rect.y}) · {pixels.toLocaleString("en-US")} pixels
             </p>
@@ -515,7 +601,14 @@ export default function PurchaseDialog({
             <h3 className="font-display text-[17px] font-semibold text-ink">
               No answer from the server yet
             </h3>
-            <p className="rounded-xl border border-hairline-strong bg-card-warm px-4 py-3 text-[15px] leading-relaxed text-ink-soft">
+            {/* POLITE, and the styling says why: a ceiling is a wait rather
+                than a refusal. Nothing the buyer believes has been proved
+                wrong yet — the hold may well be standing — so this queues
+                behind whatever they are being read instead of cutting it off. */}
+            <p
+              role="status"
+              className="rounded-xl border border-hairline-strong bg-card-warm px-4 py-3 text-[15px] leading-relaxed text-ink-soft"
+            >
               {STALLED_MESSAGE[stalled]}
             </p>
             <div className="flex items-center justify-end gap-3">
@@ -544,7 +637,14 @@ export default function PurchaseDialog({
             >
               {releasable.length > 0 ? "You are already holding these" : "This purchase stopped here"}
             </h3>
+            {/* ASSERTIVE. This is the hold that expired, the rectangle
+                somebody else took, the order that stopped being ours — every
+                one of them invalidates the purchase the buyer is in the middle
+                of, and there is nothing after it worth hearing first. It is
+                the only kind of sentence in this product that gets to
+                interrupt. */}
             <p
+              role="alert"
               className={`rounded-xl px-4 py-3 text-[15px] leading-relaxed text-ink-soft ${
                 releasable.length > 0
                   ? "border border-hairline-strong bg-card-warm"
@@ -555,7 +655,10 @@ export default function PurchaseDialog({
             </p>
 
             {releaseError && (
-              <p className="rounded-lg border border-danger-line bg-danger-soft px-3 py-2 text-[15px] text-ink-soft">
+              <p
+                role="alert"
+                className="rounded-lg border border-danger-line bg-danger-soft px-3 py-2 text-[15px] text-ink-soft"
+              >
                 {releaseError}
               </p>
             )}
@@ -631,7 +734,12 @@ export default function PurchaseDialog({
             />
           </>
         ) : step === "done" && order ? (
-          <div className="mt-4 flex flex-col gap-4">
+          // POLITE, and it is the receipt itself rather than a second copy of
+          // it in a hidden region: the payment landing is the answer to a
+          // button pressed on purpose, so it waits its turn — and what it then
+          // reads is the amount, the rectangle and the address, which is
+          // exactly what a buyer wants confirmed at that moment.
+          <div role="status" className="mt-4 flex flex-col gap-4">
             <h3 className="font-display text-[17px] font-semibold text-ink">
               Done — {pixels.toLocaleString("en-US")} pixels are yours
             </h3>
@@ -650,7 +758,7 @@ export default function PurchaseDialog({
           </div>
         ) : null}
       </div>
-    </div>
+    </dialog>
   );
 }
 

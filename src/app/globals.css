@@ -302,10 +302,51 @@ h3 {
     border-radius: var(--radius-pill);
   }
 
+  /*
+   * ONE FOCUS RING, ON EVERY SURFACE, AND IT IS MEASURED.
+   *
+   * 2px of --primary at a 2px offset, so the ring sits on the surface BEHIND
+   * the control rather than on the control's own fill — which is what makes
+   * "3:1 against each background it appears against" a question with four
+   * answers rather than one per button. Measured against those four:
+   * 4.32:1 on --canvas, 4.92:1 on --card, 4.64:1 on --card-warm, 3.81:1 on
+   * --canvas-deep. WCAG 1.4.11 asks 3:1.
+   *
+   * Two focusable things cannot use it, and both are handled rather than left
+   * out. A control hidden behind `.sr-only` — the file input under the
+   * dropzone, the two fit radios — is a one-pixel box, so the ring goes on the
+   * visible thing that stands for it (see below). And the board is a canvas
+   * the size of the whole viewport, so an outline at a 2px offset is drawn
+   * two pixels outside the window; that ring is painted into the canvas by
+   * BoardCanvas instead.
+   */
   :focus-visible {
     outline: 2px solid var(--primary);
     outline-offset: 2px;
     border-radius: var(--radius-xs);
+  }
+
+  /*
+   * The ring for a control whose real input is `.sr-only`.
+   *
+   * The dropzone is a label and a 1px file input beside it; each fit option is
+   * a label wrapped round a 1px radio. Focus lands on the input either way, and
+   * an outline on a clipped one-pixel box is a focus indicator nobody can see —
+   * which is exactly the failure this pass exists to find. `:has()` puts the
+   * ring on the box that is actually on screen, so the same 2px of --primary
+   * appears in the same place it does everywhere else.
+   *
+   * A ring on either of these must not FADE IN, which is why neither box
+   * carries Tailwind's `transition-colors` any more: that utility animates
+   * `outline-color` along with the rest, and a ring spending 160ms on its way
+   * from nothing to --primary spends 160ms measuring under 3:1. Caught from
+   * pixels — the stylesheet said 2px of --primary the whole time, and the
+   * screenshot said #d78f73.
+   */
+  .focus-proxy:has(input:focus-visible),
+  .focus-proxy:has(+ input:focus-visible) {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
   }
 
   .board-shell {
@@ -544,10 +585,27 @@ h3 {
     color: var(--body);
   }
 
+  /*
+   * A FIELD TAKES THE SAME RING AS EVERYTHING ELSE.
+   *
+   * This rule used to be `outline: none` plus a 3px --primary-soft glow, and
+   * `.field-input:focus` outranks the bare `:focus-visible` above, so every
+   * text field on the page quietly opted out of the one focus indicator the
+   * product has. What replaced it measured 1.11:1 against --card-warm and
+   * 1.14:1 against --card: a glow that is not there.
+   *
+   * The border still turns --primary, because that is the field saying it is
+   * the one being typed into; the ring is what says the keyboard is there, and
+   * it is the same 2px at the same offset as a button's, so there is one focus
+   * treatment in this product rather than two.
+   */
   .field-input:focus {
     border-color: var(--primary);
-    box-shadow: 0 0 0 3px var(--primary-soft);
-    outline: none;
+  }
+
+  .field-input:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
   }
 
   .field-input:disabled {
@@ -555,6 +613,20 @@ h3 {
     cursor: not-allowed;
   }
 
+  /*
+   * The scrim is a real `<dialog>` now, opened with `showModal()`.
+   *
+   * That is where the focus trap comes from: focus starts inside, Tab cannot
+   * leave, the board behind it goes inert, and closing hands focus back to the
+   * Buy button that opened it — all of it the platform's, none of it a
+   * hand-written list of focusable selectors that goes stale.
+   *
+   * The block below is the cost: a dialog arrives with a UA border, a fill, a
+   * width and a height of its own, and `margin: auto` centring it. Every one
+   * of those is reset so the element lays out exactly as the div it replaced.
+   * Its `::backdrop` goes transparent because the scrim is painted here, on
+   * the element itself, where the click-outside handler can see it.
+   */
   .dialog-scrim {
     position: fixed;
     inset: 0;
@@ -563,8 +635,30 @@ h3 {
     align-items: center;
     justify-content: center;
     padding: 16px;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    margin: 0;
+    border: none;
+    color: var(--ink);
     background: rgba(43, 36, 28, 0.42);
     animation: scrim-in var(--dur-enter) var(--ease);
+  }
+
+  .dialog-scrim:not([open]) {
+    display: none;
+  }
+
+  .dialog-scrim::backdrop {
+    background: transparent;
+  }
+
+  /* Focus starts on the card so the dialog is announced by its heading rather
+     than by its close button, and the card is not a control — so it takes no
+     ring. The controls inside it all take the standard one. */
+  .dialog-card:focus {
+    outline: none;
   }
 
   .dialog-card {
