@@ -104,6 +104,20 @@ can hold tens of thousands of purchases. What the page fetches now is:
 - **one rectangle's caption and link**, fetched when a pointer or the keyboard
   cursor comes to rest on it. Nobody reads ten thousand captions.
 
+**The wall is the overview. Above the ruling's zoom, the artwork is drawn
+from the buyer's own bitmap instead.** The composite is one image pixel per
+wall pixel, which is exactly what makes it one request for the whole board —
+and it is also why zooming past 1:1 was enlarging an overview of detail we
+already hold: a purchase stores four image pixels for every pixel bought.
+So above the zoom where the ruling comes back — one wall pixel to about eight
+screen pixels, which is the same threshold, deliberately — the rectangles
+actually on screen are redrawn from their own stored bytes over the composite.
+Few rectangles are visible at that zoom, the image route already exists and is
+cached for a year by its own URL, and everything not redrawn keeps the
+composite's pixels, which are not wrong: they are the overview. Nearest
+neighbour still governs every scale, and the bars a `contain` fit leaves are
+the sheet's own cream on this path exactly as they are on the server's.
+
 **Holds are not in the wall.** A hold appears and expires within half an hour,
 and baking one in would rebuild the whole bitmap twice for every abandoned
 purchase. The canvas draws holds from the rectangle list, which is where
@@ -409,7 +423,7 @@ in the same order.
 | Selecting | Terracotta outline with marching ants, so a drag never looks like a placed block |
 | Refused | The offending block outlined in danger, the selection outlined in danger, Buy disabled |
 | Held | **Its own value, not a variation on the sale's, and drawn by the canvas rather than baked into the wall.** Opaque like a sale, because those pixels are genuinely not for sale right now — but in the coarse rule's own tone (`#c9baa0`), plainly lighter than a sale's artwork-or-near-black and plainly heavier than the paper, so the two are told apart at a glance and not by inspection. Over it, an **ink** hatch at 45° — the one angle neither tier of the graph paper uses — and a broken ink edge where a sale carries an unbroken one. Pencilled in on card, not inked. Wherever the block is big enough to read one it carries its own chip, **On hold**, in the place a sold block puts its caption. A hold **you** started adds the terracotta ring, because it is still your selection and the only held rectangle you can act on. The countdown stays live in the control it gates. A hold never shows an upload: those pixels are unpaid and may never be bought, the wall composes `paid` and `minted` alone and the image route serves the same two, so there is nothing public to draw and the whole rectangle is free for a treatment of its own |
-| Sold | **The buyer's bitmap, in the wall, nearest-neighbour at every zoom**, with a 1px ink edge wherever there is room for one. The artwork is the treatment — this is the whole product, and the block is the frame. The bitmap is composed into the wall at the size the rectangle was bought at: enlarged into it with nearest neighbour so pixel art stays hard-edged, reduced into it with a real filter so a photograph stays the photograph the buyer approved in the preview |
+| Sold | **The buyer's bitmap, nearest-neighbour at every zoom** — out of the wall at the overview, and out of its own stored bytes once the zoom is close enough for the ruling — with a 1px ink edge wherever there is room for one. The artwork is the treatment — this is the whole product, and the block is the frame. The bitmap is composed into the wall at the size the rectangle was bought at: enlarged into it with nearest neighbour so pixel art stays hard-edged, reduced into it with a real filter so a photograph stays the photograph the buyer approved in the preview |
 | Sold, loading or missing | Solid `#443a2c`, edge to edge, 1px ink edge. This is the **fallback**, not the sold treatment: what the rectangle shows in the moment before the wall arrives, and what it keeps if its own bytes never decode. Every sold rectangle gets it under the wall on every frame until the wall has decoded, so a sale reads as taken from the first paint; after that the artwork covers it. An upload with an alpha channel is composited onto the paper cream inside its own rectangle rather than onto this, and never onto the ruling — a sold rectangle is never ruled |
 | Taken down | Exactly like free, and it is **not** free. The content is gone from the wall and from every endpoint; the rectangle is still sold, still its owner's, and the selector still refuses it. Nothing on the board says a takedown happened, because a takedown is about what is displayed and the board is not a moderation log |
 

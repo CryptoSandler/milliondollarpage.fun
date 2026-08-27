@@ -2,8 +2,11 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, RefObject } from "react";
+import { blockImageUrl } from "../lib/board/block-image";
 import type { BlockDetails, BoardRect } from "../lib/board/blocks";
 import type { Wall } from "../lib/board/composite";
+import { DETAIL_MIN_SCALE, detailRects, wantsDetail } from "../lib/board/detail";
+import { placeImage } from "../lib/board/image-fit";
 import {
   BOARD_HEIGHT,
   BOARD_WIDTH,
@@ -202,8 +205,12 @@ const CHIP_HEIGHT = 18;
  *
  * Both tiers arrive together. Below this there is nothing to navigate BY; above
  * it the fine tier gives the eye a step and the coarse one gives it a landmark.
+ *
+ * It is `DETAIL_MIN_SCALE`, and that is the same number rather than a
+ * coincidence: the zoom at which a single wall pixel is worth counting is the
+ * zoom at which a single wall pixel is worth drawing properly. See detail.ts.
  */
-const RULE_VISIBLE_SCALE = 8;
+const RULE_VISIBLE_SCALE = DETAIL_MIN_SCALE;
 
 /**
  * How many screen pixels wide a sold rectangle has to be before it is given
@@ -217,6 +224,17 @@ const RULE_VISIBLE_SCALE = 8;
  * zooming in is what separates them.
  */
 const SOLD_EDGE_MIN_PX = 4;
+
+/**
+ * How many decoded detail bitmaps may be held before the ones nobody is
+ * looking at are dropped.
+ *
+ * Twice `DETAIL_MAX_RECTS` and a little: enough that a slow pan back and forth
+ * across the same neighbourhood keeps hitting the cache, small enough that a
+ * long session at high zoom cannot accumulate a decoded bitmap for every
+ * purchase it has ever passed over.
+ */
+const DETAIL_CACHE_MAX = 64;
 
 // The held hatch, in SCREEN pixels rather than board pixels, so a hold is
 // equally legible on a ten-pixel block at cover scale and on a 100x100 block
@@ -498,6 +516,61 @@ export default function BoardCanvas({
     image.src = wall.url;
   }, [wall]);
 
+  /**
+   * THE DETAIL BITMAPS: one stored image per rectangle, and only above the
+   * ruling's zoom.
+   *
+   * The wall is one image pixel per wall pixel, so zooming past 1:1 enlarges
+   * an overview of detail that already exists — a purchase stores four image
+   * pixels per pixel bought. Past `DETAIL_MIN_SCALE` the rectangles actually
+   * on screen are drawn from their own bytes over the composite, which is the
+   * resolution the buyer paid for.
+   *
+   * A ref rather than state, for the reason the wall itself is a ref: these
+   * are a cache the draw effect reads, and panning at high zoom must never
+   * cause a refetch. The URLs are `/api/blocks/{id}/image`, which is immutable
+   * and cached for a year, so a rectangle crossed twice costs one request —
+   * and the hover card points at the same URL, so resting on a rectangle and
+   * zooming into it share a single fetch.
+   *
+   * Bounded by eviction rather than by never growing: anything not asked for
+   * on the current frame is dropped once the map is bigger than a couple of
+   * screenfuls. Zooming out to fit therefore returns the memory, and a long
+   * session panning across a full wall cannot accumulate one decoded bitmap
+   * per purchase ever looked at.
+   */
+  const detailImages = useRef(new Map<string, HTMLImageElement>());
+  const [detailLoaded, setDetailLoaded] = useState(0);
+
+  /**
+   * Asks for whatever the current frame wants and forgets the rest.
+   *
+   * Called from the draw effect with the ids it has just decided to draw, so
+   * there is one answer to "which rectangles are in view" per frame rather
+   * than one for drawing and a second, possibly different one, for fetching.
+   */
+  const keepDetail = useCallback((ids: string[]) => {
+    const wanted = new Set(ids);
+    for (const id of ids) {
+      if (detailImages.current.has(id)) continue;
+      const image = new Image();
+      detailImages.current.set(id, image);
+      image.onload = () => {
+        if (mounted.current) setDetailLoaded((n) => n + 1);
+      };
+      // A failed load needs no handler, exactly as the wall's does not: the
+      // image stays `complete` with a naturalWidth of 0, the draw below skips
+      // it, and the composite's own pixels are what that rectangle keeps. A
+      // takedown between the board payload and this request is that case, and
+      // the composite will have dropped the rectangle by the next poll anyway.
+      image.src = blockImageUrl(id);
+    }
+    if (detailImages.current.size <= DETAIL_CACHE_MAX) return;
+    for (const id of detailImages.current.keys()) {
+      if (!wanted.has(id)) detailImages.current.delete(id);
+    }
+  }, []);
+
   useEffect(() => {
     if (selection === null) presetPlaced.current = false;
   }, [selection, activePreset]);
@@ -686,6 +759,75 @@ export default function BoardCanvas({
     if (wallReady) {
       context.imageSmoothingEnabled = false;
       context.drawImage(wallImage, origin.x, origin.y, spanX, spanY);
+    }
+
+    /*
+     * THE DETAIL, OVER THE OVERVIEW.
+     *
+     * The wall is one image pixel per wall pixel, which is what makes it one
+     * request for the whole board — and it is also why, above 1:1, drawing it
+     * enlarges an overview of detail we already hold: every purchase stores
+     * four image pixels per pixel bought. Past the zoom where the ruling comes
+     * back, the rectangles actually on screen are redrawn from their own
+     * stored bytes, at four times the wall's resolution, which is what the
+     * buyer paid for and what they approved in the checkout preview.
+     *
+     * FEW REQUESTS, BY CONSTRUCTION. At that zoom about 156 × 100 wall pixels
+     * are visible, `detailRects` returns the rectangles covering most of that,
+     * and `DETAIL_MAX_RECTS` caps the rest. Anything not drawn here keeps the
+     * composite's pixels, which are not wrong — they are the overview.
+     *
+     * THE PAPER GOES DOWN FIRST, and then the placement comes from
+     * `placeImage`. Both are exactly what the server does when it builds the
+     * wall: `contain` letterboxes onto the sheet's own cream, `cover` crops
+     * centred, and an upload with an alpha channel is composited onto cream
+     * rather than onto whatever is underneath. One module for the geometry, so
+     * the wall, this draw and the checkout preview cannot come out as three
+     * different pictures.
+     *
+     * The fit comes from `details`, the same on-demand fetch the caption comes
+     * from. A rectangle whose fit has not arrived is left to the composite for
+     * a frame rather than drawn with a guessed one — a guess would show the
+     * buyer's picture cropped where they chose to fit it in.
+     */
+    if (wallReady && wantsDetail(scale)) {
+      const inView = detailRects(rects, origin, scale, screen);
+      keepDetail(inView.map((rect) => rect.id));
+      for (const rect of inView) {
+        // The same on-demand request the hover card makes, for the same
+        // rectangle, cached by the same map in BoardView — so zooming into a
+        // rectangle and resting on it cost one fetch between them, not two.
+        onNeedDetails(rect.id);
+        const image = detailImages.current.get(rect.id);
+        if (!image || !image.complete || image.naturalWidth === 0) continue;
+        const fit = details.get(rect.id)?.fit;
+        if (!fit) continue;
+
+        const box = {
+          x: origin.x + rect.x * scale,
+          y: origin.y + rect.y * scale,
+          width: rect.w * scale,
+          height: rect.h * scale,
+        };
+        context.fillStyle = PAINT.paper;
+        context.fillRect(box.x, box.y, box.width, box.height);
+        const { source, dest } = placeImage(
+          { width: image.naturalWidth, height: image.naturalHeight },
+          box,
+          fit,
+        );
+        context.drawImage(
+          image,
+          source.x,
+          source.y,
+          source.width,
+          source.height,
+          dest.x,
+          dest.y,
+          dest.width,
+          dest.height,
+        );
+      }
     }
 
     /*
@@ -895,6 +1037,9 @@ export default function BoardCanvas({
     hoveredId,
     chrome,
     wallLoaded,
+    detailLoaded,
+    keepDetail,
+    onNeedDetails,
     focusRing,
   ]);
 

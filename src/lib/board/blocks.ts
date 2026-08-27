@@ -83,6 +83,23 @@ export type BlockDetails = {
    */
   caption: string | null;
   link: string | null;
+  /**
+   * Which way the buyer's picture fills the rectangle — and the one field here
+   * that is not words.
+   *
+   * It is here because of the zoom-detail draw (see `./detail.ts`): above the
+   * ruling's zoom the canvas draws a rectangle's own stored bitmap over the
+   * composite, and it cannot place that bitmap without knowing whether its
+   * buyer chose to fill the rectangle or to fit inside it. The alternative was
+   * a fifth field on every entry of the board payload, for a fact needed only
+   * about the handful of rectangles somebody has zoomed into.
+   *
+   * Null for exactly the rows the caption and the link are null for — a hold,
+   * and a block that has been taken down — because it is a fact about content
+   * that is not being published, and `publishesTextSql` is one predicate
+   * rather than three.
+   */
+  fit: "contain" | "cover" | null;
 };
 
 // Exported so reserve.ts can ask, after a 409, which rows are live over a
@@ -127,12 +144,17 @@ export async function listBoardRects(): Promise<BoardRect[]> {
  * for exactly the reasons they are absent there. The rectangle itself still
  * comes back, because a hover card over a hold still has something true to
  * say.
+ *
+ * `fit` rides along under the same predicate. It is not words, and it is here
+ * for the zoom-detail draw rather than for the hover card — see the field's
+ * own note on `BlockDetails` above, and `./detail.ts` for what reads it.
  */
 export async function getBlockDetails(id: string): Promise<BlockDetails | null> {
   return queryOne<BlockDetails>(
     `SELECT id, x, y, w, h, status,
             CASE WHEN ${publishesTextSql(2)} THEN caption END AS caption,
-            CASE WHEN ${publishesTextSql(2)} THEN link END AS link
+            CASE WHEN ${publishesTextSql(2)} THEN link END AS link,
+            CASE WHEN ${publishesTextSql(2)} THEN image_fit END AS fit
        FROM blocks
       WHERE id = $1 AND ${LIVE}`,
     [id, [...IMAGE_BEARING_STATUSES]],

@@ -14,9 +14,10 @@ import { GET } from "../blocks/[id]/route";
 
 async function seed(status: string, expiresAt: string | null = null): Promise<string> {
   const rows = await query<{ id: string }>(
-    `INSERT INTO blocks (x, y, w, h, status, expires_at, caption, link,
+    `INSERT INTO blocks (x, y, w, h, status, expires_at, caption, link, image_fit,
                          price_per_pixel_usdc, total_usdc)
-     VALUES (10, 20, 30, 40, $1, $2, 'My shop', 'https://example.com/shop', 1000000, 1200000000)
+     VALUES (10, 20, 30, 40, $1, $2, 'My shop', 'https://example.com/shop', 'cover',
+             1000000, 1200000000)
      RETURNING id`,
     [status, expiresAt],
   );
@@ -30,7 +31,7 @@ async function get(id: string): Promise<Response> {
 }
 
 describe("GET /api/blocks/{id}", () => {
-  it("hands back one sold rectangle's caption, link and shape", async () => {
+  it("hands back one sold rectangle's caption, link, fit and shape", async () => {
     const id = await seed("paid");
     const response = await get(id);
     expect(response.status).toBe(200);
@@ -43,6 +44,10 @@ describe("GET /api/blocks/{id}", () => {
       status: "paid",
       caption: "My shop",
       link: "https://example.com/shop",
+      // Not words, and here for the zoom-detail draw: above the ruling's zoom
+      // the canvas redraws this rectangle from its own bitmap, and it cannot
+      // place that bitmap without knowing which fit its buyer chose.
+      fit: "cover",
     });
   });
 
@@ -51,7 +56,14 @@ describe("GET /api/blocks/{id}", () => {
     const raw = await (await get(id)).text();
     expect(raw).not.toContain("My shop");
     expect(raw).not.toContain("example.com");
-    expect(JSON.parse(raw)).toMatchObject({ status: "reserved", caption: null, link: null });
+    expect(JSON.parse(raw)).toMatchObject({
+      status: "reserved",
+      caption: null,
+      link: null,
+      // A hold publishes no bitmap, so it publishes nothing about how one
+      // would be drawn either — the same predicate, not a second one.
+      fit: null,
+    });
   });
 
   it("gives a taken-down rectangle its shape and none of its words", async () => {
@@ -59,7 +71,13 @@ describe("GET /api/blocks/{id}", () => {
     await execute("UPDATE blocks SET hidden_at = now() WHERE id = $1", [id]);
     const raw = await (await get(id)).text();
     expect(raw).not.toContain("My shop");
-    expect(JSON.parse(raw)).toMatchObject({ status: "paid", w: 30, caption: null, link: null });
+    expect(JSON.parse(raw)).toMatchObject({
+      status: "paid",
+      w: 30,
+      caption: null,
+      link: null,
+      fit: null,
+    });
   });
 
   it("answers the same 404 for a malformed id and for one that names nothing", async () => {
