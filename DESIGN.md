@@ -1,7 +1,7 @@
 ---
 version: alpha
 name: milliondollarpage.fun
-description: "A warm cream workshop wall for a permanent pixel canvas on Solana. Ruled graph paper (#f3ede0) holds a 1250x800 board where every sold block paints solid edge-to-edge and every free cell keeps its ruling, so availability never depends on what colour a buyer uploaded. The whole board is always visible and the page never scrolls; the wall around it is the same cream as the sheet. Olive-brown ink (#2b241c) sets text on the cream instead of punching through it; a single terracotta (#c2451e) carries every primary action and every selection, and appears nowhere else. Bricolage Grotesque sets display, Karla sets everything else. The board and its blocks have zero radius because they are literally pixels; only the chrome rounds. A thin fixed top bar, and the rest of the controls in a side panel or a bottom bar depending on which shape of window they are in. The system reads as a workshop wall: warm, plainly labelled, and entirely subordinate to the artwork pinned to it."
+description: "A warm cream workshop wall for a permanent pixel canvas on Solana. Cream paper (#f3ede0) holds a 1250x800 board where the paper's own colour means the pixels are for sale and colour or a bitmap means they are sold, so availability never depends on what colour a buyer uploaded. The artwork arrives as one composite bitmap of exactly the wall; a faint ruling comes back only when the zoom is close enough for a wall pixel to be worth counting. The whole board is always visible and the page never scrolls; the wall around it is the same cream as the sheet. Olive-brown ink (#2b241c) sets text on the cream instead of punching through it; a single terracotta (#c2451e) carries every primary action and every selection, and appears nowhere else. Bricolage Grotesque sets display, Karla sets everything else. The board and its blocks have zero radius because they are literally pixels; only the chrome rounds. A thin fixed top bar, and the rest of the controls in a side panel or a bottom bar depending on which shape of window they are in. The system reads as a workshop wall: warm, plainly labelled, and entirely subordinate to the artwork pinned to it."
 colors:
   primary: "#c2451e"
   primary-pressed: "#9f3819"
@@ -65,14 +65,53 @@ pictures.
 
 **A block's state must never depend on the colour a buyer uploaded.**
 
-Free cells keep their ruling. Sold blocks are covered opaquely, edge to edge —
-by the buyer's own bitmap, or by solid ink until it loads — and the ruling
-vanishes underneath them. Ruled means available; unruled means taken; and ruled
-*back over* a covered block means held rather than sold. That holds whether the
-upload is black, neon, transparent, or the same cream as the canvas.
+**The paper's cream means available. Colour or a bitmap means sold.** That is
+the rule now, and it replaces "ruled means available, unruled means taken",
+which could not survive per-pixel purchases: the ruling used to be drawn at
+every zoom, and a rule every ten pixels over a wall scaled to fit is a grid
+drawn on a board where a purchase is any rectangle, exact to the pixel, with
+nothing to snap to. The ruling is a navigation aid at close zoom now, not the
+state.
+
+So the wall is one composite bitmap of exactly the board, and its unsold pixels
+are **transparent**. The cream underneath shows through them — with its ruling,
+where the zoom is close enough to draw one — and a purchase covers both.
+
+**The cream has one honest hole in it, and two things close it.** A buyer may
+upload a picture that is the same cream as the paper. So a sold rectangle also
+carries a 1px ink edge wherever it is big enough to draw one; and an upload
+with an alpha channel is composited onto the cream inside its own rectangle
+rather than left transparent, so a sale is never a hole in the wall. Neither
+of those is a hue, which is the point.
 
 Anything that signals state through hue alone is wrong, because the buyer chooses
 the hue and we do not.
+
+## The wall is one bitmap, and it has a version
+
+**The board draws every purchase from a single PNG of exactly 1250×800.** It
+used to fetch one bitmap per block and one JSON row per block, which was the
+right shape for ten thousand 10×10 blocks and is the wrong one for a wall that
+can hold tens of thousands of purchases. What the page fetches now is:
+
+- **the wall**, one image, whose URL contains its own sha256 — so it is
+  immutable, cached for a year by every cache in the path, and a new purchase
+  busts that cache by *being a different URL* rather than by anybody purging
+  anything;
+- **a rectangle list** with no content in it at all: an id and four numbers per
+  live rectangle, which is what the pointer hit-tests and what the selector
+  refuses;
+- **one rectangle's caption and link**, fetched when a pointer or the keyboard
+  cursor comes to rest on it. Nobody reads ten thousand captions.
+
+**Holds are not in the wall.** A hold appears and expires within half an hour,
+and baking one in would rebuild the whole bitmap twice for every abandoned
+purchase. The canvas draws holds from the rectangle list, which is where
+volatile state belongs.
+
+**A wall that cannot be rebuilt goes stale, never blank.** A failed rebuild
+leaves the previous version serving, and one undecodable upload paints its own
+rectangle in the sold fallback while every other purchase composes normally.
 
 ## The board
 
@@ -127,11 +166,16 @@ the hue and we do not.
   the scale is above the fit scale. At the bottom rung the whole board is on
   screen, so a drag has nowhere to take it and a wheel must not move it — and
   the wheel does not pan at all any more, it zooms.
-- **Two-tier graph paper, and it is ruling rather than grid.** A faint rule
-  every 10 pixels and a stronger one every 100. **Nothing snaps to either.** It
-  is there to be read, not obeyed: the fine tier gives the eye a smallest legible
-  step and the coarse tier lets you navigate without counting. A rectangle may
-  start and end anywhere.
+- **Two-tier graph paper, and it appears only when it is telling the truth.**
+  A faint rule every 10 pixels and a stronger one every 100, drawn **only above
+  the zoom where one wall pixel is about eight screen pixels** — and drawn
+  *under* the wall bitmap, so it survives exactly on the pixels nobody has
+  bought. **There is no ruling at fit.** At that scale it is moiré, and worse
+  than moiré it is a lie: it draws a grid on a board that has none. **Nothing
+  snaps to either tier.** Where it does appear it is there to be read, not
+  obeyed: the fine tier gives the eye a smallest legible step and the coarse
+  tier lets you navigate without counting. A rectangle may start and end
+  anywhere.
 - **The board takes focus, and a keyboard drives it.** It is a canvas, so it
   is given a tab stop, an `application` role and its own keys; without them
   there is no way to select a rectangle without a pointer, and Buy can never
@@ -144,7 +188,10 @@ the hue and we do not.
   half-open rule, the collision refusal and the slide-back near an edge are
   the pointer's own. **One honest gap:** a pointer can now draw a rectangle
   the keyboard cannot — a 1×1 at an odd coordinate — because the cursor walks
-  the ruling and a finer step needs a third modifier nobody has chosen yet.
+  the ten-pixel step the ruling is drawn in, and a finer step needs a third
+  modifier nobody has chosen yet. The step outlived the ruling being drawn at
+  every zoom, deliberately: it is a comfortable distance for an arrow key
+  whether or not there is a line under it.
   It is recorded in `keyboard-cursor.ts` rather than closed here. When the cursor is walked off the visible board the
   view follows it by panning, and only where a drag could have: above the fit
   rung, clamped by the same `clampToFit`.
@@ -152,14 +199,29 @@ the hue and we do not.
   words.** A polite live region beside the board says the rectangle, its
   pixels, its price, what block is under it — caption and all, which is the
   hover card's information reaching a keyboard for the first time — and then
-  the very sentence printed under the Buy button. It waits for the cursor to
+  the very sentence printed under the Buy button. **The caption is fetched, so
+  it arrives a moment after the rest**, and the mirror says the true half
+  first: a sale under the cursor is announced as a sale whether or not its
+  words have landed, and never as one with no caption. It waits for the cursor to
   settle before it speaks, because a held arrow key repeats thirty times a
   second and a mirror that narrated that would be unusable.
 - **Zero radius on the board and on every block.** They are pixels. Rounding them
   lies about what they are. Only chrome rounds.
 - **Sold blocks** carry a 1px ink border, so the boundary between two adjacent
-  blocks is visible even when both uploads are the same colour.
-- **Captions** sit on their own opaque chip, never as free text over artwork.
+  blocks is visible even when both uploads are the same colour — including when
+  both are the cream that means available. It is drawn in screen pixels from
+  the rectangle list rather than baked into the wall, because a border in the
+  bitmap would be a *wall* pixel and would eat one the buyer paid for. Below
+  about four screen pixels across it is not drawn at all: a 1px stroke round a
+  one-pixel purchase at fit is bigger than the thing it outlines, and a wall of
+  them reads as a grid of ink rather than as artwork. Zooming in is what
+  separates them.
+- **Captions** sit on their own opaque chip, never as free text over artwork —
+  and the chip appears on **the rectangle whose words have been fetched**,
+  which is the one under the pointer or under the keyboard cursor. Every sold
+  block used to carry one, because every caption used to ride along in the
+  board payload; none of them do now. The hover card and the live region are
+  where a caption is read.
 
 ## Colour
 
@@ -342,13 +404,14 @@ in the same order.
 
 | State | How it reads |
 | --- | --- |
-| Free | Ruled graph paper, untouched |
+| Free | The paper's own cream. Ruled, but only above the zoom where a wall pixel is about eight screen pixels; at fit it is plain cream |
 | Hovered | A soft cream lift and the caption card, no colour change |
 | Selecting | Terracotta outline with marching ants, so a drag never looks like a placed block |
 | Refused | The offending block outlined in danger, the selection outlined in danger, Buy disabled |
-| Held | **Its own value, not a variation on the sale's.** Opaque like a sale, because those pixels are genuinely not for sale right now — but in the coarse rule's own tone (`#c9baa0`), plainly lighter than a sale's near-black and plainly heavier than the paper, so the two are told apart at a glance and not by inspection. Over it, an **ink** hatch at 45° — the one angle neither tier of the graph paper uses — and a broken ink edge where a sale carries an unbroken one. Pencilled in on card, not inked. Wherever the block is big enough to read one it carries its own chip, **On hold**, in the place a sold block puts its caption. A hold **you** started adds the terracotta ring, because it is still your selection and the only held rectangle you can act on. The countdown stays live in the control it gates. A hold never shows an upload: those pixels are unpaid and may never be bought, the image route serves only `paid` and `minted`, so there is nothing public to draw and the whole rectangle is free for a treatment of its own |
-| Sold | **The buyer's bitmap, edge to edge, nearest-neighbour at every zoom**, with a 1px ink border. The artwork is the treatment — this is the whole product, and the block is the frame |
-| Sold, loading or missing | Solid, edge to edge, 1px ink border. This is the **fallback**, not the sold treatment: what the rectangle shows in the moment before its bitmap arrives, and what it keeps if the bitmap never does. It goes down under every sold block on every frame, so a sale reads as taken from the first paint. An upload with an alpha channel is composited onto the paper cream rather than onto this, and never onto the ruling — a sold block is never ruled |
+| Held | **Its own value, not a variation on the sale's, and drawn by the canvas rather than baked into the wall.** Opaque like a sale, because those pixels are genuinely not for sale right now — but in the coarse rule's own tone (`#c9baa0`), plainly lighter than a sale's artwork-or-near-black and plainly heavier than the paper, so the two are told apart at a glance and not by inspection. Over it, an **ink** hatch at 45° — the one angle neither tier of the graph paper uses — and a broken ink edge where a sale carries an unbroken one. Pencilled in on card, not inked. Wherever the block is big enough to read one it carries its own chip, **On hold**, in the place a sold block puts its caption. A hold **you** started adds the terracotta ring, because it is still your selection and the only held rectangle you can act on. The countdown stays live in the control it gates. A hold never shows an upload: those pixels are unpaid and may never be bought, the wall composes `paid` and `minted` alone and the image route serves the same two, so there is nothing public to draw and the whole rectangle is free for a treatment of its own |
+| Sold | **The buyer's bitmap, in the wall, nearest-neighbour at every zoom**, with a 1px ink edge wherever there is room for one. The artwork is the treatment — this is the whole product, and the block is the frame. The bitmap is composed into the wall at the size the rectangle was bought at: enlarged into it with nearest neighbour so pixel art stays hard-edged, reduced into it with a real filter so a photograph stays the photograph the buyer approved in the preview |
+| Sold, loading or missing | Solid `#443a2c`, edge to edge, 1px ink edge. This is the **fallback**, not the sold treatment: what the rectangle shows in the moment before the wall arrives, and what it keeps if its own bytes never decode. Every sold rectangle gets it under the wall on every frame until the wall has decoded, so a sale reads as taken from the first paint; after that the artwork covers it. An upload with an alpha channel is composited onto the paper cream inside its own rectangle rather than onto this, and never onto the ruling — a sold rectangle is never ruled |
+| Taken down | Exactly like free, and it is **not** free. The content is gone from the wall and from every endpoint; the rectangle is still sold, still its owner's, and the selector still refuses it. Nothing on the board says a takedown happened, because a takedown is about what is displayed and the board is not a moderation log |
 
 ## Letting a hold go
 
@@ -503,7 +566,11 @@ saturated colour should carry every primary action.
 
 The graph-paper-versus-solid rule and the zero-radius rule were taken from a
 Pinterest analysis in the same MIT-licensed collection, and are likewise
-reimplemented rather than copied.
+reimplemented rather than copied. The first of the two has since been
+**replaced** — a per-pixel board cannot say "ruled means available", so what
+says it now is the paper's own cream, and the ruling has become a navigation
+aid that appears only at close zoom. See "The one rule that outranks the
+others". The zero-radius rule stands unchanged.
 
 Explored and rejected: `vercel.com/design.md`, which carries no licence and is a
 brand document instructing authors to adopt Vercel's typeface and brand CSS so the
