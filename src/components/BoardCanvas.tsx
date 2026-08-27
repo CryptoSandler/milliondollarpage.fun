@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, RefObject } from "react";
-import { blockImageUrl } from "../lib/board/block-image";
-import type { LiveBlock } from "../lib/board/blocks";
+import type { BlockDetails, BoardRect } from "../lib/board/blocks";
+import type { Wall } from "../lib/board/composite";
 import {
   BOARD_HEIGHT,
   BOARD_WIDTH,
@@ -12,8 +12,12 @@ import {
   type Point,
   type Rect,
 } from "../lib/board/geometry";
-import { placeImage } from "../lib/board/image-fit";
-import { describeCursor, keyToCommand, nextCursor } from "../lib/board/keyboard-cursor";
+import {
+  describeCursor,
+  keyToCommand,
+  nextCursor,
+  rectUnderCursor,
+} from "../lib/board/keyboard-cursor";
 import { formatUsdc } from "../lib/board/pricing";
 import {
   type Selection,
@@ -104,14 +108,16 @@ function steppedZoom(
  * nothing else; if one changes there, it changes here.
  *
  * THE RULE THAT OUTRANKS THE REST: state never depends on the buyer's colour.
- * A free cell keeps its ruling; a sold block covers its rectangle edge to edge
- * and the ruling vanishes under it. Ruled means available, unruled means taken
- * — true whether the artwork is black, neon, or the same cream as the paper.
+ * The paper's cream is what "available" looks like; colour or a bitmap is what
+ * "sold" looks like. A buyer may upload cream — so a sold rectangle also
+ * carries an ink edge wherever there is room to draw one, and the ruling, when
+ * the zoom is close enough to show it, is drawn UNDER the wall bitmap and
+ * therefore only survives on pixels nobody has bought.
  *
- * What covers a sold rectangle is the buyer's bitmap. `sold` below is what
- * goes down UNDER it: the fallback a block shows while its image is in flight
- * and the only thing it shows if that image never arrives. It is not the sold
- * treatment; the artwork is.
+ * What covers a sold rectangle is the composite wall (see composite.ts).
+ * `sold` below is what goes down UNDER it: the fallback a rectangle shows
+ * while the wall is in flight, and the only thing it shows if the wall never
+ * arrives. It is not the sold treatment; the artwork is.
  */
 const PAINT = {
   // The wall the sheet hangs on, and it is the SAME cream as the sheet. The
@@ -182,9 +188,35 @@ const PAINT = {
 const CHIP_MIN_BLOCK_PX = 96;
 const CHIP_HEIGHT = 18;
 
-// The fine tier is one ruling. Below roughly six screen pixels per rule it
-// stops being a ruling and starts being a grey wash.
-const FINE_RULE_VISIBLE_ABOVE = 6 / RULE_PIXELS;
+/**
+ * The zoom at which the graph paper appears at all: eight screen pixels per
+ * WALL pixel.
+ *
+ * There is no ruling at fit, and that is the change the pixel made. A rule
+ * every ten pixels drawn over a wall scaled to 0.78 is a line every eight
+ * screen pixels across the whole sheet — moiré, and worse than moiré, a lie:
+ * it draws a grid on a board where a purchase is any rectangle, exact to the
+ * pixel, with nothing to snap to. The ruling comes back only when a single
+ * wall pixel is big enough to see, which is the zoom at which counting by tens
+ * is a thing somebody might actually want to do.
+ *
+ * Both tiers arrive together. Below this there is nothing to navigate BY; above
+ * it the fine tier gives the eye a step and the coarse one gives it a landmark.
+ */
+const RULE_VISIBLE_SCALE = 8;
+
+/**
+ * How many screen pixels wide a sold rectangle has to be before it is given
+ * its ink edge.
+ *
+ * The edge exists so two adjacent sold rectangles stay separate when their
+ * artwork is the same colour. On a one-pixel purchase at fit — well under one
+ * screen pixel — a 1px stroke would be bigger than the thing it outlines, and
+ * a wall of them would read as a grid of ink rather than as artwork. Below
+ * this the rectangles are too small to tell apart at that zoom anyway, and
+ * zooming in is what separates them.
+ */
+const SOLD_EDGE_MIN_PX = 4;
 
 // The held hatch, in SCREEN pixels rather than board pixels, so a hold is
 // equally legible on a ten-pixel block at cover scale and on a 100x100 block
@@ -242,7 +274,33 @@ export type ZoomControls = {
 export type ZoomState = { canZoomIn: boolean; canZoomOut: boolean };
 
 type Props = {
-  blocks: LiveBlock[];
+  /**
+   * Every live rectangle, with no content in it.
+   *
+   * This is what the pointer hit-tests, what the selector refuses, and what
+   * holds are drawn from. The artwork is not here — it is `wall` below, one
+   * bitmap for the whole board — and neither are the captions, which arrive
+   * through `details` for the one rectangle somebody is resting on.
+   */
+  rects: BoardRect[];
+  /**
+   * The composite wall: every visible purchase, already drawn, at 1250×800.
+   *
+   * Null until the first one exists. The board still draws — paper, ruling,
+   * holds, the solid fallback under every sold rectangle — which is the same
+   * thing it draws for the moment before the bitmap lands.
+   */
+  wall: Wall | null;
+  /**
+   * The captions and links that have been fetched so far, keyed by id.
+   *
+   * Owned by BoardView, because the hover card reads the same map. What this
+   * component does with it is draw the caption chip on the rectangle under the
+   * pointer and put the caption into the live region for the keyboard cursor.
+   */
+  details: Map<string, BlockDetails>;
+  /** Asks BoardView to fetch one rectangle's words, if it has not already. */
+  onNeedDetails: (id: string) => void;
   /**
    * The ids of holds this browser started, so the board can mark them as the
    * buyer's own.
@@ -271,7 +329,7 @@ type Props = {
    */
   boardRef: RefObject<HTMLCanvasElement | null>;
   onSelectionChange: (selection: Selection | null) => void;
-  onHoverChange: (block: LiveBlock | null, at: Point | null) => void;
+  onHoverChange: (rect: BoardRect | null, at: Point | null) => void;
   /** Reports which ends of the ladder still have a rung, so the buttons can be disabled at the ends. */
   onZoomStateChange: (state: ZoomState) => void;
   /**
@@ -299,7 +357,10 @@ type Drag =
   | { kind: "pan"; last: Point; movement: number; from: Point; touch: boolean };
 
 export default function BoardCanvas({
-  blocks,
+  rects,
+  wall,
+  details,
+  onNeedDetails,
   ownHoldIds,
   selection,
   activePreset,
@@ -380,25 +441,30 @@ export default function BoardCanvas({
   }, [chrome]);
 
   /**
-   * Every sold block's bitmap, decoded once and kept for the life of the page.
+   * THE WALL, decoded once per version and kept until the version changes.
    *
-   * A ref rather than state, because the map is not what the board renders
-   * from — it is a cache the draw effect reads. Panning and zooming redraw
-   * from it constantly and must never cause a refetch; the board also
-   * refetches its JSON every thirty seconds, which hands this effect a brand
-   * new `blocks` array each time, and an image already in the map is skipped.
+   * One image for every purchase on the board. This replaced a map of one
+   * bitmap per block, which was a request per purchase — affordable at ten
+   * thousand 10×10 blocks and not at a pixel a piece.
    *
-   * An entry goes in BEFORE the bytes arrive, which is what makes that
-   * skipping work. The draw loop therefore has to ask whether each image is
-   * actually decoded rather than merely present — see `complete &&
-   * naturalWidth` below, which is also exactly what tells a bitmap still
-   * loading apart from one whose request 404'd.
+   * A ref rather than state, because the image is not what the board renders
+   * FROM — it is a cache the draw effect reads. Panning, zooming and the ants
+   * redraw constantly and must never cause a refetch. The URL carries the
+   * wall's own sha256, so a new wall is a new URL and the browser's cache does
+   * the rest: nothing here has to decide whether a cached copy is stale.
+   *
+   * The previous version stays on screen while the next one decodes, which is
+   * what stops a purchase blanking the board for a frame. `complete &&
+   * naturalWidth > 0` is what tells a decoded wall from one still loading and
+   * from one whose request 404'd — the last case being a version that has
+   * aged out, where the right answer is to keep drawing the wall we have until
+   * the next poll names a newer one.
    */
-  const images = useRef(new Map<string, HTMLImageElement>());
-  // Bumped by each image that finishes, purely to schedule a redraw: the
-  // board has to repaint when a bitmap lands, and the bitmap lands outside
-  // React.
-  const [imagesLoaded, setImagesLoaded] = useState(0);
+  const walls = useRef(new Map<string, HTMLImageElement>());
+  const drawnWall = useRef<HTMLImageElement | null>(null);
+  // Bumped when the wall finishes decoding, purely to schedule a redraw: the
+  // board has to repaint when it lands, and it lands outside React.
+  const [wallLoaded, setWallLoaded] = useState(0);
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -408,19 +474,29 @@ export default function BoardCanvas({
   }, []);
 
   useEffect(() => {
-    for (const block of blocks) {
-      if (!block.hasImage || images.current.has(block.id)) continue;
-      const image = new Image();
-      images.current.set(block.id, image);
-      // A failed load needs no handler: the image stays `complete` with a
-      // naturalWidth of 0, the draw loop skips it, and the block keeps the
-      // solid fallback. That is the whole 404 story.
-      image.onload = () => {
-        if (mounted.current) setImagesLoaded((n) => n + 1);
-      };
-      image.src = blockImageUrl(block.id);
+    if (!wall) return;
+    const known = walls.current.get(wall.version);
+    if (known) {
+      if (known.complete && known.naturalWidth > 0) drawnWall.current = known;
+      return;
     }
-  }, [blocks]);
+    const image = new Image();
+    walls.current.set(wall.version, image);
+    image.onload = () => {
+      drawnWall.current = image;
+      // Every version but this one and the one on screen: a page left open
+      // through a busy afternoon must not accumulate a decoded 1250×800 per
+      // purchase anybody else made.
+      for (const [version, held] of walls.current) {
+        if (version !== wall.version && held !== drawnWall.current) walls.current.delete(version);
+      }
+      if (mounted.current) setWallLoaded((n) => n + 1);
+    };
+    // A failed load needs no handler: the image stays `complete` with a
+    // naturalWidth of 0, `drawnWall` keeps whatever it had, and the board
+    // keeps drawing the wall it already has. That is the whole 404 story.
+    image.src = wall.url;
+  }, [wall]);
 
   useEffect(() => {
     if (selection === null) presetPlaced.current = false;
@@ -547,105 +623,117 @@ export default function BoardCanvas({
       Math.round(spanY) + 1,
     );
 
-    // Two-tier graph paper, and it is ruling rather than grid: nothing snaps
-    // to it any more. The fine tier is ten pixels — a legible smallest step
-    // for a hand and for an arrow key. The coarse tier is a hundred — it is
-    // how you navigate without counting.
+    // The graph paper, and ONLY above the zoom where a wall pixel is about
+    // eight screen pixels. At fit it is not a ruling, it is moiré — and it is
+    // a lie besides, because nothing snaps to it and a purchase is any
+    // rectangle exact to the pixel. Drawn UNDER the wall bitmap, so it
+    // survives exactly on the pixels nobody has bought: the paper's cream
+    // means available, and the ruling is what that cream is ruled with.
     context.save();
     context.beginPath();
     context.rect(origin.x, origin.y, spanX, spanY);
     context.clip();
 
-    if (scale > FINE_RULE_VISIBLE_ABOVE) {
+    if (scale >= RULE_VISIBLE_SCALE) {
       drawRules(context, origin, scale, RULE_PIXELS, PAINT.ruleFine, screen);
+      drawRules(context, origin, scale, 100, PAINT.ruleCoarse, screen);
     }
-    drawRules(context, origin, scale, 100, PAINT.ruleCoarse, screen);
     context.restore();
 
     const colliding = new Set(selection?.collidesWith ?? []);
     const own = new Set(ownHoldIds);
-    for (const block of blocks) {
-      const x = origin.x + block.x * scale;
-      const y = origin.y + block.y * scale;
-      const w = block.w * scale;
-      const h = block.h * scale;
-      if (x + w < 0 || y + h < 0 || x > width || y > height) continue;
 
-      const held = block.status === "reserved";
-
-      // Opaque, edge to edge, so the ruling disappears underneath and the
-      // rectangle reads as not-for-sale from the very first frame. WHICH
-      // opaque is the whole distinction: a sale goes down in near-black, a
-      // hold in the coarse rule's own tone. For a sale this is also the
-      // fallback the block keeps if its bitmap never arrives.
-      context.fillStyle = held ? PAINT.held : PAINT.sold;
-      context.fillRect(x, y, w, h);
-
-      // The artwork, over the top, filling exactly the same rectangle. This
-      // is what a sold block actually looks like; everything above is what it
-      // looks like for the moment before. A hold never reaches here — those
-      // pixels are unpaid and may never be bought, so there is nothing public
-      // to draw.
-      const image = !held && block.hasImage ? images.current.get(block.id) : undefined;
-      if (image && image.complete && image.naturalWidth > 0) {
-        // Cream first, then the bitmap. An upload with an alpha channel is
-        // composited onto the paper's own colour rather than onto whatever
-        // happens to be underneath — without this, a transparent PNG would
-        // let the graph paper's ruling show through a block that has been
-        // sold, and ruled means available.
-        context.fillStyle = PAINT.paper;
-        context.fillRect(x, y, w, h);
-        // Re-asserted immediately before the draw. It is set once per frame
-        // after setTransform and survives save/restore, so this is belt and
-        // braces — but interpolating somebody's 10×10 bitmap up to 160px is
-        // the one thing this board must never do, and it costs nothing to
-        // say so at the only place it could happen.
-        context.imageSmoothingEnabled = false;
-        // WHERE the bitmap lands is `image-fit.ts`, not this line, and the
-        // nine-argument form is the whole point: the five-argument one this
-        // replaced stretched every image to the block's shape, so a buyer who
-        // chose "Fit inside" for a wide photograph on a square block approved
-        // a letterboxed preview and got a squashed block — permanently, since
-        // the content is immutable once paid. `placeImage` reproduces exactly
-        // what the confirmation preview's CSS `object-fit` does.
-        //
-        // A contained image leaves bars, and the cream fill above has already
-        // covered the whole rectangle, so they are the sheet's own colour and
-        // never the graph ruling — ruled means available.
-        //
-        // `imageFit` is null only for a row from before the board asked, and
-        // "contain" is what the form has always defaulted to.
-        const { source, dest } = placeImage(
-          { width: image.naturalWidth, height: image.naturalHeight },
-          { x, y, width: w, height: h },
-          block.imageFit ?? "contain",
-        );
-        context.drawImage(
-          image,
-          source.x,
-          source.y,
-          source.width,
-          source.height,
-          dest.x,
-          dest.y,
-          dest.width,
-          dest.height,
+    /*
+     * THE FALLBACK, and it goes down before the wall does.
+     *
+     * DESIGN.md: a sold rectangle whose bitmap has not arrived is "Solid, edge
+     * to edge, 1px ink border. This is the fallback, not the sold treatment:
+     * what the rectangle shows in the moment before its bitmap arrives, and
+     * what it keeps if the bitmap never does." There is one bitmap now instead
+     * of one per block, so "the moment before" is one moment for the whole
+     * board — but it is the same moment, and a sale still has to read as taken
+     * from the first paint rather than as cream nobody has bought.
+     *
+     * Once the wall is decoded this is skipped entirely: the artwork covers
+     * every sold pixel itself, and painting under it would only cost a fill.
+     */
+    const wallImage = drawnWall.current;
+    const wallReady = wallImage !== null && wallImage.complete && wallImage.naturalWidth > 0;
+    if (!wallReady) {
+      context.fillStyle = PAINT.sold;
+      for (const rect of rects) {
+        if (rect.status === "reserved") continue;
+        context.fillRect(
+          origin.x + rect.x * scale,
+          origin.y + rect.y * scale,
+          rect.w * scale,
+          rect.h * scale,
         );
       }
+    }
 
-      // A hairline ink edge, so two adjacent sold blocks stay separate even
-      // when their artwork is identical. A hold overdraws it with a broken
-      // one below.
-      context.strokeStyle = PAINT.soldEdge;
-      context.lineWidth = 1;
-      context.strokeRect(x + 0.5, y + 0.5, Math.max(0, w - 1), Math.max(0, h - 1));
+    /*
+     * THE WALL. One bitmap, every visible purchase, drawn once at exactly the
+     * board's own rectangle — so a wall pixel lands on `scale` screen pixels
+     * and the arithmetic is the identity.
+     *
+     * NEAREST NEIGHBOUR. `imageSmoothingEnabled` is already false for the
+     * frame and it survives save/restore, so this is belt and braces — but
+     * interpolating a wall of other people's artwork is the one thing this
+     * board must never do, and it costs nothing to say so at the only place it
+     * could happen.
+     */
+    if (wallReady) {
+      context.imageSmoothingEnabled = false;
+      context.drawImage(wallImage, origin.x, origin.y, spanX, spanY);
+    }
 
-      // The rest of the hold: an ink ruling back over the card, a broken edge
-      // where a sale carries an unbroken one, and its own word for it wherever
-      // there is room to read one. Pencilled in, not inked.
+    /*
+     * The ink edge round every sold rectangle, so two neighbours stay separate
+     * when their artwork is the same colour — including when it is the same
+     * cream as the paper, which is the case the "cream means available" rule
+     * cannot answer on its own.
+     *
+     * One path and one stroke for the whole board rather than a stroke per
+     * rectangle: at a pixel a purchase there may be tens of thousands of them
+     * on a frame that also has to keep up with the marching ants.
+     */
+    context.strokeStyle = PAINT.soldEdge;
+    context.lineWidth = 1;
+    context.beginPath();
+    for (const rect of rects) {
+      if (rect.status === "reserved") continue;
+      const w = rect.w * scale;
+      const h = rect.h * scale;
+      if (w < SOLD_EDGE_MIN_PX || h < SOLD_EDGE_MIN_PX) continue;
+      const x = origin.x + rect.x * scale;
+      const y = origin.y + rect.y * scale;
+      if (x + w < 0 || y + h < 0 || x > width || y > height) continue;
+      context.rect(x + 0.5, y + 0.5, w - 1, h - 1);
+    }
+    context.stroke();
+
+    for (const rect of rects) {
+      const x = origin.x + rect.x * scale;
+      const y = origin.y + rect.y * scale;
+      const w = rect.w * scale;
+      const h = rect.h * scale;
+      if (x + w < 0 || y + h < 0 || x > width || y > height) continue;
+
+      const held = rect.status === "reserved";
+
+      // A HOLD IS NOT IN THE WALL, and this is where it gets drawn instead.
+      // Those pixels are unpaid and may never be bought, so there is nothing
+      // public to put on them and the whole rectangle is free for a treatment
+      // of its own: the coarse rule's own tone, plainly lighter than a sale
+      // and plainly heavier than the paper, an ink hatch at 45 degrees, and a
+      // broken edge where a sale carries an unbroken one.
       if (held) {
-        // Clamped to the viewport before hatching, so a block zoomed until it
-        // is larger than the screen costs a screenful of strokes, not a
+        context.fillStyle = PAINT.held;
+        context.fillRect(x, y, w, h);
+
+        // Clamped to the viewport before hatching, so a rectangle zoomed until
+        // it is larger than the screen costs a screenful of strokes, not a
         // blockful.
         const hx = Math.max(x, 0);
         const hy = Math.max(y, 0);
@@ -660,10 +748,10 @@ export default function BoardCanvas({
         context.strokeRect(x + 0.5, y + 0.5, Math.max(0, w - 1), Math.max(0, h - 1));
         context.restore();
 
-        // Its own label, where a block is big enough to carry one. A hold has
-        // no caption to compete with — there is no content on it yet — so this
-        // sits exactly where a sold block's caption would, and says the one
-        // thing about this rectangle anybody needs.
+        // Its own label, where a rectangle is big enough to carry one. A hold
+        // has no caption to compete with — there is no content on it yet — so
+        // this sits exactly where a sold rectangle's caption would, and says
+        // the one thing about it anybody needs.
         if (w >= CHIP_MIN_BLOCK_PX && h >= CHIP_HEIGHT + 8) {
           drawCaptionChip(context, "On hold", x + 4, y + h - 4 - CHIP_HEIGHT, w - 8, family);
         }
@@ -672,14 +760,14 @@ export default function BoardCanvas({
         // on the board you can do something about — resume it or let it go.
         // Terracotta, which DESIGN.md reserves for the primary action and for
         // your selection, and a hold you started is exactly your selection.
-        if (own.has(block.id)) {
+        if (own.has(rect.id)) {
           context.strokeStyle = PAINT.selection;
           context.lineWidth = 2;
           context.strokeRect(x + 1, y + 1, Math.max(0, w - 2), Math.max(0, h - 2));
         }
       }
 
-      if (colliding.has(block.id)) {
+      if (colliding.has(rect.id)) {
         context.strokeStyle = PAINT.danger;
         context.lineWidth = 2;
         context.strokeRect(x + 1, y + 1, Math.max(0, w - 2), Math.max(0, h - 2));
@@ -689,7 +777,7 @@ export default function BoardCanvas({
 
       // Hovered: a soft cream lift and nothing else. No hue changes hands,
       // because the hue belongs to the buyer.
-      if (block.id === hoveredId) {
+      if (rect.id === hoveredId) {
         context.fillStyle = PAINT.lift;
         context.fillRect(x, y, w, h);
         context.strokeStyle = PAINT.cream;
@@ -697,8 +785,16 @@ export default function BoardCanvas({
         context.strokeRect(x + 1, y + 1, Math.max(0, w - 2), Math.max(0, h - 2));
       }
 
-      if (!held && block.caption && w >= CHIP_MIN_BLOCK_PX && h >= CHIP_HEIGHT + 8) {
-        drawCaptionChip(context, block.caption, x + 4, y + h - 4 - CHIP_HEIGHT, w - 8, family);
+      // The caption chip, for a rectangle whose words have actually been
+      // fetched — which is the one under the pointer or under the cursor.
+      // Every sold rectangle used to carry one, because every caption used to
+      // ride along in the board payload; none of them do now, and a chip on
+      // one is honest where a chip on none would have thrown the rule away.
+      // DESIGN.md's rule about the chip itself is untouched: a caption is
+      // never free text over artwork.
+      const words = held ? undefined : details.get(rect.id)?.caption;
+      if (words && w >= CHIP_MIN_BLOCK_PX && h >= CHIP_HEIGHT + 8) {
+        drawCaptionChip(context, words, x + 4, y + h - 4 - CHIP_HEIGHT, w - 8, family);
       }
     }
 
@@ -789,7 +885,8 @@ export default function BoardCanvas({
       }
     }
   }, [
-    blocks,
+    rects,
+    details,
     ownHoldIds,
     selection,
     viewport,
@@ -797,7 +894,7 @@ export default function BoardCanvas({
     ants,
     hoveredId,
     chrome,
-    imagesLoaded,
+    wallLoaded,
     focusRing,
   ]);
 
@@ -844,13 +941,13 @@ export default function BoardCanvas({
     // and clamped by presetRect, and it stays there.
     if (activePreset !== null) {
       presetPlaced.current = true;
-      publish(selectionFromPreset(at, activePreset, blocks, perPixel));
+      publish(selectionFromPreset(at, activePreset, rects, perPixel));
       drag.current = { kind: "none" };
       return;
     }
 
     drag.current = { kind: "select", from: at, to: at, movement: 0 };
-    publish(selectionFromDrag(at, at, blocks, perPixel));
+    publish(selectionFromDrag(at, at, rects, perPixel));
   }
 
   function onPointerMove(event: ReactPointerEvent<HTMLCanvasElement>) {
@@ -867,15 +964,21 @@ export default function BoardCanvas({
     const current = drag.current;
 
     if (current.kind === "none") {
-      const hovered = blocks.find((b) => rectContains(b, at));
+      const hovered = rects.find((candidate) => rectContains(candidate, at));
       setHoveredId(hovered?.id ?? null);
+      // The words for the rectangle under the pointer, and only that one.
+      // This is the on-demand half of the representation change: the payload
+      // carries no captions, so resting on a rectangle is what asks for its
+      // caption. BoardView caches the answer, so crossing the same rectangle
+      // twice costs one request.
+      if (hovered) onNeedDetails(hovered.id);
       const rect = event.currentTarget.getBoundingClientRect();
       onHoverChange(hovered ?? null, hovered ? { x: event.clientX - rect.left, y: event.clientY - rect.top } : null);
       const preview = presetSelectionForMove(
         at,
         activePreset,
         presetPlaced.current,
-        blocks,
+        rects,
         perPixel,
       );
       if (preview) publish(preview);
@@ -909,7 +1012,7 @@ export default function BoardCanvas({
       to: at,
       movement: current.movement + 1,
     };
-    publish(selectionFromDrag(current.from, at, blocks, perPixel));
+    publish(selectionFromDrag(current.from, at, rects, perPixel));
   }
 
   /** Two fingers spreading or closing, resolved into whole rungs of the ladder. */
@@ -952,7 +1055,7 @@ export default function BoardCanvas({
     // choice. Drag or zoom in to buy fewer.
     if (current.touch) {
       presetPlaced.current = true;
-      publish(selectionFromPreset(current.from, activePreset ?? RULE_PIXELS, blocks, perPixel));
+      publish(selectionFromPreset(current.from, activePreset ?? RULE_PIXELS, rects, perPixel));
       return;
     }
     publish(null);
@@ -1147,7 +1250,7 @@ export default function BoardCanvas({
     // preview must not be picked back up by the next stray mouse move.
     presetPlaced.current = true;
     const rect = nextCursor(selection?.rect ?? null, command, activePreset);
-    publish(describeSelection(rect, blocks, perPixel));
+    publish(describeSelection(rect, rects, perPixel));
     revealCursor(rect);
   }
 
@@ -1165,12 +1268,18 @@ export default function BoardCanvas({
    */
   useEffect(() => {
     if (!focusRing) return;
-    const timer = setTimeout(
-      () => setMirror(describeCursor(selection, blocks, activateHint)),
-      MIRROR_SETTLE_MS,
-    );
+    const timer = setTimeout(() => {
+      // Ask for the words of whatever the cursor has come to rest on, at the
+      // same moment the sentence is written. The request is what eventually
+      // re-runs this effect with the caption in `details`, so the mirror says
+      // the rectangle first and the caption a moment later rather than
+      // waiting silently for a fetch.
+      const under = selection ? rectUnderCursor(selection.rect, rects) : null;
+      if (under) onNeedDetails(under.id);
+      setMirror(describeCursor(selection, rects, details, activateHint));
+    }, MIRROR_SETTLE_MS);
     return () => clearTimeout(timer);
-  }, [focusRing, selection, blocks, activateHint]);
+  }, [focusRing, selection, rects, details, onNeedDetails, activateHint]);
 
   return (
     <>

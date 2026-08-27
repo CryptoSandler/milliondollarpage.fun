@@ -1,4 +1,4 @@
-import type { LiveBlock } from "./blocks";
+import type { BlockDetails, BoardRect } from "./blocks";
 import {
   BOARD_HEIGHT,
   BOARD_WIDTH,
@@ -150,22 +150,45 @@ export function nextCursor(
 }
 
 /**
+ * The rectangle under the cursor's own top-left corner, or null.
+ *
+ * Exported because the canvas needs the same answer for a different reason:
+ * it is what has to be FETCHED before the sentence below can name a caption.
+ * One definition, so the rectangle whose words are requested is always the
+ * rectangle the sentence then describes.
+ */
+export function rectUnderCursor(rect: Rect, rects: BoardRect[]): BoardRect | null {
+  return rects.find((other) => rectContains(other, { x: rect.x, y: rect.y })) ?? null;
+}
+
+/**
  * What is under the cursor's own corner, said the way the hover card says it.
  *
  * A pointer gets that card for free; a keyboard cursor gets nothing, and the
- * captions, the links and the sold/held state of every block on the board
+ * captions, the links and the sold/held state of every rectangle on the board
  * would otherwise be reachable by mouse alone.
+ *
+ * THE CAPTION NOW ARRIVES SEPARATELY, and that is the one thing the
+ * representation change moved through this function. The board payload used to
+ * carry every block's words; it carries none, so the caption comes from
+ * `details` — the same on-demand fetch the hover card uses, keyed by id. While
+ * that fetch is in flight there is no entry, and the sentence says what it
+ * knows rather than guessing: a sold rectangle whose words have not arrived is
+ * still announced as a sold rectangle. The mirror waits for the cursor to
+ * settle before it speaks, which is most of the time the fetch needs anyway.
  */
-function beneath(rect: Rect, blocks: LiveBlock[]): string {
-  const under = blocks.find((block) => rectContains(block, { x: rect.x, y: rect.y }));
+function beneath(rect: Rect, rects: BoardRect[], details: Map<string, BlockDetails>): string {
+  const under = rectUnderCursor(rect, rects);
   if (!under) return "";
-  const named = under.caption ? `called ${under.caption}` : "with no caption";
+  const known = details.get(under.id);
   // A hold publishes no caption at all (see blocks.ts), so the branch that
-  // names one is only ever reached by a sale. Both are written out anyway,
-  // because a payload that starts carrying one must not start reading wrong.
+  // names one is only ever reached by a sale. All three are written out
+  // anyway, because a payload that starts carrying one must not start reading
+  // wrong.
+  const named = !known ? "" : known.caption ? ` called ${known.caption}` : " with no caption";
   return under.status === "reserved"
-    ? `Under the cursor: a block on hold ${named}. `
-    : `Under the cursor: a sold block ${named}. `;
+    ? `Under the cursor: a block on hold${named}. `
+    : `Under the cursor: a sold block${named}. `;
 }
 
 /**
@@ -180,10 +203,17 @@ function beneath(rect: Rect, blocks: LiveBlock[]): string {
  * straight through rather than rewritten. Two wordings of "why can you not buy
  * this" would drift apart, and the one a screen reader hears would be the one
  * nobody was looking at when they did.
+ *
+ * `details` is the caption cache the hover card reads from, handed in rather
+ * than fetched here so this stays pure and stays tested. The board's words
+ * moved off the payload and onto a per-rectangle route when the wall became a
+ * composite; the live region moved with them rather than losing the caption
+ * it had only just been given.
  */
 export function describeCursor(
   selection: Selection | null,
-  blocks: LiveBlock[],
+  rects: BoardRect[],
+  details: Map<string, BlockDetails>,
   hint: string,
 ): string {
   if (!selection) return `Nothing selected. ${hint}`;
@@ -191,6 +221,6 @@ export function describeCursor(
   return (
     `${rect.w} by ${rect.h} at ${rect.x}, ${rect.y}. ` +
     `${selection.pixels.toLocaleString("en-US")} pixels, ${formatUsdc(selection.totalBaseUnits)}. ` +
-    `${beneath(rect, blocks)}${hint}`
+    `${beneath(rect, rects, details)}${hint}`
   );
 }

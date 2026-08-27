@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { BoardStats, LiveBlock } from "../lib/board/blocks";
+import { fetchBlockDetails } from "../lib/board/block-details";
+import type { BlockDetails, BoardRect, BoardStats } from "../lib/board/blocks";
+import type { Wall } from "../lib/board/composite";
 import type { Point } from "../lib/board/geometry";
 import type { Selection } from "../lib/board/selection";
 import { BOARD_BOTTOM_GAP, type Chrome } from "../lib/canvas/viewport";
@@ -11,8 +13,16 @@ import InteractionLegend from "./InteractionLegend";
 import PurchaseDialog from "./PurchaseDialog";
 import SelectionPanel from "./SelectionPanel";
 
+/**
+ * What `/api/board` ships, and what the page is rendered from on the server.
+ *
+ * `rects` carries no content at all and `wall` is one bitmap for all of it —
+ * see `src/lib/board/composite.ts` for why a row per block with a bitmap per
+ * block stopped being the right shape the moment a pixel became the unit.
+ */
 type BoardPayload = {
-  blocks: LiveBlock[];
+  rects: BoardRect[];
+  wall: Wall | null;
   stats: BoardStats;
   pricePerPixelBaseUnits: number;
 };
@@ -35,14 +45,16 @@ const FALLBACK_CHROME: Chrome = {
 // offering rectangles the server will refuse. Thirty seconds: the hold
 // window is thirty minutes, so this is frequent enough that a stale
 // rectangle is rare, and the payload (see /api/board) is small enough that
-// twice a minute per open tab is nowhere near "hammering" the endpoint.
+// twice a minute per open tab is nowhere near "hammering" the endpoint. It
+// is also what brings a NEW WALL VERSION down; the bitmap itself is fetched
+// only when that version actually changes, because its URL is its hash.
 const REFRESH_INTERVAL_MS = 30_000;
 
 export default function BoardView({ initial }: { initial: BoardPayload }) {
   const [board, setBoard] = useState(initial);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [activePreset, setActivePreset] = useState<number | null>(null);
-  const [hovered, setHovered] = useState<{ block: LiveBlock; at: Point } | null>(null);
+  const [hovered, setHovered] = useState<{ rect: BoardRect; at: Point } | null>(null);
   const [chrome, setChrome] = useState<Chrome>(FALLBACK_CHROME);
   // A plain text field until a real wallet arrives in a later batch: there is
   // no connection and no signature yet, only an address the buyer types in.
@@ -115,8 +127,37 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
     setSelection(null);
   }, []);
 
-  const handleHover = useCallback((block: LiveBlock | null, at: Point | null) => {
-    setHovered(block && at ? { block, at } : null);
+  const handleHover = useCallback((rect: BoardRect | null, at: Point | null) => {
+    setHovered(rect && at ? { rect, at } : null);
+  }, []);
+
+  /**
+   * The captions and links fetched so far, and the one place that fetches
+   * them.
+   *
+   * Here rather than in BoardCanvas because two things read the same answer:
+   * the hover card below, and the canvas — for its caption chip and for the
+   * live region that mirrors the keyboard cursor. One cache, so a screen
+   * reader and a hover card can never be told different things about the same
+   * rectangle.
+   *
+   * `pending` is a plain ref rather than state: it exists only to stop a
+   * second request while the first is in flight, and re-rendering because a
+   * request started would be a re-render for nothing. A rectangle whose fetch
+   * failed stays in it, which is deliberate — the answer was "nothing to
+   * show", and asking again on every pointer move over a 404 would be a poll
+   * nobody asked for.
+   */
+  const [details, setDetails] = useState<Map<string, BlockDetails>>(() => new Map());
+  const pending = useRef(new Set<string>());
+
+  const requestDetails = useCallback((id: string) => {
+    if (pending.current.has(id)) return;
+    pending.current.add(id);
+    void fetchBlockDetails(id).then((found) => {
+      if (!found) return;
+      setDetails((current) => new Map(current).set(id, found));
+    });
   }, []);
 
   const rememberOwnHold = useCallback((orderId: string) => {
@@ -163,8 +204,8 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
 
     if (selection.collidesWith.length > 0) {
       const taken = new Set(selection.collidesWith);
-      const hit = board.blocks.filter((block) => taken.has(block.id));
-      const held = hit.filter((block) => block.status === "reserved").length;
+      const hit = board.rects.filter((rect) => taken.has(rect.id));
+      const held = hit.filter((rect) => rect.status === "reserved").length;
       const sold = hit.length - held;
 
       // Everything in the way is a hold this browser started. Buy stays ON:
@@ -172,7 +213,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
       // clock still running, and offers to release anything that only
       // partly overlaps. Refusing here would put the selector in front of
       // the one refusal the buyer can actually undo.
-      if (hit.length > 0 && hit.every((block) => ownHoldIds.includes(block.id))) {
+      if (hit.length > 0 && hit.every((rect) => ownHoldIds.includes(rect.id))) {
         if (walletMissing) {
           return {
             canBuy: false,
@@ -231,7 +272,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
       hint: "Holds these pixels for 30 minutes while you upload.",
       tone: "info",
     };
-  }, [selection, board.blocks, walletMissing, ownHoldIds]);
+  }, [selection, board.rects, walletMissing, ownHoldIds]);
 
   // A second press while a dialog is already open must not start a second
   // purchase. The scrim makes that all but unreachable by mouse; this is the
@@ -358,7 +399,10 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
   return (
     <div className="board-shell">
       <BoardCanvas
-        blocks={board.blocks}
+        rects={board.rects}
+        wall={board.wall}
+        details={details}
+        onNeedDetails={requestDetails}
         ownHoldIds={ownHoldIds}
         selection={selection}
         activePreset={activePreset}
@@ -442,28 +486,37 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
             top: Math.max(chrome.top + 8, hovered.at.y - 88),
           }}
         >
+          {/*
+            The rectangle and its state come off the board payload and are
+            there the instant the pointer arrives. The caption and the link do
+            not: they are fetched for this one rectangle, so the card says
+            what it knows first and fills the words in when they land. A hold
+            publishes neither, and never will.
+          */}
           <p className="truncate font-display text-[14.5px] font-bold text-ink">
-            {hovered.block.caption ?? "No caption"}
+            {hovered.rect.status === "reserved"
+              ? "On hold"
+              : (details.get(hovered.rect.id)?.caption ?? "No caption")}
           </p>
-          {hovered.block.link && (
+          {details.get(hovered.rect.id)?.link && (
             <p className="truncate text-[12.5px] font-semibold text-primary-pressed">
-              {hovered.block.link}
+              {details.get(hovered.rect.id)!.link}
             </p>
           )}
           <p className="tabular mt-1 text-[11px] text-body">
-            {hovered.block.w} × {hovered.block.h} at ({hovered.block.x}, {hovered.block.y}) ·{" "}
-            {(hovered.block.w * hovered.block.h).toLocaleString("en-US")} px
+            {hovered.rect.w} × {hovered.rect.h} at ({hovered.rect.x}, {hovered.rect.y}) ·{" "}
+            {(hovered.rect.w * hovered.rect.h).toLocaleString("en-US")} px
           </p>
           <p
             className={`mt-1 text-[11px] font-semibold ${
-              hovered.block.status === "reserved" && ownHoldIds.includes(hovered.block.id)
+              hovered.rect.status === "reserved" && ownHoldIds.includes(hovered.rect.id)
                 ? "text-primary-pressed"
                 : "text-body"
             }`}
           >
-            {hovered.block.status !== "reserved"
+            {hovered.rect.status !== "reserved"
               ? "Sold — not for sale"
-              : ownHoldIds.includes(hovered.block.id)
+              : ownHoldIds.includes(hovered.rect.id)
                 ? "Your hold. Select it and press Buy to carry on, or to let it go."
                 : "On hold mid-purchase — not for sale right now"}
           </p>

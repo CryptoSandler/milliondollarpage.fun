@@ -21,5 +21,16 @@ export default defineConfig({
     // it forces a single worker instead of running files in parallel.
     pool: "forks",
     fileParallelism: false,
+    // Fifteen seconds, up from Vitest's five.
+    //
+    // Nothing here is CPU-bound: composing the whole 1250x800 wall takes tens
+    // of milliseconds, and every test in this suite talks to a Postgres that
+    // is not on this machine, where one round trip is a couple of hundred
+    // milliseconds. A test that seeds two purchases and then rebuilds the wall
+    // three times is a dozen of those, and it was failing on the clock rather
+    // than on an assertion. The hook timeout follows for the same reason: the
+    // TRUNCATE before each test is one more round trip.
+    testTimeout: 15_000,
+    hookTimeout: 15_000,
   },
 });

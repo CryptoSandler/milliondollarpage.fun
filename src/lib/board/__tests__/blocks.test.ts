@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
 import { execute, query } from "../../db";
-import { boardStats, listLiveBlocks, sweepExpiredReservations } from "../blocks";
+import { boardStats, getBlockDetails, listBoardRects, sweepExpiredReservations } from "../blocks";
 import { validateContent } from "../content";
 import { attachContent } from "../orders";
 import { reserveRect } from "../reserve";
@@ -22,151 +22,136 @@ async function insert(
   );
 }
 
-describe("listLiveBlocks", () => {
+describe("listBoardRects", () => {
   it("returns nothing for an empty board", async () => {
-    expect(await listLiveBlocks()).toEqual([]);
+    expect(await listBoardRects()).toEqual([]);
   });
 
-  it("includes reserved, paid and minted blocks, because all three hold pixels", async () => {
+  it("includes reserved, paid and minted rectangles, because all three hold pixels", async () => {
     await insert(0, 0, 10, 10, "reserved", "2999-01-01T00:00:00Z");
     await insert(10, 0, 10, 10, "paid");
     await insert(20, 0, 10, 10, "minted");
-    const blocks = await listLiveBlocks();
-    expect(blocks.map((b) => b.status).sort()).toEqual(["minted", "paid", "reserved"]);
+    const rects = await listBoardRects();
+    expect(rects.map((r) => r.status).sort()).toEqual(["minted", "paid", "reserved"]);
   });
 
   /**
    * The reversal migration 006 made. A takedown used to be a status the
    * overlap constraint ignored, which put the rectangle back on sale; it is a
-   * flag on a row that stays sold, so the block is still HERE — the board has
-   * to keep those pixels out of the selector — and only its content goes.
+   * flag on a row that stays sold, so the rectangle is still HERE — the board
+   * has to keep those pixels out of the selector — and only its content goes.
    */
-  it("still returns a taken-down block, because its pixels are still not for sale", async () => {
+  it("still returns a taken-down rectangle, because its pixels are still not for sale", async () => {
     await insert(0, 0, 10, 10, "paid");
     await execute("UPDATE blocks SET hidden_at = now()");
-    const blocks = await listLiveBlocks();
-    expect(blocks).toHaveLength(1);
-    expect(blocks[0]).toMatchObject({ status: "paid", x: 0, y: 0, w: 10, h: 10 });
-  });
-
-  it("publishes none of a taken-down block's words or bytes", async () => {
-    await insert(0, 0, 10, 10, "paid");
-    await execute(
-      `UPDATE blocks SET caption = 'My shop', link = 'https://example.com/shop',
-                         image_fit = 'cover', pending_image = $1,
-                         pending_image_mime = 'image/webp', hidden_at = now()`,
-      [Buffer.from([0x52, 0x49, 0x46, 0x46])],
-    );
-    const [block] = await listLiveBlocks();
-    expect(block.caption).toBeNull();
-    expect(block.link).toBeNull();
-    expect(block.imageFit).toBeNull();
-    expect(block.hasImage).toBe(false);
+    const rects = await listBoardRects();
+    expect(rects).toHaveLength(1);
+    expect(rects[0]).toMatchObject({ status: "paid", x: 0, y: 0, w: 10, h: 10 });
   });
 
   it("excludes reservations that have already expired", async () => {
     await insert(0, 0, 10, 10, "reserved", "2000-01-01T00:00:00Z");
-    expect(await listLiveBlocks()).toEqual([]);
+    expect(await listBoardRects()).toEqual([]);
   });
 
-  it("returns coordinates a canvas can draw without further arithmetic", async () => {
+  it("returns coordinates a canvas can hit-test without further arithmetic", async () => {
     await insert(120, 340, 50, 20, "minted");
-    const [block] = await listLiveBlocks();
-    expect(block).toMatchObject({ x: 120, y: 340, w: 50, h: 20 });
+    const [rect] = await listBoardRects();
+    expect(rect).toMatchObject({ x: 120, y: 340, w: 50, h: 20 });
   });
 
-  it("says a sold block has no image when nobody uploaded one", async () => {
-    await insert(0, 0, 10, 10, "paid");
-    expect((await listLiveBlocks())[0].hasImage).toBe(false);
-  });
-
-  it("says a sold block has one once bytes are attached", async () => {
-    await insert(0, 0, 10, 10, "paid");
-    await execute(`UPDATE blocks SET pending_image = $1, pending_image_mime = 'image/webp'`, [
-      Buffer.from([0x52, 0x49, 0x46, 0x46]),
-    ]);
-    expect((await listLiveBlocks())[0].hasImage).toBe(true);
-  });
-
-  it("says a HELD block has none even when it does, because a hold publishes no pixels", async () => {
-    await insert(0, 0, 10, 10, "reserved", "2999-01-01T00:00:00Z");
-    await execute(`UPDATE blocks SET pending_image = $1, pending_image_mime = 'image/webp'`, [
-      Buffer.from([0x52, 0x49, 0x46, 0x46]),
-    ]);
-    expect((await listLiveBlocks())[0].hasImage).toBe(false);
-  });
-
-  it("never selects the bytes, or the buyer's wallet, into the public payload", async () => {
+  /**
+   * The whole point of the new shape: an id and four numbers. Every caption,
+   * link, fit and image flag that used to ride along here is gone — the
+   * artwork is one composite bitmap and the words are fetched per rectangle —
+   * and this is the assertion that fails the day one of them creeps back in
+   * and turns a payload of tens of thousands of rectangles into a payload of
+   * tens of thousands of captions.
+   */
+  it("carries no content at all, and never the buyer's wallet", async () => {
     // The wallet goes in with the row rather than being UPDATEd on after: a
     // paid row's buyer_pubkey is frozen by the ownership trigger (migration
     // 005), which is the point of that trigger and would refuse this fixture.
     await execute(
-      `INSERT INTO blocks (x, y, w, h, status, buyer_pubkey, price_per_pixel_usdc, total_usdc)
-       VALUES (0, 0, 10, 10, 'paid', 'AWalletNobodyMayLearn', 1000000, 100000000)`,
+      `INSERT INTO blocks (x, y, w, h, status, buyer_pubkey, caption, link, image_fit,
+                           price_per_pixel_usdc, total_usdc, pending_image, pending_image_mime)
+       VALUES (0, 0, 10, 10, 'paid', 'AWalletNobodyMayLearn', 'My shop',
+               'https://example.com/shop', 'cover', 1000000, 100000000, $1, 'image/webp')`,
+      [Buffer.from([0x52, 0x49, 0x46, 0x46])],
     );
-    const [block] = await listLiveBlocks();
-    expect(Object.keys(block).sort()).toEqual(
-      ["caption", "h", "hasImage", "id", "imageFit", "link", "status", "w", "x", "y"],
-    );
+    const [rect] = await listBoardRects();
+    expect(Object.keys(rect).sort()).toEqual(["h", "id", "status", "w", "x", "y"]);
+  });
+});
+
+describe("getBlockDetails", () => {
+  it("returns nothing for a well-formed id that names no rectangle", async () => {
+    expect(await getBlockDetails("00000000-0000-4000-8000-000000000000")).toBeNull();
+  });
+
+  it("publishes a paid rectangle's caption and link, which is what somebody bought", async () => {
+    await insert(0, 0, 10, 10, "paid");
+    await execute(`UPDATE blocks SET caption = 'My shop', link = 'https://example.com/shop'`);
+    const [rect] = await listBoardRects();
+    const details = await getBlockDetails(rect.id);
+    expect(details).toMatchObject({
+      caption: "My shop",
+      link: "https://example.com/shop",
+      x: 0,
+      w: 10,
+      status: "paid",
+    });
+  });
+
+  it("publishes a minted rectangle's caption and link too", async () => {
+    await insert(0, 0, 10, 10, "minted");
+    await execute(`UPDATE blocks SET caption = 'Minted', link = 'https://example.com/minted'`);
+    const [rect] = await listBoardRects();
+    expect(await getBlockDetails(rect.id)).toMatchObject({
+      caption: "Minted",
+      link: "https://example.com/minted",
+    });
   });
 
   /**
    * A hold's words are as unpaid as its pixels.
    *
-   * Reserving costs nothing and lasts half an hour. Before this, the board
-   * published a reservation's caption and link to every visitor, which made a
-   * free hold into free hosting for a phishing link, repeatable for as long
-   * as somebody cared to keep re-reserving. The bytes were already protected;
-   * these are the same rule applied to the text.
+   * Reserving costs nothing and lasts half an hour. Before this rule existed,
+   * the board published a reservation's caption and link to every visitor,
+   * which made a free hold into free hosting for a phishing link, repeatable
+   * for as long as somebody cared to keep re-reserving. Moving the words onto
+   * their own route does not move the rule with them.
    */
-  it("publishes no caption and no link for a held block, however filled in it is", async () => {
+  it("publishes no caption and no link for a hold, however filled in it is", async () => {
     await insert(0, 0, 10, 10, "reserved", "2999-01-01T00:00:00Z");
     await execute(
-      `UPDATE blocks SET caption = 'Free money', link = 'https://not-really-us.example/', image_fit = 'cover'`,
+      `UPDATE blocks SET caption = 'Free money', link = 'https://not-really-us.example/'`,
     );
-    const [block] = await listLiveBlocks();
-    expect(block.status).toBe("reserved");
-    expect(block.caption).toBeNull();
-    expect(block.link).toBeNull();
-    expect(block.imageFit).toBeNull();
+    const [rect] = await listBoardRects();
+    const details = await getBlockDetails(rect.id);
+    expect(details).toMatchObject({ status: "reserved", caption: null, link: null });
   });
 
-  it("still returns the held block itself, because the board has to draw it", async () => {
-    await insert(40, 50, 20, 20, "reserved", "2999-01-01T00:00:00Z");
-    await execute(`UPDATE blocks SET caption = 'Free money', link = 'https://not-really-us.example/'`);
-    const blocks = await listLiveBlocks();
-    expect(blocks).toHaveLength(1);
-    expect(blocks[0]).toMatchObject({ x: 40, y: 50, w: 20, h: 20, status: "reserved" });
-  });
-
-  it("publishes a paid block's caption and link, which is what somebody bought", async () => {
+  it("publishes none of a taken-down rectangle's words, and still gives its shape", async () => {
     await insert(0, 0, 10, 10, "paid");
-    await execute(`UPDATE blocks SET caption = 'My shop', link = 'https://example.com/shop'`);
-    const [block] = await listLiveBlocks();
-    expect(block.caption).toBe("My shop");
-    expect(block.link).toBe("https://example.com/shop");
+    await execute(
+      `UPDATE blocks SET caption = 'My shop', link = 'https://example.com/shop', hidden_at = now()`,
+    );
+    const [rect] = await listBoardRects();
+    expect(await getBlockDetails(rect.id)).toMatchObject({
+      status: "paid",
+      caption: null,
+      link: null,
+      w: 10,
+      h: 10,
+    });
   });
 
-  it("publishes a minted block's caption and link too", async () => {
-    await insert(0, 0, 10, 10, "minted");
-    await execute(`UPDATE blocks SET caption = 'Minted', link = 'https://example.com/minted'`);
-    const [block] = await listLiveBlocks();
-    expect(block.caption).toBe("Minted");
-    expect(block.link).toBe("https://example.com/minted");
-  });
-
-  /**
-   * The canvas cannot draw an image correctly without knowing which fit its
-   * buyer chose. It used to stretch every bitmap to the block's shape; now it
-   * letterboxes or crops, and this is the column that tells it which.
-   */
-  it("tells the canvas the fit a sold block's buyer chose", async () => {
-    await insert(0, 0, 10, 10, "paid");
-    await execute(`UPDATE blocks SET image_fit = 'contain'`);
-    expect((await listLiveBlocks())[0].imageFit).toBe("contain");
-
-    await execute(`UPDATE blocks SET image_fit = 'cover'`);
-    expect((await listLiveBlocks())[0].imageFit).toBe("cover");
+  it("returns nothing for an expired hold, the same as for a rectangle that never existed", async () => {
+    await insert(0, 0, 10, 10, "reserved", "2999-01-01T00:00:00Z");
+    const [rect] = await listBoardRects();
+    await execute("UPDATE blocks SET expires_at = '2000-01-01T00:00:00Z' WHERE id = $1", [rect.id]);
+    expect(await getBlockDetails(rect.id)).toBeNull();
   });
 });
 
@@ -195,7 +180,7 @@ describe("sweepExpiredReservations", () => {
   it("deletes expired reservations and reports how many", async () => {
     await insert(0, 0, 10, 10, "reserved", "2000-01-01T00:00:00Z");
     expect(await sweepExpiredReservations()).toBe(1);
-    expect(await listLiveBlocks()).toEqual([]);
+    expect(await listBoardRects()).toEqual([]);
   });
 
   it("never touches a live reservation", async () => {
@@ -212,7 +197,7 @@ describe("sweepExpiredReservations", () => {
     await insert(0, 0, 10, 10, "reserved", "2000-01-01T00:00:00Z");
     await sweepExpiredReservations();
     await insert(0, 0, 10, 10, "minted");
-    expect(await listLiveBlocks()).toHaveLength(1);
+    expect(await listBoardRects()).toHaveLength(1);
   });
 
   /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { LiveBlock } from "../blocks";
+import type { BlockDetails, BoardRect } from "../blocks";
 import { BOARD_HEIGHT, BOARD_WIDTH } from "../geometry";
 import {
   CURSOR_LEAP_RULES,
@@ -16,22 +16,24 @@ function block(
   y: number,
   w: number,
   h: number,
-  extra: Partial<LiveBlock> = {},
-): LiveBlock {
-  return {
-    id: `${x}-${y}`,
-    x,
-    y,
-    w,
-    h,
-    status: "minted",
-    caption: null,
-    link: null,
-    imageFit: null,
-    hasImage: false,
-    ...extra,
-  };
+  extra: Partial<BoardRect> = {},
+): BoardRect {
+  return { id: `${x}-${y}`, x, y, w, h, status: "minted", ...extra };
 }
+
+/**
+ * The captions the board no longer ships in its payload.
+ *
+ * They arrive from `/api/blocks/{id}` when a pointer or the keyboard cursor
+ * rests on a rectangle, so the mirror is handed a map rather than reading a
+ * field. That is the whole of what the representation change moved through
+ * this function, and it is why every assertion below passes one.
+ */
+function words(rect: BoardRect, caption: string | null): Map<string, BlockDetails> {
+  return new Map([[rect.id, { ...rect, caption, link: null }]]);
+}
+
+const NO_WORDS = new Map<string, BlockDetails>();
 
 const NONE = { shiftKey: false, altKey: false };
 
@@ -193,46 +195,60 @@ describe("nextCursor", () => {
 
 describe("describeCursor", () => {
   it("says there is nothing yet, and still passes the hint along", () => {
-    expect(describeCursor(null, [], "Pick a size to start.")).toBe(
+    expect(describeCursor(null, [], NO_WORDS, "Pick a size to start.")).toBe(
       "Nothing selected. Pick a size to start.",
     );
   });
 
   it("states the rectangle, its pixels and its price", () => {
     const selection = describeSelection({ x: 240, y: 480, w: 20, h: 10 }, [], DOLLAR);
-    expect(describeCursor(selection, [], "Holds these pixels for 30 minutes.")).toBe(
+    expect(describeCursor(selection, [], NO_WORDS, "Holds these pixels for 30 minutes.")).toBe(
       "20 by 10 at 240, 480. 200 pixels, $200. Holds these pixels for 30 minutes.",
     );
   });
 
-  it("names the sold block under the cursor's own corner, caption and all", () => {
-    const blocks = [block(0, 0, 100, 100, { caption: "Top left corner" })];
-    const selection = describeSelection({ x: 0, y: 0, w: 10, h: 10 }, blocks, DOLLAR);
-    expect(describeCursor(selection, blocks, "A block here is already sold.")).toContain(
-      "Under the cursor: a sold block called Top left corner.",
-    );
+  it("names the sold rectangle under the cursor's own corner, caption and all", () => {
+    const under = block(0, 0, 100, 100);
+    const selection = describeSelection({ x: 0, y: 0, w: 10, h: 10 }, [under], DOLLAR);
+    expect(
+      describeCursor(selection, [under], words(under, "Top left corner"), "Already sold."),
+    ).toContain("Under the cursor: a sold block called Top left corner.");
   });
 
-  it("says a sold block has no caption rather than saying nothing", () => {
-    const blocks = [block(500, 500, 10, 10)];
-    const selection = describeSelection({ x: 500, y: 500, w: 10, h: 10 }, blocks, DOLLAR);
-    expect(describeCursor(selection, blocks, "Sold.")).toContain(
+  it("says a sold rectangle has no caption rather than saying nothing", () => {
+    const under = block(500, 500, 10, 10);
+    const selection = describeSelection({ x: 500, y: 500, w: 10, h: 10 }, [under], DOLLAR);
+    expect(describeCursor(selection, [under], words(under, null), "Sold.")).toContain(
       "Under the cursor: a sold block with no caption.",
     );
   });
 
+  /**
+   * The words are fetched, so there is a moment before they arrive. What the
+   * mirror must not do in that moment is claim the rectangle has no caption:
+   * it says the true half — that a sale is under the cursor — and picks the
+   * caption up when the fetch lands and this runs again.
+   */
+  it("still names a sold rectangle whose words have not arrived yet", () => {
+    const under = block(500, 500, 10, 10);
+    const selection = describeSelection({ x: 500, y: 500, w: 10, h: 10 }, [under], DOLLAR);
+    const said = describeCursor(selection, [under], NO_WORDS, "Sold.");
+    expect(said).toContain("Under the cursor: a sold block.");
+    expect(said).not.toContain("no caption");
+  });
+
   it("tells a hold apart from a sale", () => {
-    const blocks = [block(300, 300, 10, 10, { status: "reserved" })];
-    const selection = describeSelection({ x: 300, y: 300, w: 10, h: 10 }, blocks, DOLLAR);
-    expect(describeCursor(selection, blocks, "On hold.")).toContain(
+    const under = block(300, 300, 10, 10, { status: "reserved" });
+    const selection = describeSelection({ x: 300, y: 300, w: 10, h: 10 }, [under], DOLLAR);
+    expect(describeCursor(selection, [under], words(under, null), "On hold.")).toContain(
       "Under the cursor: a block on hold with no caption.",
     );
   });
 
-  it("says nothing about a block the cursor only overlaps but does not start on", () => {
-    const blocks = [block(510, 500, 10, 10, { caption: "Not this one" })];
-    const selection = describeSelection({ x: 500, y: 500, w: 20, h: 10 }, blocks, DOLLAR);
-    expect(describeCursor(selection, blocks, "Blocked.")).toBe(
+  it("says nothing about a rectangle the cursor only overlaps but does not start on", () => {
+    const other = block(510, 500, 10, 10);
+    const selection = describeSelection({ x: 500, y: 500, w: 20, h: 10 }, [other], DOLLAR);
+    expect(describeCursor(selection, [other], words(other, "Not this one"), "Blocked.")).toBe(
       "20 by 10 at 500, 500. 200 pixels, $200. Blocked.",
     );
   });

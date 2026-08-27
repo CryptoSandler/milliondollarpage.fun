@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { LiveBlock } from "../blocks";
+import type { BoardRect } from "../blocks";
 import {
   PRESETS,
   describeSelection,
@@ -10,8 +10,8 @@ import {
 
 const DOLLAR = 1_000_000;
 
-function sold(x: number, y: number, w: number, h: number, id = "sold-1"): LiveBlock {
-  return { id, x, y, w, h, status: "minted", caption: null, link: null, imageFit: null, hasImage: false };
+function sold(x: number, y: number, w: number, h: number, id = "sold-1"): BoardRect {
+  return { id, x, y, w, h, status: "minted" };
 }
 
 describe("PRESETS", () => {

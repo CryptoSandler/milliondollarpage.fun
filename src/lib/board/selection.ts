@@ -1,4 +1,4 @@
-import type { LiveBlock } from "./blocks";
+import type { BoardRect } from "./blocks";
 import {
   type Point,
   type Rect,
@@ -13,8 +13,8 @@ import { totalBaseUnits } from "./pricing";
 /**
  * What the buyer has currently selected, and whether it can be bought.
  *
- * Pure, and it returns the IDs of the blocks it collides with rather than a
- * boolean, because the canvas paints those blocks red. "Why can't I select
+ * Pure, and it returns the IDs of the rectangles it collides with rather than
+ * a boolean, because the canvas paints those rectangles red. "Why can't I select
  * here" is answered by the drawing, not by an error message — see
  * docs/references.md, where the same idea is taken from a competitor's
  * selector.
@@ -38,8 +38,8 @@ export type Selection = {
   buyable: boolean;
 };
 
-export function describeSelection(rect: Rect, blocks: LiveBlock[], perPixel: number): Selection {
-  const collidesWith = blocks.filter((block) => rectsIntersect(rect, block)).map((block) => block.id);
+export function describeSelection(rect: Rect, rects: BoardRect[], perPixel: number): Selection {
+  const collidesWith = rects.filter((other) => rectsIntersect(rect, other)).map((other) => other.id);
   const pixels = rectPixels(rect);
 
   return {
@@ -54,19 +54,19 @@ export function describeSelection(rect: Rect, blocks: LiveBlock[], perPixel: num
 export function selectionFromDrag(
   from: Point,
   to: Point,
-  blocks: LiveBlock[],
+  rects: BoardRect[],
   perPixel: number,
 ): Selection {
-  return describeSelection(snapRect(from, to), blocks, perPixel);
+  return describeSelection(snapRect(from, to), rects, perPixel);
 }
 
 export function selectionFromPreset(
   at: Point,
   size: number,
-  blocks: LiveBlock[],
+  rects: BoardRect[],
   perPixel: number,
 ): Selection {
-  return describeSelection(presetRect(at, size), blocks, perPixel);
+  return describeSelection(presetRect(at, size), rects, perPixel);
 }
 
 /**
@@ -89,9 +89,9 @@ export function presetSelectionForMove(
   at: Point,
   size: number | null,
   placed: boolean,
-  blocks: LiveBlock[],
+  rects: BoardRect[],
   perPixel: number,
 ): Selection | null {
   if (size === null || placed) return null;
-  return selectionFromPreset(at, size, blocks, perPixel);
+  return selectionFromPreset(at, size, rects, perPixel);
 }

@@ -2,7 +2,6 @@ import type { PoolClient } from "pg";
 import { execute, query, queryOne } from "../db";
 import { IMAGE_BEARING_STATUSES, hasPublicImageSql, publishesTextSql } from "./block-image";
 import { TOTAL_PIXELS } from "./geometry";
-import type { Fit } from "./image-fit";
 
 /**
  * Reading the board.
@@ -15,11 +14,58 @@ import type { Fit } from "./image-fit";
  * An expired reservation is not live even though it is still a row. Expiry is
  * a clock comparison rather than a status, so it is applied in every read
  * rather than depending on the sweep having run recently.
+ *
+ * WHAT MOVED OUT OF HERE. `listLiveBlocks` used to return a row per block with
+ * its caption, its link, its fit and a flag saying it had a bitmap to fetch.
+ * That shape was designed for ten thousand 10×10 blocks; the unit is a pixel
+ * now. The artwork went to `./composite.ts`, which serves the whole wall as
+ * one versioned bitmap, and the words went to `getBlockDetails` below, which
+ * answers one rectangle at a time when somebody actually rests on it. What is
+ * left here is the hit-testing list, and it carries no content at all.
  */
 
 export type LiveStatus = "reserved" | "paid" | "minted";
 
-export type LiveBlock = {
+/**
+ * One rectangle on the wall, with no content in it at all.
+ *
+ * This is the whole of what the board ships per purchase now: an id and four
+ * numbers, plus which of the three live states it is in. The artwork arrives
+ * as ONE composite bitmap (see `./composite.ts`), so nothing here has to carry
+ * a caption, a link, a fit or a flag saying an image exists — and at pixel
+ * granularity that matters, because there can be tens of thousands of these.
+ *
+ * `status` is here rather than being folded into the bitmap because a HOLD is
+ * not in the bitmap: it is volatile, it expires within half an hour, and the
+ * canvas draws it from this list. Sold rectangles are in the bitmap and still
+ * appear here, because the selector has to refuse them and the pointer has to
+ * hit-test them.
+ *
+ * ponytail: about seventy bytes each as JSON, not the twenty a packed
+ * encoding would give — the uuid is most of it. Ten thousand purchases is
+ * around 700 KB, which is a payload this poll can carry; if the wall ever
+ * fills to the point where it cannot, the upgrade is a binary or tuple
+ * encoding on this one field, and nothing else has to change to take it.
+ */
+export type BoardRect = {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  status: LiveStatus;
+};
+
+/**
+ * What a pointer or a keyboard cursor resting on a rectangle asks for.
+ *
+ * Fetched one at a time, on demand, by `src/lib/board/block-details.ts`.
+ * Caption and link used to ride along in the board payload for every block at
+ * once — which was affordable when a block was 10×10 and is not when it is one
+ * pixel. Nobody reads ten thousand captions; they read the one under the
+ * pointer.
+ */
+export type BlockDetails = {
   id: string;
   x: number;
   y: number;
@@ -27,39 +73,16 @@ export type LiveBlock = {
   h: number;
   status: LiveStatus;
   /**
-   * The buyer's caption and link — or null, for a block nobody has paid for.
+   * The buyer's caption and link — or null.
    *
-   * A `reserved` row can carry both in the database and publishes neither
-   * here. That is the same rule `hasImage` applies to the bytes, applied to
-   * the words: a hold is thirty free minutes, and without this it was thirty
-   * free minutes of serving a stranger's link to every visitor. The owner of
-   * the hold still gets their own text back from `GET /api/orders/{id}` —
-   * this payload is one shared response with no reader to be owner OF.
+   * Null for a hold, which publishes neither: a reservation is thirty free
+   * minutes, and without this it was thirty free minutes of serving a
+   * stranger's link to every visitor. Null for a block that has been taken
+   * down, for the reason a takedown exists. The owner of a hold still gets
+   * their own text back from `GET /api/orders/{id}`.
    */
   caption: string | null;
   link: string | null;
-  /**
-   * How the buyer asked their bitmap to meet the block's edges.
-   *
-   * Null for a block with no upload behind it, and null for a hold, which
-   * publishes nothing about an upload it has not paid for. The canvas needs
-   * this to draw at all: without it, it stretched every image to the block's
-   * shape and a contained one came out squashed for good. See `image-fit.ts`.
-   */
-  imageFit: Fit | null;
-  /**
-   * Whether `/api/blocks/{id}/image` will answer with a bitmap.
-   *
-   * A boolean, never the bytes: a full board is a thousand images, and
-   * inlining even small ones would turn a payload the page refetches twice a
-   * minute into tens of megabytes. The canvas fetches each bitmap once, on
-   * its own URL, and the browser caches it from there.
-   *
-   * False is not "no image" so much as "nothing you may see yet" — it is
-   * false for a reservation whose buyer has already uploaded, because a hold
-   * publishes no pixels. See block-image.ts for why.
-   */
-  hasImage: boolean;
 };
 
 // Exported so reserve.ts can ask, after a 409, which rows are live over a
@@ -69,32 +92,50 @@ export const LIVE = `status IN ('reserved', 'paid', 'minted')
               AND (status <> 'reserved' OR (expires_at IS NOT NULL AND expires_at > now()))`;
 
 /**
- * Every rectangle the board must draw.
+ * Every rectangle the board must hit-test, and nothing else.
  *
- * The column list is a whitelist and stays one. `buyer_pubkey` in particular
- * must never join it: this payload is public and unauthenticated, and that
- * column is the single credential `/content`, `/confirm` and the release
- * endpoint trust. Adding it would hand every visitor the keys to every open
- * hold. `pending_image` must never join it either — the bytes go out one
- * block at a time, on their own route.
+ * The column list is a whitelist and stays one, and it is now short enough
+ * that the rule is easy to keep: `buyer_pubkey` must never join it (this
+ * payload is public and unauthenticated, and that column is the single
+ * credential `/content`, `/confirm` and the release endpoint trust);
+ * `pending_image` must never join it either.
  *
- * `caption` and `link` are on the whitelist but pass through
- * `publishesTextSql` first, which is the same "somebody paid" test
- * `hasPublicImageSql` applies to the bytes. A held block is still returned —
- * the board has to draw it, and it draws it as a hold — with both columns
- * null.
+ * A TAKEN-DOWN BLOCK IS STILL HERE. Its content is gone from the composite and
+ * from every endpoint, but its rectangle is still sold and still its owner's,
+ * so the selector must keep refusing it. That is the whole difference between
+ * a visibility flag and the status it replaced.
  */
-export async function listLiveBlocks(): Promise<LiveBlock[]> {
-  return query<LiveBlock>(
-    `SELECT id, x, y, w, h, status,
-            CASE WHEN ${publishesTextSql(1)} THEN caption END AS caption,
-            CASE WHEN ${publishesTextSql(1)} THEN link END AS link,
-            CASE WHEN ${publishesTextSql(1)} THEN image_fit END AS "imageFit",
-            ${hasPublicImageSql(1)} AS "hasImage"
+export async function listBoardRects(): Promise<BoardRect[]> {
+  return query<BoardRect>(
+    `SELECT id, x, y, w, h, status
        FROM blocks
       WHERE ${LIVE}
       ORDER BY created_at`,
-    [[...IMAGE_BEARING_STATUSES]],
+  );
+}
+
+/**
+ * One rectangle's caption and link, for the pointer or the cursor resting on
+ * it.
+ *
+ * Null covers every reason at once — no such block, an id that names nothing
+ * live, an expired hold — because the route answers all of them with the same
+ * 404 and must not let a caller tell them apart.
+ *
+ * `publishesTextSql` is the same predicate the composite and the image route
+ * use, so a hold's words and a taken-down block's words come back null here
+ * for exactly the reasons they are absent there. The rectangle itself still
+ * comes back, because a hover card over a hold still has something true to
+ * say.
+ */
+export async function getBlockDetails(id: string): Promise<BlockDetails | null> {
+  return queryOne<BlockDetails>(
+    `SELECT id, x, y, w, h, status,
+            CASE WHEN ${publishesTextSql(2)} THEN caption END AS caption,
+            CASE WHEN ${publishesTextSql(2)} THEN link END AS link
+       FROM blocks
+      WHERE id = $1 AND ${LIVE}`,
+    [id, [...IMAGE_BEARING_STATUSES]],
   );
 }
 

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import * as db from "../../db";
 import { execute, query } from "../../db";
-import { boardStats, listLiveBlocks } from "../blocks";
+import { boardStats, getBlockDetails, listBoardRects } from "../blocks";
 import type { ValidatedContent } from "../content";
 import {
   OrderExpired,
@@ -54,7 +54,7 @@ async function expire(id: string): Promise<void> {
  * 10-pixel grid, a 10x10 minimum and a $100 unit each made this purchase
  * impossible on their own. It runs the real path — hold, content, payment —
  * and then reads what the PAGE would draw rather than what the functions
- * returned, because the board renders from `listLiveBlocks` and `boardStats`
+ * returned, because the board renders from `listBoardRects` and `boardStats`
  * and a sale nobody can see is not a sale.
  */
 describe("a single pixel, bought end to end", () => {
@@ -79,9 +79,11 @@ describe("a single pixel, bought end to end", () => {
     expect(formatUsdc(Number(row.total_usdc))).toBe("$1");
 
     // And what a visitor sees: the board draws it, and the counters count it.
-    const [drawn] = await listLiveBlocks();
+    const [drawn] = await listBoardRects();
     expect(drawn).toMatchObject({ x: 137, y: 41, w: 1, h: 1, status: "paid" });
-    expect(drawn.caption).toBe("A caption");
+    // The words are not in that list any more — they are fetched for the one
+    // rectangle somebody rests on — so this is where a visitor gets them.
+    expect((await getBlockDetails(held.id))?.caption).toBe("A caption");
 
     const stats = await boardStats();
     expect(stats.pixelsSold).toBe(1);
