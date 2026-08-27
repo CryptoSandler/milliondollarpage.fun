@@ -35,7 +35,10 @@ describe("migration 002", () => {
       "is_animated",
       "mint_address",
       "owner_wallet",
-      "removed_at",
+      // Renamed by migration 006, which turned a takedown from a status into
+      // a flag; it is the same column doing the same job under a name that
+      // says what it is.
+      "hidden_at",
       "pending_image",
       "pending_image_mime",
     ]) {

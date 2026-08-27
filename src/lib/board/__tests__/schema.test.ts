@@ -56,11 +56,49 @@ describe("the blocks table", () => {
     expect(await errorCodeOf(() => insertBlock(0, 0, 10, 10, "reserved"))).toBe("23P01");
   });
 
-  it("frees a removed block's rectangle for someone else", async () => {
-    await insertBlock(0, 0, 20, 20, "removed");
+  /**
+   * The reversal migration 006 exists for. 001 excluded `removed` from the
+   * overlap constraint so a moderated rectangle went back on sale, which is
+   * ownership lapsing; a takedown is a flag on a row that stays sold, so the
+   * constraint keeps covering it and nobody else can ever buy those pixels.
+   */
+  it("keeps a taken-down block's rectangle out of everybody else's reach", async () => {
     await insertBlock(0, 0, 20, 20, "minted");
-    const rows = await query("SELECT id FROM blocks WHERE status = 'minted'");
-    expect(rows).toHaveLength(1);
+    await execute("UPDATE blocks SET hidden_at = now(), takedown_reason = 'a report'");
+    expect(await errorCodeOf(() => insertBlock(0, 0, 20, 20, "reserved"))).toBe("23P01");
+    expect(await query("SELECT id FROM blocks")).toHaveLength(1);
+  });
+
+  it("no longer has the status a takedown used to be", async () => {
+    expect(await errorCodeOf(() => insertBlock(0, 0, 10, 10, "removed"))).toBe("23514");
+  });
+
+  it("refuses to hide a hold, which has no published content to take down", async () => {
+    const code = await errorCodeOf(() =>
+      execute(
+        `INSERT INTO blocks (x, y, w, h, status, expires_at, hidden_at,
+                             price_per_pixel_usdc, total_usdc)
+         VALUES (0, 0, 10, 10, 'reserved', now() + interval '30 minutes', now(), 1000000, 100000000)`,
+      ),
+    );
+    expect(code).toBe("23514");
+  });
+
+  it("refuses a purge that left the bytes, the mime, the caption or the link behind", async () => {
+    await insertBlock(0, 0, 10, 10, "paid");
+    const code = await errorCodeOf(() =>
+      execute(
+        `UPDATE blocks SET hidden_at = now(), purged_at = now(), pending_image = $1,
+                           pending_image_mime = 'image/png'`,
+        [Buffer.from([1, 2, 3])],
+      ),
+    );
+    expect(code).toBe("23514");
+  });
+
+  it("refuses a purge that never hid anything, because destroyed bytes cannot still be published", async () => {
+    await insertBlock(0, 0, 10, 10, "paid");
+    expect(await errorCodeOf(() => execute("UPDATE blocks SET purged_at = now()"))).toBe("23514");
   });
 
   it("accepts a rectangle that lines up with no grid, because there is none", async () => {
@@ -165,8 +203,9 @@ describe("the ownership trigger", () => {
     expect(await ownerOf(id)).toBe(OWNER);
   });
 
-  it("refuses it for a removed block, because a takedown does not move ownership", async () => {
-    const id = await soldTo("removed");
+  it("refuses it for a taken-down block, because a takedown does not move ownership", async () => {
+    const id = await soldTo("paid");
+    await execute("UPDATE blocks SET hidden_at = now() WHERE id = $1", [id]);
     expect(
       await errorCodeOf(() =>
         execute("UPDATE blocks SET buyer_pubkey = $2 WHERE id = $1", [id, THIEF]),

@@ -41,7 +41,7 @@ describe("servesImage", () => {
     expect(servesImage("reserved")).toBe(false);
   });
 
-  it("refuses a removed block, whose rectangle is on sale again", () => {
+  it("refuses the status a takedown used to be, because migration 006 retired it", () => {
     expect(servesImage("removed")).toBe(false);
   });
 
@@ -74,8 +74,19 @@ describe("publishesText — the same rule, applied to the caption and the link",
     expect(publishesText("reserved")).toBe(false);
   });
 
-  it("refuses a removed block, whose rectangle is for sale again", () => {
+  it("refuses the retired status too, and for the same reason", () => {
     expect(publishesText("removed")).toBe(false);
+  });
+
+  /**
+   * A takedown is a flag, so it is unreachable from a status. This is the one
+   * pair of functions in the module allowed not to know about it, and the
+   * assertion exists so that a reader who finds them answering `true` for a
+   * hidden block's status does not read it as a bug in the wrong place.
+   */
+  it("says nothing about a takedown, which is not a status and never was", () => {
+    expect(publishesText("paid")).toBe(true);
+    expect(publishesTextSql(1)).toContain("hidden_at IS NULL");
   });
 
   /**
@@ -90,8 +101,8 @@ describe("publishesText — the same rule, applied to the caption and the link",
 
 describe("publishesTextSql", () => {
   it("binds the statuses at the position it is given rather than splicing them in", () => {
-    expect(publishesTextSql(1)).toBe("status = ANY($1)");
-    expect(publishesTextSql(4)).toBe("status = ANY($4)");
+    expect(publishesTextSql(1)).toContain("status = ANY($1)");
+    expect(publishesTextSql(4)).toContain("status = ANY($4)");
     expect(publishesTextSql(1)).not.toContain("paid");
   });
 
@@ -136,8 +147,9 @@ describe("getBlockImage", () => {
     expect(await getBlockImage(id)).toBeNull();
   });
 
-  it("returns nothing for a removed block", async () => {
-    const id = await insert("removed", WEBP, "image/webp");
+  it("returns nothing for a block that has been taken down, whose pixels are still its owner's", async () => {
+    const id = await insert("paid", WEBP, "image/webp");
+    await execute("UPDATE blocks SET hidden_at = now() WHERE id = $1", [id]);
     expect(await getBlockImage(id)).toBeNull();
   });
 

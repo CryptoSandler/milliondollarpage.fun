@@ -20,8 +20,10 @@ where the answer is "nothing yet", because a promise with no mechanism under it
 is the kind of thing this file exists to stop us believing.
 
 **Does not change owner.** A Postgres trigger, `blocks_owner_is_final`, added
-by `migrations/005_owner_is_final.sql`. It refuses any UPDATE that changes
-`buyer_pubkey` on a row that has been paid for — `paid`, `minted` or `removed`.
+by `migrations/005_owner_is_final.sql`, re-stated by 006 when `removed` was
+retired. It refuses any UPDATE that changes `buyer_pubkey` on a row that has
+been paid for — `paid` or `minted`, which since 006 is every status a sold row
+can hold, taken-down ones included.
 This is the same family of control as 001's exclusion constraint and it is here
 for the same reason: the database refuses the write, so no route, no script and
 no console session can reassign a sold rectangle by forgetting a check.
@@ -54,32 +56,50 @@ while a token balance is held.
 
 Content can have to come down. Ownership does not come with it.
 
-**Normal takedown is a visibility flag — SPECIFIED, NOT YET BUILT.** The block
-stops being published: the board does not draw it, the image route does not
-serve it, the caption and link are not returned. Nothing is deleted. It is
-reversible by clearing the flag, which matters because the common case is a
-report that turns out to be wrong, and an irreversible answer to a reversible
-question is how a mistake becomes permanent.
+**Normal takedown is a visibility flag — BUILT, `migrations/006_takedown.sql`.**
+`hidden_at` on a row that stays `paid` or `minted`. The block stops being
+published: the composite wall is regenerated without it, the image route does
+not serve it, the caption and link are not returned. Nothing is deleted. It is
+one statement, and so is undoing it:
 
-**Legal purge is a deletion of bytes — SPECIFIED, NOT YET BUILT.** Where the
-law requires the material itself to be destroyed rather than hidden, the stored
-image and any text are actually erased. It is not reversible and it is not
-meant to be. It is a strictly rarer action than the flag and should be recorded
-as such wherever it is eventually built.
+```sql
+UPDATE blocks SET hidden_at = now(), takedown_reason = '...' WHERE id = '...';
+UPDATE blocks SET hidden_at = NULL, takedown_reason = NULL WHERE id = '...';
+```
+
+Reversible matters because the common case is a report that turns out to be
+wrong, and an irreversible answer to a reversible question is how a mistake
+becomes permanent. The bytes are never touched, so what comes back is the same
+picture byte for byte.
+
+**Legal purge is a deletion of bytes — BUILT, same migration.**
+`block_purge_content(id, reason)`. Where the law requires the material itself
+to be destroyed rather than hidden, the image, its mime, its hash, the caption
+and the link are actually erased, and `purged_at` records that they were. It is
+not reversible and it is not meant to be. `blocks_purged_keeps_nothing` is the
+CHECK that says what "erased" means, so a purge that missed a column is a
+statement the database refuses rather than a residue nobody notices.
+
+Both levels are operator statements run by hand. There is no moderation console
+in this repository, and a route for one nobody has asked for would be a route
+with no caller.
 
 **In neither case does ownership of the rectangle transfer or lapse.** A
 takedown is about what is displayed. The buyer still owns the pixels, is not
 refunded (moderation after publication is not refunded — see
 `docs/references.md`), and nobody else can buy those pixels.
 
-**What is built today contradicts that last paragraph, and it is the open
-question of this section.** `status = 'removed'` exists, and a removed row is
-outside the exclusion constraint's predicate on purpose: 001 says in as many
-words that a moderated block's rectangle goes back on sale. That is ownership
-lapsing. The visibility flag above is what resolves it — a flag is orthogonal
-to status, so a hidden block keeps holding its rectangle — and until that is
-built, `removed` should be treated as a status nothing in production sets.
-Which of the two wins is a product decision and is not made here.
+**The schema used to contradict that last paragraph. It no longer does.**
+`status = 'removed'` existed, and a removed row sat outside the exclusion
+constraint's predicate on purpose: 001 said in as many words that a moderated
+block's rectangle goes back on sale. That is ownership lapsing, and it was the
+open question of this section. The owner decided it in favour of the paragraph
+above, and 006 is that decision: a takedown is a flag, the row keeps its sold
+status, the constraint keeps covering its rectangle, and `removed` is retired —
+dropped from `blocks_status_known`, so it is not a value anything can write.
+`removed_at` and `removed_reason` were renamed to `hidden_at` and
+`takedown_reason` rather than replaced; they were already the right two
+columns.
 
 ## Open decision: whether a block can change hands
 

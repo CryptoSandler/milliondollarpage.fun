@@ -31,9 +31,12 @@
 /**
  * The statuses whose pixels are public: the two that mean somebody paid.
  *
- * `reserved` is deliberately absent (see above) and `removed` is absent
- * because a moderated block's rectangle is back on sale — its bytes must stop
- * being served the moment it is removed, not linger behind a cached URL.
+ * `reserved` is deliberately absent (see above), and it is now the only status
+ * absent. `removed` used to be the other one, on the argument that a moderated
+ * block's rectangle went back on sale; migration 006 retired that status
+ * outright, because a takedown must not hand a paid rectangle back to the
+ * board. What a takedown is instead is `hidden_at`, and status has nothing to
+ * say about it — see `notTakenDownSql` below.
  */
 export const IMAGE_BEARING_STATUSES = ["paid", "minted"] as const;
 
@@ -56,6 +59,13 @@ export function servesImage(status: string): boolean {
  * takes a status and nothing else. `toPublicOrder` in `./orders.ts` is where
  * "or it is your own" gets added, because that is the only place that knows
  * who is asking.
+ *
+ * A TAKEDOWN IS ALSO NOT ASKED HERE, and that is the one thing to know about
+ * this pair of functions. Hiding is a flag on a row, not a status, so it is
+ * unreachable from a status alone — every SQL reader below adds
+ * `notTakenDownSql` and every one of them must. `toPublicOrder` is the single
+ * caller that is allowed to stop at the status, because the only reader it
+ * serves is the block's own buyer asking about their own order.
  */
 export const publishesText = servesImage;
 
@@ -79,19 +89,35 @@ export function hasPublicImageSql(statusesParam: number): string {
 }
 
 /**
+ * "This row has not been taken down", as SQL.
+ *
+ * Its own function rather than a string typed out three times, because it is
+ * the half of publication that a status cannot express. Migration 006 made a
+ * takedown a flag on a row that stays `paid` or `minted` — precisely so the
+ * rectangle can never be resold — which means every reader that used to be
+ * able to answer "may I publish this" from `status` alone now cannot.
+ *
+ * A legal purge nulls the bytes and the words as well, so this predicate is
+ * belt and braces for that case and the whole answer for a normal takedown,
+ * where every byte is still sitting in the row untouched and reversibly.
+ */
+export function notTakenDownSql(): string {
+  return "hidden_at IS NULL";
+}
+
+/**
  * "This row's own words are public", as SQL.
  *
- * The status half of `hasPublicImageSql`, on its own, because a caption and a
- * link have no `pending_image` to also require. `listLiveBlocks` wraps it
- * around `caption` and `link` in a CASE, so a held block comes back with
- * both columns null rather than being filtered out of the board entirely — a
- * hold still has to be drawn, it just has nothing to say.
+ * `hasPublicImageSql` without its two byte clauses, because a caption and a
+ * link have no `pending_image` to also require. Both halves it does keep are
+ * load-bearing: somebody paid for this rectangle, AND nobody has taken it
+ * down.
  *
  * `statusesParam` is the same 1-based bind position, carrying the same
  * `IMAGE_BEARING_STATUSES` array. Nothing is spliced into the string.
  */
 export function publishesTextSql(statusesParam: number): string {
-  return `status = ANY($${statusesParam})`;
+  return `(status = ANY($${statusesParam}) AND ${notTakenDownSql()})`;
 }
 
 /**

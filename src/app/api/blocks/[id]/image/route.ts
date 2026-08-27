@@ -44,10 +44,10 @@ export async function GET(
       // never swept, and there is no endpoint that replaces an image. The
       // URL is keyed by the block's uuid, so different pixels are always a
       // different URL — the case `immutable` would be wrong for cannot
-      // arise. The one way these bytes stop being correct is moderation, and
-      // a removed block leaves `IMAGE_BEARING_STATUSES` — which is why this
-      // says a year and not "forever", and why a takedown is a cache purge
-      // rather than only a database update.
+      // arise. The one way these bytes stop being correct is a takedown, and
+      // `hidden_at` takes this route's answer to a 404 the moment one lands —
+      // which is why this says a year and not "forever", and why a takedown
+      // is a cache purge rather than only a database update.
       "cache-control": "public, max-age=31536000, immutable",
       // These are bytes a stranger uploaded. `content-type` above is the
       // validated one; without this a browser is free to ignore it, sniff

@@ -35,9 +35,33 @@ describe("listLiveBlocks", () => {
     expect(blocks.map((b) => b.status).sort()).toEqual(["minted", "paid", "reserved"]);
   });
 
-  it("excludes removed blocks, whose pixels are for sale again", async () => {
-    await insert(0, 0, 10, 10, "removed");
-    expect(await listLiveBlocks()).toEqual([]);
+  /**
+   * The reversal migration 006 made. A takedown used to be a status the
+   * overlap constraint ignored, which put the rectangle back on sale; it is a
+   * flag on a row that stays sold, so the block is still HERE — the board has
+   * to keep those pixels out of the selector — and only its content goes.
+   */
+  it("still returns a taken-down block, because its pixels are still not for sale", async () => {
+    await insert(0, 0, 10, 10, "paid");
+    await execute("UPDATE blocks SET hidden_at = now()");
+    const blocks = await listLiveBlocks();
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toMatchObject({ status: "paid", x: 0, y: 0, w: 10, h: 10 });
+  });
+
+  it("publishes none of a taken-down block's words or bytes", async () => {
+    await insert(0, 0, 10, 10, "paid");
+    await execute(
+      `UPDATE blocks SET caption = 'My shop', link = 'https://example.com/shop',
+                         image_fit = 'cover', pending_image = $1,
+                         pending_image_mime = 'image/webp', hidden_at = now()`,
+      [Buffer.from([0x52, 0x49, 0x46, 0x46])],
+    );
+    const [block] = await listLiveBlocks();
+    expect(block.caption).toBeNull();
+    expect(block.link).toBeNull();
+    expect(block.imageFit).toBeNull();
+    expect(block.hasImage).toBe(false);
   });
 
   it("excludes reservations that have already expired", async () => {

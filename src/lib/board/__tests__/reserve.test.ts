@@ -94,10 +94,12 @@ describe("reserveRect", () => {
     expect(held.rect.x).toBe(20);
   });
 
-  it("allows a rectangle over a removed block, whose pixels are for sale again", async () => {
-    await seedBlock(0, 0, "removed", null);
-    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, BUYER, CALLER);
-    expect(held.rect).toEqual({ x: 0, y: 0, w: 20, h: 20 });
+  it("refuses a rectangle over a taken-down block, because a takedown is not a resale", async () => {
+    await seedBlock(0, 0, "paid", null);
+    await execute("UPDATE blocks SET hidden_at = now(), takedown_reason = 'a report'");
+    await expect(reserveRect({ x: 0, y: 0, w: 20, h: 20 }, BUYER, CALLER)).rejects.toBeInstanceOf(
+      RectangleTaken,
+    );
   });
 
   it("refuses a malformed rectangle before touching the database", async () => {
