@@ -57,7 +57,7 @@ const UNSIGNED =
   "Ask for a fresh challenge and sign that.";
 
 /**
- * Give a hold back before the thirty minutes are up.
+ * Give a hold back before its clock runs out.
  *
  * The one destructive endpoint on the site, and the only one whose whole job
  * is to delete a row, so every guard is stated twice: once here in the order

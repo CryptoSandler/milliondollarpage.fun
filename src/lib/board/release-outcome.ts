@@ -27,8 +27,8 @@ import type { ReleaseResult } from "./purchase-client";
  *   abandonment wording entirely.
  * - **Anything else.** 403, 404, a network failure, no wallet to sign with:
  *   we do not know that the hold is gone, so we must not say it is. The
- *   rectangle may still be reserved, and it comes back on its own when the
- *   thirty minutes are up.
+ *   rectangle may still be reserved, and it comes back on its own when its
+ *   clock runs out.
  *
  * A 404 sits in that last group rather than with the successes on purpose.
  * The buyer's own attempt may have deleted it, or a sweep may have, or the id
@@ -69,6 +69,6 @@ export function tellRelease(result: ReleaseResult): ReleaseTelling {
     purchased: false,
     notice:
       `${result.message} Those pixels may still be held for you, and they go back on the board ` +
-      "on their own once the thirty minutes are up. Nothing was charged.",
+      "on their own once the hold's clock runs out. Nothing was charged.",
   };
 }

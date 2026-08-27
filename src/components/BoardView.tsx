@@ -7,6 +7,7 @@ import { blockImageUrl } from "../lib/board/block-image";
 import type { BlockDetails, BoardRect, BoardStats } from "../lib/board/blocks";
 import type { Wall } from "../lib/board/composite";
 import type { Point } from "../lib/board/geometry";
+import { holdMinutes } from "../lib/board/hold-clock";
 import type { Selection } from "../lib/board/selection";
 import { BOARD_BOTTOM_GAP, type Chrome } from "../lib/canvas/viewport";
 import BlockCard from "./BlockCard";
@@ -249,7 +250,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
       }
       return {
         canBuy: false,
-        hint: "Part of this is on hold mid-purchase. It reopens within 30 minutes if that purchase is not finished.",
+        hint: "Part of this is on hold mid-purchase. It reopens within half an hour at the outside, if that purchase is not finished.",
         tone: "refused",
       };
     }
@@ -272,7 +273,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
 
     return {
       canBuy: true,
-      hint: "Holds these pixels for 30 minutes while you upload.",
+      hint: `Holds these pixels for ${holdMinutes(selection.pixels)} minutes while you upload.`,
       tone: "info",
     };
   }, [selection, board.rects, walletMissing, ownHoldIds]);

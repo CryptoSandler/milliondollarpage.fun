@@ -94,7 +94,9 @@ describe("describeUpload — every status the routes can return", () => {
 
   it("says 410 as a hold that ran out and a card that was never charged", () => {
     const messages = describeUpload({ kind: "failure", status: 410 });
-    expect(messages.form).toContain("thirty minutes");
+    // "The clock", not "the thirty minutes": how long a hold lasts depends on
+    // how big it is now, so the copy names the clock the buyer was watching.
+    expect(messages.form).toContain("The clock ran out");
     expect(messages.form).toContain("Nothing was charged");
   });
 

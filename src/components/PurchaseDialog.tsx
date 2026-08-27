@@ -70,7 +70,7 @@ const RETRY_LABEL = "Ask again";
 const NO_WALLET_TO_SIGN =
   "Handing a hold back is signed by the wallet that started it, and there is no wallet connected " +
   "here yet — only an address typed into a field, which proves nothing. These pixels go back on " +
-  "the board by themselves when the thirty minutes are up, and until then you can pick the hold " +
+  "the board by themselves when the hold's clock runs out, and until then you can pick the hold " +
   "up again from the board and carry on with it.";
 
 /**
@@ -333,7 +333,7 @@ export default function PurchaseDialog({
           // up from the board instead of being refused by their own rectangle.
           onClose(
             "That close did not get an answer in time, so these pixels may still be held for you. " +
-              "They are marked as yours on the board until the thirty minutes are up. Nothing was charged.",
+              "They are marked as yours on the board until the hold's clock runs out. Nothing was charged.",
           );
           return;
         }
@@ -414,7 +414,7 @@ export default function PurchaseDialog({
   const handleExpired = useCallback(() => {
     if (order) onHoldEnded(order.id);
     setFatalMessage(
-      "The thirty minutes ran out before this purchase was finished, so the hold ended and these pixels went back on the board. Nothing was charged. Close this and select them again — they are still free unless somebody else got there first.",
+      "The clock ran out before this purchase was finished, so the hold ended and these pixels went back on the board. Nothing was charged. Close this and select them again — they are still free unless somebody else got there first.",
     );
   }, [order, onHoldEnded]);
 
@@ -529,7 +529,7 @@ export default function PurchaseDialog({
       ? ""
       : resumed
         ? "Carrying on with the hold you already had on these pixels. The clock has been running since you first pressed Buy."
-        : "These pixels are held for you for thirty minutes. Nobody else can buy them while this is open.";
+        : "These pixels are held for you until the clock above runs out. Nobody else can buy them while this is open.";
 
   return (
     <dialog

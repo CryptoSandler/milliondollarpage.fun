@@ -136,7 +136,7 @@ async function send(
 }
 
 /**
- * Holds a rectangle for thirty minutes. 201 on success, 400/409/429 otherwise.
+ * Holds a rectangle. 201 on success, 400/409/429 otherwise.
  *
  * A 201 whose `id` the caller has seen before is a RESUMED hold, not a new
  * one: the server hands an existing order back in the same shape rather than
@@ -244,7 +244,7 @@ const RELEASE_FALLBACK = "That hold could not be let go.";
 type IssuedChallenge = { nonce: string; message: string };
 
 /**
- * Hands a hold back before its thirty minutes are up.
+ * Hands a hold back before its clock runs out.
  *
  * Two requests, because releasing is now something you prove rather than
  * something you claim: ask `/release-challenge` for a single-use sentence,

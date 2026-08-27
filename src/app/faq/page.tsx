@@ -3,7 +3,8 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { BOARD_HEIGHT, BOARD_WIDTH, TOTAL_PIXELS } from "../../lib/board/geometry";
 import { BLOCK_PIXEL_SCALE, STORED_MAX_LONG_EDGE } from "../../lib/board/image-plan";
-import { RESERVATION_MINUTES } from "../../lib/board/reserve";
+import { RESERVATION_MINUTES, SHORT_HOLD_MINUTES } from "../../lib/board/hold-clock";
+import { RESERVATION_LIMITS } from "../../lib/callers/limits";
 
 /**
  * The questions a buyer has to have answered before they spend anything.
@@ -157,14 +158,34 @@ export default function FaqPage() {
 
         <Question title="What happens between picking a rectangle and paying for it?">
           <p>
-            Pressing Buy holds the rectangle for {RESERVATION_MINUTES} minutes while you upload. Held
-            pixels are drawn differently from sold ones and nobody else can buy them in the meantime.
-            If you walk away, the hold ends by itself and the pixels go back on the board — nothing is
-            charged and nothing is kept.
+            Pressing Buy holds the rectangle while you upload. An ordinary rectangle is held for{" "}
+            {RESERVATION_MINUTES} minutes; a very large one is held for less, down to{" "}
+            {SHORT_HOLD_MINUTES} minutes, because a big rectangle sitting unbought is a big piece of
+            the wall nobody else can reach. The dialog counts your own clock down in front of you.
+            Held pixels are drawn differently from sold ones and nobody else can buy them in the
+            meantime. If you walk away, the hold ends by itself and the pixels go back on the board —
+            nothing is charged and nothing is kept.
           </p>
           <p>
             While it is only held, your picture, link and caption are yours alone: none of them is
             published to anybody until the rectangle is actually paid for.
+          </p>
+        </Question>
+
+        <Question title="Is there a limit on how much I can hold at once?">
+          <p>
+            Yes, and only on holding. One visitor may have{" "}
+            {RESERVATION_LIMITS.heldPixelsPerCaller.toLocaleString("en-US")} pixels held at a time —
+            a 100 by 100 rectangle, or several smaller ones adding up to it — and there is a limit on
+            how long pixels can be kept off the board over an hour, so nobody can park the wall for
+            free while everyone else waits.
+          </p>
+          <p>
+            <strong className="font-bold text-ink">There is no limit on how much you can own.</strong>{" "}
+            Paying clears what a hold cost, so a rectangle larger than that is bought as a few
+            adjoining purchases, one after another. There is no grid to line them up on and edges do
+            not collide, so the finished rectangles touch exactly — though each one is its own block,
+            with its own picture, link and caption.
           </p>
         </Question>
 
