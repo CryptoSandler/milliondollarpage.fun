@@ -6,6 +6,7 @@ import { GET as wallRoute } from "../../../app/api/wall/[version]/route";
 import { listBoardRects } from "../blocks";
 import { currentWall, ensureWall, wallPng } from "../composite";
 import { BOARD_HEIGHT, BOARD_WIDTH } from "../geometry";
+import { placeImage } from "../image-fit";
 
 /**
  * The wall, checked by looking at it.
@@ -283,3 +284,159 @@ describe("regenerating the wall", () => {
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
   });
 });
+
+/**
+ * A picture made of four solid quadrants, whose correct resize is knowable
+ * without knowing the resizer.
+ *
+ * This is what makes the next test a guard rather than a restatement. Any
+ * honest reduction of a large flat region samples that region's own colour —
+ * lanczos, bilinear, nearest, it does not matter — so the expected wall is
+ * four solid quarters of the colours that went in, and nothing here has to
+ * agree with `composite.ts` about how the resize is done.
+ */
+async function quarters(
+  size: number,
+  colours: [Rgba3, Rgba3, Rgba3, Rgba3],
+): Promise<Buffer> {
+  const half = size / 2;
+  const parts = await Promise.all(
+    colours.map((colour) =>
+      sharp({ create: { width: half, height: half, channels: 3, background: colour } })
+        .png()
+        .toBuffer(),
+    ),
+  );
+  return sharp({ create: { width: size, height: size, channels: 3, background: colours[0] } })
+    .composite([
+      { input: parts[0], left: 0, top: 0 },
+      { input: parts[1], left: half, top: 0 },
+      { input: parts[2], left: 0, top: half },
+      { input: parts[3], left: half, top: half },
+    ])
+    .png()
+    .toBuffer();
+}
+
+type Rgba3 = { r: number; g: number; b: number };
+
+describe("the wall draws the picture that was uploaded", () => {
+  /**
+   * FOUR TIMES DOWN, AND STILL THE SAME PICTURE.
+   *
+   * A purchase stores four image pixels per pixel bought, so the common case
+   * on the wall is a 4:1 reduction. What the buyer approved is that reduction,
+   * and this reads it back out of the rendered PNG: the four quadrants land
+   * where the four quadrants were, in the colours they were, at the size the
+   * rectangle was bought at.
+   */
+  it("reduces a stored image into its rectangle without moving anything", async () => {
+    const tl = { r: 210, g: 30, b: 30 };
+    const tr = { r: 30, g: 170, b: 60 };
+    const bl = { r: 30, g: 60, b: 200 };
+    const br = { r: 220, g: 190, b: 20 };
+    // 400x400 stored on a 100x100 rectangle: exactly the four-to-one this
+    // board is built around.
+    await buy({ x: 300, y: 200, w: 100, h: 100 }, await quarters(400, [tl, tr, bl, br]), "cover");
+
+    const { png } = await servedWall();
+    // Well inside each quarter, so no filter's edge kernel is being asked
+    // about — the claim is about where the picture is, not about the seam.
+    expect(await pixelAt(png, 310, 210)).toMatchObject({ ...tl, a: 255 });
+    expect(await pixelAt(png, 390, 210)).toMatchObject({ ...tr, a: 255 });
+    expect(await pixelAt(png, 310, 290)).toMatchObject({ ...bl, a: 255 });
+    expect(await pixelAt(png, 390, 290)).toMatchObject({ ...br, a: 255 });
+  });
+
+  it("enlarges a stored image into its rectangle the same way", async () => {
+    const tl = { r: 12, g: 12, b: 12 };
+    const tr = { r: 240, g: 240, b: 240 };
+    const bl = { r: 240, g: 12, b: 240 };
+    const br = { r: 12, g: 240, b: 12 };
+    // 4x4 on a 40x40 rectangle — a small purchase's stored image, blown up
+    // ten times. Nearest neighbour, so the quarters stay hard-edged.
+    await buy({ x: 500, y: 600, w: 40, h: 40 }, await quarters(4, [tl, tr, bl, br]), "cover");
+
+    const { png } = await servedWall();
+    expect(await pixelAt(png, 505, 605)).toMatchObject({ ...tl, a: 255 });
+    expect(await pixelAt(png, 535, 605)).toMatchObject({ ...tr, a: 255 });
+    expect(await pixelAt(png, 505, 635)).toMatchObject({ ...bl, a: 255 });
+    expect(await pixelAt(png, 535, 635)).toMatchObject({ ...br, a: 255 });
+  });
+});
+
+/**
+ * THE CHECKOUT AND THE WALL, ASKED THE SAME QUESTION.
+ *
+ * `ConfirmationStep` renders its preview by asking `placeImage` where the
+ * stored bitmap goes inside the rectangle, then drawing it there. The wall
+ * never calls `placeImage` at all — it hands `fit`, `position` and a
+ * background to sharp and lets sharp do it. Two implementations of one rule,
+ * which is exactly the pair that can silently drift.
+ *
+ * So the expected coordinates below come from the PREVIEW's module, and the
+ * colours come out of the WALL's rendered PNG. If sharp and `placeImage` ever
+ * disagree about where a contained picture sits, a buyer approves a preview
+ * they do not get, and this is what says so.
+ */
+describe("the checkout preview and the wall agree about the rectangle", () => {
+  it("puts a contained picture where placeImage says, and the paper either side of it", async () => {
+    const ink = { r: 190, g: 20, b: 140 };
+    const rect = { x: 700, y: 300, w: 60, h: 60 };
+    // Twice as wide as it is tall, contained in a square rectangle: the case
+    // with bars, and the case a five-argument drawImage used to squash.
+    await buy(rect, await solidRect(200, 100, ink), "contain");
+
+    const { dest } = placeImage(
+      { width: 200, height: 100 },
+      { x: rect.x, y: rect.y, width: rect.w, height: rect.h },
+      "contain",
+    );
+    const { png } = await servedWall();
+
+    // The middle of where the preview says the picture is.
+    const middle = { x: Math.round(dest.x + dest.width / 2), y: Math.round(dest.y + dest.height / 2) };
+    expect(await pixelAt(png, middle.x, middle.y)).toMatchObject({ ...ink, a: 255 });
+
+    // And the bars: the sheet's own cream, one pixel inside the rectangle at
+    // the top and at the bottom, where the preview says there is no picture.
+    const paper = { r: 0xf3, g: 0xed, b: 0xe0, a: 255 };
+    expect(await pixelAt(png, middle.x, rect.y + 1)).toEqual(paper);
+    expect(await pixelAt(png, middle.x, rect.y + rect.h - 2)).toEqual(paper);
+
+    // The picture's own top edge, two pixels below where the preview puts it,
+    // so a rounding difference of one is not what is being asserted.
+    expect(await pixelAt(png, middle.x, Math.round(dest.y) + 2)).toMatchObject({ ...ink, a: 255 });
+  });
+
+  it("fills the rectangle edge to edge when the buyer chose to fill it", async () => {
+    const ink = { r: 20, g: 120, b: 190 };
+    const rect = { x: 900, y: 500, w: 60, h: 30 };
+    await buy(rect, await solidRect(200, 100, ink), "cover");
+
+    const { dest } = placeImage(
+      { width: 200, height: 100 },
+      { x: rect.x, y: rect.y, width: rect.w, height: rect.h },
+      "cover",
+    );
+    // The preview says a cover fit leaves no gap, so every corner is picture.
+    expect(dest).toEqual({ x: rect.x, y: rect.y, width: rect.w, height: rect.h });
+
+    const { png } = await servedWall();
+    for (const [x, y] of [
+      [rect.x, rect.y],
+      [rect.x + rect.w - 1, rect.y],
+      [rect.x, rect.y + rect.h - 1],
+      [rect.x + rect.w - 1, rect.y + rect.h - 1],
+    ]) {
+      expect(await pixelAt(png, x, y), `corner ${x},${y}`).toMatchObject({ ...ink, a: 255 });
+    }
+  });
+});
+
+/** A solid picture that is not square, so a fit has something to do. */
+async function solidRect(width: number, height: number, colour: Rgba3): Promise<Buffer> {
+  return sharp({ create: { width, height, channels: 3, background: colour } })
+    .png()
+    .toBuffer();
+}
