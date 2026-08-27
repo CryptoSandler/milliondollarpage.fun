@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { PRESETS, type Selection } from "../lib/board/selection";
-import { blockPriceBaseUnits, formatUsdc, unitOfSale } from "../lib/board/pricing";
+import { formatUsdc, unitOfSale } from "../lib/board/pricing";
 import type { ZoomState } from "./BoardCanvas";
 
 /**
@@ -160,7 +160,7 @@ export default function SelectionPanel({
             </p>
             <p className="tabular hidden truncate text-[12.5px] text-body lg:block">
               {selection.rect.w} × {selection.rect.h} at ({selection.rect.x}, {selection.rect.y}) ·{" "}
-              {formatUsdc(blockPriceBaseUnits(perPixel))} a block
+              {formatUsdc(perPixel)} a pixel
             </p>
           </>
         )}

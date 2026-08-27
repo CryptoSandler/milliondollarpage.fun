@@ -47,8 +47,12 @@ describe("describeSelection", () => {
   });
 
   it("is unbuyable when the rectangle itself is invalid, collision or not", () => {
-    expect(describeSelection({ x: 5, y: 0, w: 10, h: 10 }, [], DOLLAR).buyable).toBe(false);
+    // Off the wall, and with no area. What is NO LONGER invalid is x = 5: the
+    // grid is gone, and a rectangle that starts on an odd pixel is a sale.
+    expect(describeSelection({ x: 1245, y: 0, w: 10, h: 10 }, [], DOLLAR).buyable).toBe(false);
+    expect(describeSelection({ x: 0, y: 795, w: 10, h: 10 }, [], DOLLAR).buyable).toBe(false);
     expect(describeSelection({ x: 0, y: 0, w: 0, h: 10 }, [], DOLLAR).buyable).toBe(false);
+    expect(describeSelection({ x: 5, y: 0, w: 10, h: 10 }, [], DOLLAR).buyable).toBe(true);
   });
 
   it("still reports the price of an unbuyable selection, so the panel can show it", () => {
@@ -64,37 +68,42 @@ describe("describeSelection", () => {
 });
 
 describe("selectionFromDrag", () => {
-  it("snaps the drag before doing anything else", () => {
+  it("takes the exact pixels the drag covered, and prices those", () => {
+    // It used to round this out to 20×20 and charge $400 for a nine-pixel
+    // drag. The rectangle is what was dragged over, and the price is its area.
     const selection = selectionFromDrag({ x: 3, y: 3 }, { x: 11, y: 11 }, [], DOLLAR);
-    expect(selection.rect).toEqual({ x: 0, y: 0, w: 20, h: 20 });
-    expect(selection.pixels).toBe(400);
+    expect(selection.rect).toEqual({ x: 3, y: 3, w: 9, h: 9 });
+    expect(selection.pixels).toBe(81);
+    expect(selection.totalBaseUnits).toBe(81_000_000);
   });
 
-  it("finds collisions against the snapped rectangle, not the raw drag", () => {
-    // The drag never enters the sold block, but the snapped rectangle does.
-    const selection = selectionFromDrag({ x: 0, y: 0 }, { x: 5, y: 5 }, [sold(0, 0, 10, 10)], DOLLAR);
+  it("finds collisions against the whole rectangle, not against its two corners", () => {
+    // Neither end of the drag is inside the sold block; the rectangle they
+    // describe swallows it whole.
+    const selection = selectionFromDrag({ x: 0, y: 0 }, { x: 20, y: 20 }, [sold(5, 5, 2, 2)], DOLLAR);
+    expect(selection.collidesWith).toEqual(["sold-1"]);
     expect(selection.buyable).toBe(false);
   });
 });
 
 describe("selectionFromPreset", () => {
-  it("places the preset under the pointer", () => {
+  it("places the preset at the pixel under the pointer", () => {
     const selection = selectionFromPreset({ x: 34, y: 56 }, 100, [], DOLLAR);
-    expect(selection.rect).toEqual({ x: 30, y: 50, w: 100, h: 100 });
+    expect(selection.rect).toEqual({ x: 34, y: 56, w: 100, h: 100 });
   });
 
-  it("keeps a preset whole near the edge", () => {
-    const selection = selectionFromPreset({ x: 995, y: 995 }, 100, [], DOLLAR);
-    expect(selection.rect).toEqual({ x: 900, y: 900, w: 100, h: 100 });
+  it("keeps a preset whole near the edge, on each axis by its own edge", () => {
+    const selection = selectionFromPreset({ x: 1245, y: 795 }, 100, [], DOLLAR);
+    expect(selection.rect).toEqual({ x: 1150, y: 700, w: 100, h: 100 });
     expect(selection.pixels).toBe(10_000);
   });
 
-  // The click path. A preset needs no drag: one click on a cell buys the
-  // rectangle anchored there, aligned to the 10-pixel grid, whatever pixel of
-  // that cell was actually under the pointer.
-  it("anchors a click anywhere inside a cell to that cell, on the grid", () => {
+  // The click path. A preset needs no drag: one click buys the rectangle
+  // anchored at exactly the pixel that was under the pointer. It used to
+  // round back to a cell of the grid, and there is no grid to round to.
+  it("anchors a click at the pixel under it, with no cell to round to", () => {
     for (const at of [{ x: 260, y: 490 }, { x: 264, y: 497 }, { x: 269, y: 499 }]) {
-      expect(selectionFromPreset(at, 10, [], DOLLAR).rect).toEqual({ x: 260, y: 490, w: 10, h: 10 });
+      expect(selectionFromPreset(at, 10, [], DOLLAR).rect).toEqual({ ...at, w: 10, h: 10 });
     }
   });
 
@@ -109,7 +118,7 @@ describe("selectionFromPreset", () => {
 describe("presetSelectionForMove — what a click places stays placed", () => {
   it("previews under the pointer while the preset has not been put down", () => {
     const preview = presetSelectionForMove({ x: 34, y: 56 }, 100, false, [], DOLLAR);
-    expect(preview?.rect).toEqual({ x: 30, y: 50, w: 100, h: 100 });
+    expect(preview?.rect).toEqual({ x: 34, y: 56, w: 100, h: 100 });
   });
 
   it("leaves the selection alone once a click has placed it", () => {

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  blockPriceBaseUnits,
   formatPercentSold,
   formatUsdc,
   totalBaseUnits,
@@ -78,26 +77,33 @@ describe("formatPercentSold", () => {
 describe("the unit of sale", () => {
   const DOLLAR = 1_000_000;
 
-  it("prices one block at a hundred dollars when a pixel is a dollar", () => {
-    expect(blockPriceBaseUnits(DOLLAR)).toBe(100_000_000);
-    expect(formatUsdc(blockPriceBaseUnits(DOLLAR))).toBe("$100");
+  it("says what a pixel costs, because the pixel is what is for sale", () => {
+    expect(unitOfSale(DOLLAR)).toBe("$1 a pixel · any rectangle, from one pixel up");
   });
 
-  it("follows the per-pixel price rather than restating a hundred", () => {
-    expect(blockPriceBaseUnits(2_500_000)).toBe(250_000_000);
-    expect(blockPriceBaseUnits(0)).toBe(0);
+  it("follows the per-pixel price rather than restating a dollar", () => {
+    expect(unitOfSale(2_500_000)).toContain("$2.50 a pixel");
+    expect(unitOfSale(500_000)).toContain("$0.50 a pixel");
   });
 
-  it("says the unit plainly, and says blocks rather than pixels", () => {
-    expect(unitOfSale(DOLLAR)).toBe("Sold in 10×10 blocks · $100 each");
-  });
-
-  it("never offers a single pixel at a price", () => {
-    // The one sentence the header and the panel both carry. "$1 per pixel"
-    // beside a control reads as an offer, and a single pixel is not for sale.
+  it("offers the single pixel it used to refuse to price", () => {
+    // This assertion is the inverse of the one it replaces. The old sentence
+    // was forbidden from saying "per pixel" beside a control, because a
+    // control that offered one pixel would have been offering something that
+    // could not be bought. It can be bought now, so the sentence has to say
+    // so — and the price of one pixel is the price of one purchase.
     for (const perPixel of [DOLLAR, 2_500_000, 500_000]) {
-      expect(unitOfSale(perPixel)).not.toContain("per pixel");
-      expect(unitOfSale(perPixel)).toContain("10×10 blocks");
+      expect(totalBaseUnits(1, perPixel)).toBe(perPixel);
+      expect(unitOfSale(perPixel)).toContain("from one pixel up");
+    }
+  });
+
+  it("no longer names a block, a grid or a minimum, because there is none", () => {
+    for (const perPixel of [DOLLAR, 2_500_000, 500_000]) {
+      const said = unitOfSale(perPixel).toLowerCase();
+      expect(said).not.toContain("block");
+      expect(said).not.toContain("10×10");
+      expect(said).not.toContain("minimum");
     }
   });
 });

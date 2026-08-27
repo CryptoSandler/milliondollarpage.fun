@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { LiveBlock } from "../blocks";
-import { BOARD_PIXELS } from "../geometry";
+import { BOARD_HEIGHT, BOARD_WIDTH } from "../geometry";
 import {
-  CURSOR_LEAP_BLOCKS,
+  CURSOR_LEAP_RULES,
   describeCursor,
   keyToCommand,
   nextCursor,
@@ -36,16 +36,16 @@ function block(
 const NONE = { shiftKey: false, altKey: false };
 
 describe("keyToCommand", () => {
-  it("turns a bare arrow into a one-block move", () => {
+  it("turns a bare arrow into a move of one fine rule", () => {
     expect(keyToCommand("ArrowRight", NONE)).toEqual({ kind: "move", dx: 1, dy: 0 });
     expect(keyToCommand("ArrowUp", NONE)).toEqual({ kind: "move", dx: 0, dy: -1 });
   });
 
-  it("makes shift leap by the coarse rule, which is ten blocks", () => {
+  it("makes shift leap by the coarse rule, which is ten fine ones", () => {
     expect(keyToCommand("ArrowDown", { shiftKey: true, altKey: false })).toEqual({
       kind: "move",
       dx: 0,
-      dy: CURSOR_LEAP_BLOCKS,
+      dy: CURSOR_LEAP_RULES,
     });
   });
 
@@ -62,11 +62,11 @@ describe("keyToCommand", () => {
     });
   });
 
-  it("lets the two modifiers combine into a ten-block resize", () => {
+  it("lets the two modifiers combine into a ten-rule resize", () => {
     expect(keyToCommand("ArrowDown", { shiftKey: true, altKey: true })).toEqual({
       kind: "resize",
       dw: 0,
-      dh: CURSOR_LEAP_BLOCKS,
+      dh: CURSOR_LEAP_RULES,
     });
   });
 
@@ -78,7 +78,7 @@ describe("keyToCommand", () => {
 });
 
 describe("nextCursor", () => {
-  it("puts the cursor down on one block at the origin when there is none", () => {
+  it("puts the cursor down on one fine rule at the origin when there is none", () => {
     expect(nextCursor(null, { kind: "move", dx: -1, dy: -1 }, null)).toEqual({
       x: 0,
       y: 0,
@@ -96,7 +96,7 @@ describe("nextCursor", () => {
     });
   });
 
-  it("moves by whole blocks and nothing else", () => {
+  it("moves by whole rules and nothing else", () => {
     const rect = { x: 200, y: 400, w: 20, h: 20 };
     expect(nextCursor(rect, { kind: "move", dx: 1, dy: 0 }, null)).toEqual({
       x: 210,
@@ -104,7 +104,7 @@ describe("nextCursor", () => {
       w: 20,
       h: 20,
     });
-    expect(nextCursor(rect, { kind: "move", dx: 0, dy: -CURSOR_LEAP_BLOCKS }, null)).toEqual({
+    expect(nextCursor(rect, { kind: "move", dx: 0, dy: -CURSOR_LEAP_RULES }, null)).toEqual({
       x: 200,
       y: 300,
       w: 20,
@@ -115,12 +115,12 @@ describe("nextCursor", () => {
   it("refuses to walk off the board rather than shrinking against the edge", () => {
     const wide = { x: 0, y: 0, w: 100, h: 10 };
     expect(nextCursor(wide, { kind: "move", dx: -1, dy: 0 }, null)).toEqual(wide);
-    expect(nextCursor(wide, { kind: "move", dx: 0, dy: -CURSOR_LEAP_BLOCKS }, null)).toEqual(wide);
+    expect(nextCursor(wide, { kind: "move", dx: 0, dy: -CURSOR_LEAP_RULES }, null)).toEqual(wide);
   });
 
   it("stops with its trailing edge on the board's, half-open", () => {
-    const rect = { x: BOARD_PIXELS - 100, y: BOARD_PIXELS - 100, w: 100, h: 100 };
-    expect(nextCursor(rect, { kind: "move", dx: CURSOR_LEAP_BLOCKS, dy: 0 }, null)).toEqual(rect);
+    const rect = { x: BOARD_WIDTH - 100, y: BOARD_HEIGHT - 100, w: 100, h: 100 };
+    expect(nextCursor(rect, { kind: "move", dx: CURSOR_LEAP_RULES, dy: 0 }, null)).toEqual(rect);
     expect(nextCursor(rect, { kind: "move", dx: 0, dy: 1 }, null)).toEqual(rect);
   });
 
@@ -140,14 +140,20 @@ describe("nextCursor", () => {
     });
   });
 
-  it("never shrinks below the one block that is the unit of sale", () => {
+  /**
+   * A pointer can now draw a rectangle finer than this and a keyboard cannot,
+   * which is a gap this stage records rather than closes — see the module's
+   * own header. What the floor must never be is zero: a rectangle with no area
+   * is not a purchase, and the database refuses one.
+   */
+  it("never shrinks below the fine rule it walks by, and never to nothing", () => {
     const rect = { x: 500, y: 500, w: 10, h: 10 };
-    expect(nextCursor(rect, { kind: "resize", dw: -CURSOR_LEAP_BLOCKS, dh: -1 }, null)).toEqual(rect);
+    expect(nextCursor(rect, { kind: "resize", dw: -CURSOR_LEAP_RULES, dh: -1 }, null)).toEqual(rect);
   });
 
   it("never grows past the board's trailing edge", () => {
-    const rect = { x: 900, y: 900, w: 100, h: 100 };
-    expect(nextCursor(rect, { kind: "resize", dw: CURSOR_LEAP_BLOCKS, dh: 1 }, null)).toEqual(rect);
+    const rect = { x: BOARD_WIDTH - 100, y: BOARD_HEIGHT - 100, w: 100, h: 100 };
+    expect(nextCursor(rect, { kind: "resize", dw: CURSOR_LEAP_RULES, dh: 1 }, null)).toEqual(rect);
   });
 
   it("leaves a preset the size the button named", () => {
@@ -156,25 +162,31 @@ describe("nextCursor", () => {
   });
 
   it("slides a preset back onto the board instead of clipping it, exactly as a click does", () => {
-    const rect = { x: 900, y: 0, w: 100, h: 100 };
-    expect(nextCursor(rect, { kind: "move", dx: CURSOR_LEAP_BLOCKS, dy: 0 }, 100)).toEqual(rect);
+    const rect = { x: BOARD_WIDTH - 100, y: 0, w: 100, h: 100 };
+    expect(nextCursor(rect, { kind: "move", dx: CURSOR_LEAP_RULES, dy: 0 }, 100)).toEqual(rect);
   });
 
-  it("keeps every rectangle on the ten-pixel grid", () => {
+  /**
+   * Not a grid rule any more — there is no grid — but a keyboard rule. The
+   * cursor is walked by the ruling, so everything it produces sits on it, and
+   * a rectangle that fell off the ruling would mean a step somewhere stopped
+   * being a whole one.
+   */
+  it("keeps every rectangle the keyboard makes on the ruling it walks", () => {
     let rect = nextCursor(null, { kind: "move", dx: 1, dy: 1 }, null);
     for (const command of [
-      { kind: "move", dx: 3, dy: CURSOR_LEAP_BLOCKS } as const,
+      { kind: "move", dx: 3, dy: CURSOR_LEAP_RULES } as const,
       { kind: "resize", dw: 7, dh: 2 } as const,
       { kind: "move", dx: -1, dy: 4 } as const,
-      { kind: "resize", dw: -3, dh: CURSOR_LEAP_BLOCKS } as const,
+      { kind: "resize", dw: -3, dh: CURSOR_LEAP_RULES } as const,
     ]) {
       rect = nextCursor(rect, command, null);
       expect(rect.x % 10).toBe(0);
       expect(rect.y % 10).toBe(0);
       expect(rect.w % 10).toBe(0);
       expect(rect.h % 10).toBe(0);
-      expect(rect.x + rect.w).toBeLessThanOrEqual(BOARD_PIXELS);
-      expect(rect.y + rect.h).toBeLessThanOrEqual(BOARD_PIXELS);
+      expect(rect.x + rect.w).toBeLessThanOrEqual(BOARD_WIDTH);
+      expect(rect.y + rect.h).toBeLessThanOrEqual(BOARD_HEIGHT);
     }
   });
 });

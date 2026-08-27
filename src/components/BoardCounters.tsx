@@ -13,10 +13,12 @@ import { formatPercentSold, unitOfSale } from "../lib/board/pricing";
  * window narrows: the unit of sale goes first, then the block count, then the
  * percentage. The pixels-sold figure is the one that never leaves.
  *
- * What the header says about price is the UNIT — "Sold in 10×10 blocks · $100
- * each" — and never "$1 per pixel". A dollar a pixel is the strapline for what
- * this board is; it is not an offer, because a single pixel cannot be bought,
- * and a price beside a counter reads as an offer.
+ * What the header says about price is the UNIT, and the unit is now the pixel:
+ * "$1 a pixel · any rectangle, from one pixel up". It used to be forbidden
+ * from saying a per-pixel price here, because a price beside a counter reads
+ * as an offer and a single pixel was not one. It is one now, so the sentence
+ * that would have been misleading is the accurate one. `unitOfSale` owns the
+ * wording; this file only decides when there is room for it.
  */
 export default function BoardCounters({
   stats,

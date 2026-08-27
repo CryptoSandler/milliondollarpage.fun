@@ -4,7 +4,14 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, RefObject } from "react";
 import { blockImageUrl } from "../lib/board/block-image";
 import type { LiveBlock } from "../lib/board/blocks";
-import { BLOCK_PIXELS, BOARD_PIXELS, rectContains, type Point, type Rect } from "../lib/board/geometry";
+import {
+  BOARD_HEIGHT,
+  BOARD_WIDTH,
+  RULE_PIXELS,
+  rectContains,
+  type Point,
+  type Rect,
+} from "../lib/board/geometry";
 import { placeImage } from "../lib/board/image-fit";
 import { describeCursor, keyToCommand, nextCursor } from "../lib/board/keyboard-cursor";
 import { formatUsdc } from "../lib/board/pricing";
@@ -35,12 +42,21 @@ import {
 
 /**
  * The top rung of the zoom ladder: sixteen screen pixels per board pixel, so a
- * 10-pixel block fills 160px and a single pixel of somebody's artwork is a
+ * ten-pixel block fills 160px and a single pixel of somebody's artwork is a
  * 16×16 square. The ladder only ever stops on a power of two, so this is a rung
  * and not a ceiling nothing reaches — it used to be 24, which the old
  * continuous 1.15-per-notch zoom could land on and nothing now can.
  */
 const MAX_ZOOM = 16;
+
+/**
+ * The wall, as the viewport maths wants it: a width and a height that are no
+ * longer the same number. Everything in this file that fits, clamps or draws
+ * the board reads it from here, so the six places that used to write
+ * one square board size cannot drift apart from each
+ * other or from `geometry.ts`.
+ */
+const BOARD = { width: BOARD_WIDTH, height: BOARD_HEIGHT };
 
 /**
  * How far two fingers have to spread before a pinch counts as one rung.
@@ -68,8 +84,7 @@ function steppedZoom(
   point: Point,
   direction: "in" | "out",
 ): Viewport {
-  const board = { width: BOARD_PIXELS, height: BOARD_PIXELS };
-  const fit = fitScale(screen, chrome, board);
+  const fit = fitScale(screen, chrome, BOARD);
   return clampToFit(
     zoomToScale(v, screen, point, nextZoomScale(v.scale, direction, fit, MAX_ZOOM), {
       min: fit,
@@ -77,7 +92,7 @@ function steppedZoom(
     }),
     screen,
     chrome,
-    board,
+    BOARD,
   );
 }
 
@@ -167,14 +182,14 @@ const PAINT = {
 const CHIP_MIN_BLOCK_PX = 96;
 const CHIP_HEIGHT = 18;
 
-// The fine tier is one block. Below roughly six screen pixels per block it
-// stops describing where a block would land and starts being a grey wash.
-const FINE_RULE_VISIBLE_ABOVE = 6 / BLOCK_PIXELS;
+// The fine tier is one ruling. Below roughly six screen pixels per rule it
+// stops being a ruling and starts being a grey wash.
+const FINE_RULE_VISIBLE_ABOVE = 6 / RULE_PIXELS;
 
 // The held hatch, in SCREEN pixels rather than board pixels, so a hold is
-// equally legible on a 10x10 block at cover scale and on a 100x100 block
-// zoomed in. Seven is wide enough to read as separate strokes at the smallest
-// block the board can sell.
+// equally legible on a ten-pixel block at cover scale and on a 100x100 block
+// zoomed in. Seven is wide enough to read as separate strokes on a block small
+// enough to be a few screen pixels across.
 const HELD_HATCH_STEP = 7;
 
 // The marching ants: 12px of dash cycle every 600ms, per DESIGN.md. Advancing
@@ -315,7 +330,7 @@ export default function BoardCanvas({
   // function's zero-screen answer and gets re-fit once the ResizeObserver
   // below reports the real size.
   const [viewport, setViewport] = useState<Viewport>(() =>
-    initialViewport({ width: 0, height: 0 }, chrome, { width: BOARD_PIXELS, height: BOARD_PIXELS }),
+    initialViewport({ width: 0, height: 0 }, chrome, BOARD),
   );
   const [resizeTick, setResizeTick] = useState(0);
   const [ants, setAnts] = useState(0);
@@ -437,17 +452,16 @@ export default function BoardCanvas({
       const el = canvasRef.current;
       if (!el) return;
       const screen = { width: el.clientWidth, height: el.clientHeight };
-      const board = { width: BOARD_PIXELS, height: BOARD_PIXELS };
       if (!hasInteracted.current) {
-        setViewport(initialViewport(screen, chromeRef.current, board));
+        setViewport(initialViewport(screen, chromeRef.current, BOARD));
         return;
       }
       setViewport((v) =>
         clampToFit(
-          { ...v, scale: Math.max(fitScale(screen, chromeRef.current, board), v.scale) },
+          { ...v, scale: Math.max(fitScale(screen, chromeRef.current, BOARD), v.scale) },
           screen,
           chromeRef.current,
-          board,
+          BOARD,
         ),
       );
     });
@@ -510,13 +524,14 @@ export default function BoardCanvas({
     const screen = { width, height };
     const origin = boardToScreen(viewport, screen, { x: 0, y: 0 });
     const scale = viewport.scale;
-    const span = BOARD_PIXELS * scale;
+    const spanX = BOARD_WIDTH * scale;
+    const spanY = BOARD_HEIGHT * scale;
 
     context.fillStyle = PAINT.ground;
     context.fillRect(0, 0, width, height);
 
     context.fillStyle = PAINT.paper;
-    context.fillRect(origin.x, origin.y, span, span);
+    context.fillRect(origin.x, origin.y, spanX, spanY);
 
     // The sheet's edge. The wall behind the board is the same cream as the
     // board, which is what DESIGN.md asks for — so this hairline, drawn just
@@ -528,20 +543,21 @@ export default function BoardCanvas({
     context.strokeRect(
       Math.round(origin.x) - 0.5,
       Math.round(origin.y) - 0.5,
-      Math.round(span) + 1,
-      Math.round(span) + 1,
+      Math.round(spanX) + 1,
+      Math.round(spanY) + 1,
     );
 
-    // Two-tier graph paper. The fine tier is one block — it says where a
-    // block would land. The coarse tier is a hundred pixels — it is how you
-    // navigate without counting.
+    // Two-tier graph paper, and it is ruling rather than grid: nothing snaps
+    // to it any more. The fine tier is ten pixels — a legible smallest step
+    // for a hand and for an arrow key. The coarse tier is a hundred — it is
+    // how you navigate without counting.
     context.save();
     context.beginPath();
-    context.rect(origin.x, origin.y, span, span);
+    context.rect(origin.x, origin.y, spanX, spanY);
     context.clip();
 
     if (scale > FINE_RULE_VISIBLE_ABOVE) {
-      drawRules(context, origin, scale, BLOCK_PIXELS, PAINT.ruleFine, screen);
+      drawRules(context, origin, scale, RULE_PIXELS, PAINT.ruleFine, screen);
     }
     drawRules(context, origin, scale, 100, PAINT.ruleCoarse, screen);
     context.restore();
@@ -756,8 +772,8 @@ export default function BoardCanvas({
       const free = freeRegion(screen, chrome);
       const left = Math.max(free.x + 2, origin.x - 3);
       const top = Math.max(free.y + 2, origin.y - 3);
-      const right = Math.min(free.x + free.width - 2, origin.x + span + 3);
-      const bottom = Math.min(free.y + free.height - 2, origin.y + span + 3);
+      const right = Math.min(free.x + free.width - 2, origin.x + spanX + 3);
+      const bottom = Math.min(free.y + free.height - 2, origin.y + spanY + 3);
       if (right > left && bottom > top) {
         const w = right - left;
         const h = bottom - top;
@@ -876,13 +892,12 @@ export default function BoardCanvas({
       };
       const rect = event.currentTarget.getBoundingClientRect();
       const screen = { width: rect.width, height: rect.height };
-      const board = { width: BOARD_PIXELS, height: BOARD_PIXELS };
       setViewport((v) =>
         // Refused at the base rung: the whole board is already on screen, so
         // there is nowhere for a drag to take it and nudging it would only
         // open cream on one side.
-        canPan(v.scale, fitScale(screen, chromeRef.current, board))
-          ? clampToFit(panBy(v, -dx / v.scale, -dy / v.scale), screen, chromeRef.current, board)
+        canPan(v.scale, fitScale(screen, chromeRef.current, BOARD))
+          ? clampToFit(panBy(v, -dx / v.scale, -dy / v.scale), screen, chromeRef.current, BOARD)
           : v,
       );
       return;
@@ -929,9 +944,15 @@ export default function BoardCanvas({
     // selection gets placed at all, so it selects the block under the finger
     // (or the active preset around it); with a mouse, shift-clicking empty
     // board is a deliberate way to clear.
+    //
+    // With no preset chosen the tap takes one RULING square, not the single
+    // pixel the same tap would produce with a mouse. A fingertip is about
+    // forty screen pixels across and a board pixel is well under one at the
+    // fit scale, so a one-pixel tap target would be a lottery rather than a
+    // choice. Drag or zoom in to buy fewer.
     if (current.touch) {
       presetPlaced.current = true;
-      publish(selectionFromPreset(current.from, activePreset ?? BLOCK_PIXELS, blocks, perPixel));
+      publish(selectionFromPreset(current.from, activePreset ?? RULE_PIXELS, blocks, perPixel));
       return;
     }
     publish(null);
@@ -1020,10 +1041,7 @@ export default function BoardCanvas({
     if (!el) return;
     hasInteracted.current = true;
     setViewport(
-      initialViewport({ width: el.clientWidth, height: el.clientHeight }, chromeRef.current, {
-        width: BOARD_PIXELS,
-        height: BOARD_PIXELS,
-      }),
+      initialViewport({ width: el.clientWidth, height: el.clientHeight }, chromeRef.current, BOARD),
     );
   }, []);
 
@@ -1040,10 +1058,7 @@ export default function BoardCanvas({
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
-    const fit = fitScale({ width: el.clientWidth, height: el.clientHeight }, chrome, {
-      width: BOARD_PIXELS,
-      height: BOARD_PIXELS,
-    });
+    const fit = fitScale({ width: el.clientWidth, height: el.clientHeight }, chrome, BOARD);
     onZoomStateChange(zoomAffordance(viewport.scale, fit, MAX_ZOOM));
   }, [viewport.scale, resizeTick, chrome, onZoomStateChange]);
 
@@ -1069,10 +1084,9 @@ export default function BoardCanvas({
     const el = canvasRef.current;
     if (!el) return;
     const screen = { width: el.clientWidth, height: el.clientHeight };
-    const board = { width: BOARD_PIXELS, height: BOARD_PIXELS };
     const chromeNow = chromeRef.current;
     setViewport((v) => {
-      if (!canPan(v.scale, fitScale(screen, chromeNow, board))) return v;
+      if (!canPan(v.scale, fitScale(screen, chromeNow, BOARD))) return v;
       const free = freeRegion(screen, chromeNow);
       const near = boardToScreen(v, screen, { x: rect.x, y: rect.y });
       const far = boardToScreen(v, screen, { x: rect.x + rect.w, y: rect.y + rect.h });
@@ -1089,15 +1103,15 @@ export default function BoardCanvas({
         free.y + free.height,
       );
       if (dx === 0 && dy === 0) return v;
-      return clampToFit(panBy(v, dx / v.scale, dy / v.scale), screen, chromeNow, board);
+      return clampToFit(panBy(v, dx / v.scale, dy / v.scale), screen, chromeNow, BOARD);
     });
   }, []);
 
   /**
    * THE ONLY WAY TO SELECT A RECTANGLE WITHOUT A POINTER.
    *
-   * Arrows move the cursor one block, shift moves it ten — one coarse rule of
-   * the graph paper — and alt turns the same arrows into a resize from the
+   * Arrows move the cursor one fine rule, shift moves it ten — one coarse rule
+   * of the graph paper — and alt turns the same arrows into a resize from the
    * rectangle's top-left anchor. Enter is the primary action, which is the Buy
    * button's, and Escape clears. Which key means what is `keyToCommand`'s
    * decision and where the rectangle lands is `nextCursor`'s; both are pure and
@@ -1176,7 +1190,7 @@ export default function BoardCanvas({
          */
         tabIndex={0}
         role="application"
-        aria-label="Pixel board, 1000 by 1000"
+        aria-label="Pixel board, 1250 by 800"
         aria-describedby={helpId}
         onKeyDown={onKeyDown}
         onFocus={(event) => setFocusRing(event.currentTarget.matches(":focus-visible"))}
@@ -1197,7 +1211,7 @@ export default function BoardCanvas({
         }}
       />
       <p id={helpId} className="sr-only">
-        Arrow keys move the selection one block. Hold shift to move ten blocks at a time. Hold alt
+        Arrow keys move the selection ten pixels. Hold shift to move a hundred at a time. Hold alt
         with an arrow key to resize it from its top-left corner. Enter buys the selected pixels.
         Escape clears the selection.
       </p>
@@ -1235,19 +1249,19 @@ function drawRules(
   context.beginPath();
 
   const startX = Math.max(0, Math.floor(-origin.x / scale / step) * step);
-  for (let p = startX; p <= BOARD_PIXELS; p += step) {
+  for (let p = startX; p <= BOARD_WIDTH; p += step) {
     const sx = Math.round(origin.x + p * scale) + 0.5;
     if (sx > screen.width) break;
     context.moveTo(sx, Math.max(0, origin.y));
-    context.lineTo(sx, Math.min(screen.height, origin.y + BOARD_PIXELS * scale));
+    context.lineTo(sx, Math.min(screen.height, origin.y + BOARD_HEIGHT * scale));
   }
 
   const startY = Math.max(0, Math.floor((0 - origin.y) / scale / step) * step);
-  for (let p = startY; p <= BOARD_PIXELS; p += step) {
+  for (let p = startY; p <= BOARD_HEIGHT; p += step) {
     const sy = Math.round(origin.y + p * scale) + 0.5;
     if (sy > screen.height) break;
     context.moveTo(Math.max(0, origin.x), sy);
-    context.lineTo(Math.min(screen.width, origin.x + BOARD_PIXELS * scale), sy);
+    context.lineTo(Math.min(screen.width, origin.x + BOARD_WIDTH * scale), sy);
   }
 
   context.stroke();

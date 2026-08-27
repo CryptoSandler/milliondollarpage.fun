@@ -1,7 +1,8 @@
 import type { LiveBlock } from "./blocks";
 import {
-  BLOCK_PIXELS,
-  BOARD_PIXELS,
+  BOARD_HEIGHT,
+  BOARD_WIDTH,
+  RULE_PIXELS,
   type Point,
   type Rect,
   presetRect,
@@ -26,28 +27,37 @@ import type { Selection } from "./selection";
  *
  * THERE IS NO SECOND GEOMETRY HERE. Every rectangle this module returns comes
  * out of `snapRect` or `presetRect`, the same two functions the pointer path
- * uses, so the 10-pixel grid, the half-open rule and the slide-back-on-the-
- * board behaviour near an edge are inherited rather than restated. What this
- * module adds is only which two points to hand them.
+ * uses, so the half-open rule and the slide-back-on-the-board behaviour near
+ * an edge are inherited rather than restated. What this module adds is only
+ * which two points to hand them.
+ *
+ * ponytail: the cursor walks the RULING — ten pixels a press, a hundred with
+ * shift — which is what it did when ten pixels was also the smallest thing
+ * anybody could buy. Rectangles are exact to the pixel now, so a pointer can
+ * draw one this keyboard cannot: a 1×1 at (137, 41). Closing that needs a
+ * third tier of step, and which key carries it is a decision about bindings
+ * rather than about geometry, so it is left to whoever owns the selector
+ * rather than invented here. Everything below is in pixels and would take the
+ * finer step without restructuring.
  */
 
-/** How many blocks a plain arrow moves, and how many a shifted one does. */
-export const CURSOR_STEP_BLOCKS = 1;
+/** How many rules a plain arrow moves, and how many a shifted one does. */
+export const CURSOR_STEP_RULES = 1;
 
 /**
  * The shifted step, and it is not an arbitrary "faster".
  *
- * The board is ruled in two tiers: a faint rule every block and a stronger one
- * every hundred pixels. A plain arrow walks the fine tier; a shifted arrow
+ * The board is ruled in two tiers: a faint rule every ten pixels and a stronger
+ * one every hundred. A plain arrow walks the fine tier; a shifted arrow
  * walks the coarse one, so a keyboard cursor crosses the board the same way an
  * eye does — by the ruling that is already drawn for exactly that job.
  */
-export const CURSOR_LEAP_BLOCKS = 10;
+export const CURSOR_LEAP_RULES = 10;
 
 export type CursorCommand =
-  /** Translate the rectangle, in blocks. */
+  /** Translate the rectangle, in rules. */
   | { kind: "move"; dx: number; dy: number }
-  /** Grow or shrink it from its top-left anchor, in blocks. */
+  /** Grow or shrink it from its top-left anchor, in rules. */
   | { kind: "resize"; dw: number; dh: number };
 
 const ARROWS: Record<string, { x: number; y: number }> = {
@@ -75,12 +85,12 @@ export function keyToCommand(
 ): CursorCommand | null {
   const arrow = ARROWS[key];
   if (!arrow) return null;
-  const step = modifiers.shiftKey ? CURSOR_LEAP_BLOCKS : CURSOR_STEP_BLOCKS;
+  const step = modifiers.shiftKey ? CURSOR_LEAP_RULES : CURSOR_STEP_RULES;
   if (modifiers.altKey) return { kind: "resize", dw: arrow.x * step, dh: arrow.y * step };
   return { kind: "move", dx: arrow.x * step, dy: arrow.y * step };
 }
 
-/** The block the cursor appears on when it does not exist yet. */
+/** The pixel the cursor appears on when it does not exist yet. */
 const CURSOR_HOME: Point = { x: 0, y: 0 };
 
 function clamp(value: number, low: number, high: number): number {
@@ -92,8 +102,8 @@ function clamp(value: number, low: number, high: number): number {
  *
  * `rect` is null before the cursor exists — the board takes focus without
  * selecting anything, so the first arrow press puts it down rather than
- * carrying an invisible one around — and the answer is then the home block
- * whichever way the arrow pointed.
+ * carrying an invisible one around — and the answer is then the home
+ * rectangle whichever way the arrow pointed.
  *
  * `presetSize` is the size button currently held down in the panel. A preset
  * is a fixed rectangle by definition: it moves and it cannot be resized, and
@@ -106,7 +116,11 @@ export function nextCursor(
   presetSize: number | null,
 ): Rect {
   if (rect === null) {
-    return presetSize === null ? snapRect(CURSOR_HOME, CURSOR_HOME) : presetRect(CURSOR_HOME, presetSize);
+    // One fine rule square, not the single pixel `snapRect` would return for a
+    // point: the cursor is walked by the ruling, so it starts the size of one.
+    return presetSize === null
+      ? snapRect(CURSOR_HOME, { x: RULE_PIXELS - 1, y: RULE_PIXELS - 1 })
+      : presetRect(CURSOR_HOME, presetSize);
   }
 
   if (command.kind === "resize") {
@@ -114,25 +128,24 @@ export function nextCursor(
     // here rather than quietly dropping back to freehand keeps the panel's
     // pressed button honest about what is selected.
     if (presetSize !== null) return rect;
-    const w = clamp(rect.w + command.dw * BLOCK_PIXELS, BLOCK_PIXELS, BOARD_PIXELS - rect.x);
-    const h = clamp(rect.h + command.dh * BLOCK_PIXELS, BLOCK_PIXELS, BOARD_PIXELS - rect.y);
+    const w = clamp(rect.w + command.dw * RULE_PIXELS, RULE_PIXELS, BOARD_WIDTH - rect.x);
+    const h = clamp(rect.h + command.dh * RULE_PIXELS, RULE_PIXELS, BOARD_HEIGHT - rect.y);
     return snapRect({ x: rect.x, y: rect.y }, { x: rect.x + w - 1, y: rect.y + h - 1 });
   }
 
   const at = {
-    x: rect.x + command.dx * BLOCK_PIXELS,
-    y: rect.y + command.dy * BLOCK_PIXELS,
+    x: rect.x + command.dx * RULE_PIXELS,
+    y: rect.y + command.dy * RULE_PIXELS,
   };
   if (presetSize !== null) return presetRect(at, presetSize);
 
   // The TOP-LEFT is clamped before the two corners go to `snapRect`, and that
   // ordering is the whole of it: `snapRect` clamps each point on its own, so a
   // 100-wide rectangle walked off the left edge would keep its right corner
-  // and come back 90 wide. Clamping the translation instead moves the whole
-  // rectangle or none of it, and `snapRect` still has the last word on the
-  // grid.
-  const x = clamp(at.x, 0, BOARD_PIXELS - rect.w);
-  const y = clamp(at.y, 0, BOARD_PIXELS - rect.h);
+  // and come back 99 wide. Clamping the translation instead moves the whole
+  // rectangle or none of it.
+  const x = clamp(at.x, 0, BOARD_WIDTH - rect.w);
+  const y = clamp(at.y, 0, BOARD_HEIGHT - rect.h);
   return snapRect({ x, y }, { x: x + rect.w - 1, y: y + rect.h - 1 });
 }
 
