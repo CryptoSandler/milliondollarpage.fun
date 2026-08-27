@@ -49,7 +49,8 @@ describe("tellRelease", () => {
       expect(told.purchased, String(failure.status)).toBe(false);
       // The server's own sentence survives, then ours says what is still true.
       expect(told.notice).toContain(failure.message);
-      expect(told.notice).toContain("thirty minutes");
+      // The clock, not a number: a hold's length depends on its area now.
+      expect(told.notice).toContain("clock runs out");
       expect(told.notice).not.toContain("back on the board for anyone to buy");
     }
   });

@@ -1,4 +1,5 @@
 import { execute, isUniqueViolation, queryOne, violatedConstraint } from "../db";
+import { cancelHoldCharge, endHoldCharge } from "../callers/hold-meter";
 import { publishesText } from "./block-image";
 import type { ValidatedContent } from "./content";
 import type { Rect } from "./geometry";
@@ -18,6 +19,12 @@ import type { Rect } from "./geometry";
  * statement on purpose: the blocks_paid_never_expires CHECK added in the
  * orders migration rejects a statement that sets one without the other, and
  * that CHECK is what makes a paid order immune to the reservation sweep.
+ *
+ * BOTH ENDINGS SETTLE THE HOLD'S CHARGE. A hold costs its caller pixel-minutes
+ * against the budget in `../callers/limits.ts`, and the two ways a hold ends
+ * before its clock does are here: a sale, which costs nothing, and a release,
+ * which costs the minutes it actually used. See `settleQuietly` at the foot of
+ * this file for why neither one is allowed to fail the request it rides on.
  */
 
 export type OrderStatus = "reserved" | "paid";
@@ -264,6 +271,10 @@ export async function markPaid(id: string, buyerPubkey: string, signature: strin
     // Same race as attachContent above: the row can vanish between
     // loadOwnedLiveRow's read and this UPDATE if a hold expires mid-request.
     if (!updated) throw new OrderExpired();
+    // The hold became a sale, so it never cost anything. Refunding the whole
+    // charge is what keeps the budget from taxing the one outcome it exists
+    // to protect.
+    await settleQuietly(() => cancelHoldCharge(id), "cancel");
     return toOrder(updated);
   } catch (error) {
     if (isUniqueViolation(error) && violatedConstraint(error) === "blocks_payment_signature_unique") {
@@ -277,7 +288,7 @@ const RELEASE_REFUSED =
   "These pixels are paid for and permanently yours, so there is no hold left to let go of.";
 
 /**
- * Give a held rectangle back before the thirty minutes are up.
+ * Give a held rectangle back before its clock runs out.
  *
  * This is the only function in this file that DELETES, which makes it the
  * most dangerous one here, so it is written to be safe twice over.
@@ -314,7 +325,14 @@ export async function releaseOwnReservation(id: string, buyerPubkey: string): Pr
     "DELETE FROM blocks WHERE id = $1 AND buyer_pubkey = $2 AND status = 'reserved'",
     [id, buyerPubkey],
   );
-  if (deleted === 1) return;
+  if (deleted === 1) {
+    // Charged for the minutes it was actually held, not for the clock it was
+    // given. AFTER the DELETE, never before: a charge cut short for a hold
+    // that then turned out to still be standing would hand the caller back
+    // budget for pixels they still have.
+    await settleQuietly(() => endHoldCharge(id), "end");
+    return;
+  }
 
   // Zero rows means the statement's own guard fired: something changed
   // between the read and the delete. Only the real owner can get this far, so
@@ -326,3 +344,25 @@ export async function releaseOwnReservation(id: string, buyerPubkey: string): Pr
   throw new OrderNotReady(RELEASE_REFUSED);
 }
 
+
+/**
+ * Settles a hold's charge without ever failing the request it rides on.
+ *
+ * The two callers above have both just written the thing that matters — a
+ * payment, or a release — and the meter is bookkeeping that follows it. If the
+ * meter write fails, the caller keeps a charge they should not have kept: an
+ * allowance slightly smaller than it ought to be for at most one window. That
+ * is the safe direction. Throwing instead would report a completed payment as
+ * a failure, and that is not.
+ *
+ * It is logged rather than swallowed silently, because a meter that is
+ * persistently failing is a limit slowly turning into a lockout for real
+ * buyers, and the log is the only place that would show.
+ */
+async function settleQuietly(work: () => Promise<void>, what: string): Promise<void> {
+  try {
+    await work();
+  } catch (error) {
+    console.error(`hold meter: failed to ${what} a charge:`, error);
+  }
+}

@@ -1,9 +1,12 @@
+import { rectIsValid } from "../../../lib/board/geometry";
 import { reserveRect, RectangleInvalid, RectangleTaken } from "../../../lib/board/reserve";
 import { checkReservationLimits } from "../../../lib/callers/limits";
 import { NO_STORE, identify, json, problem } from "../../../lib/http";
 
+const NOT_A_RECTANGLE = "That is not a rectangle this board can sell.";
+
 /**
- * Hold a rectangle for thirty minutes.
+ * Hold a rectangle, for a while that depends on how big it is.
  *
  * A 409 here is an ordinary outcome, not a failure: two people wanted the same
  * pixels and Postgres picked one. It must never surface as a 500.
@@ -22,7 +25,14 @@ export async function POST(request: Request): Promise<Response> {
   const parsed = parseReserveBody(body);
   if (!parsed) return problem(400, "A rectangle and a wallet address are required.");
 
-  const limit = await checkReservationLimits(caller.ipHash);
+  // Validity before limits, and this order is load-bearing: two of the four
+  // limits price the request by its AREA, and a rectangle with no area — or
+  // one made of half pixels — has no honest area to be priced by.
+  // `reserveRect` checks this again at its own boundary, which is where it
+  // belongs; this is not a second rule, it is the same function asked earlier.
+  if (!rectIsValid(parsed.rect)) return problem(400, NOT_A_RECTANGLE);
+
+  const limit = await checkReservationLimits(caller.ipHash, parsed.rect);
   if (!limit.ok) {
     const seconds = Math.max(1, Math.ceil((Date.parse(limit.retryAt) - Date.now()) / 1000));
     return problem(429, limit.message, { retryAt: limit.retryAt }, { "retry-after": String(seconds) });
@@ -47,7 +57,7 @@ export async function POST(request: Request): Promise<Response> {
         yourOrderIds: error.yourOrderIds,
       });
     }
-    if (error instanceof RectangleInvalid) return problem(400, "That is not a rectangle this board can sell.");
+    if (error instanceof RectangleInvalid) return problem(400, NOT_A_RECTANGLE);
     throw error;
   }
 }

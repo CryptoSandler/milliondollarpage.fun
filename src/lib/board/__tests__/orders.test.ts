@@ -323,10 +323,27 @@ describe("releaseOwnReservation", () => {
     expect(await getOrder(held.id), "the released row must be gone, not merely marked").toBeNull();
 
     // The point of the whole feature: those pixels are buyable again at once,
-    // not in thirty minutes when the sweep would have got to them.
+    // not when the sweep would have got to them.
     const again = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, BUYER, CALLER);
     expect(again.rect).toEqual({ x: 0, y: 0, w: 20, h: 20 });
     expect(again.id).not.toBe(held.id);
+  });
+
+  it("stops charging the hold the moment it is handed back, and no later", async () => {
+    // A buyer who changes their mind pays the minutes they used, not the clock
+    // they were given. Read off the ledger row rather than recomputed: the
+    // charge must have been cut short, and the row must still be there — a
+    // release that DELETED the charge would look identical here and would let
+    // an attacker clear their meter by releasing.
+    const held = await hold(0, 0, 20, 20);
+    await releaseOwnReservation(held.id, BUYER);
+
+    const charges = await query<{ shortened: boolean }>(
+      "SELECT charged_until < started_at + interval '1 minute' AS shortened FROM hold_meter WHERE block_id = $1",
+      [held.id],
+    );
+    expect(charges, "the charge must survive the release").toHaveLength(1);
+    expect(charges[0].shortened).toBe(true);
   });
 
   it("REFUSES a different pubkey, AND leaves the row exactly where it was", async () => {

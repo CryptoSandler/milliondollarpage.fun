@@ -1,7 +1,9 @@
 import { randomInt } from "node:crypto";
 import { query, transaction } from "../db";
+import { chargeHold } from "../callers/hold-meter";
 import { LIVE, sweepExpiredReservations } from "./blocks";
 import { type Rect, rectIsValid, rectPixels } from "./geometry";
+import { holdMinutes } from "./hold-clock";
 import { totalBaseUnits } from "./pricing";
 
 /**
@@ -18,9 +20,12 @@ import { totalBaseUnits } from "./pricing";
  * rectangles both reach the INSERT, and Postgres refuses one of them with
  * 23P01. That refusal IS the correctness argument; there is no lock to
  * remember to take, and no check-then-act window to lose.
+ *
+ * HOW LONG A HOLD LASTS is `holdMinutes` in `./hold-clock.ts` and is a
+ * function of area, not a constant. It is written into `expires_at` here, and
+ * the same number prices the hold against its caller's pixel-minute budget in
+ * `../callers/limits.ts` — one rule, read twice, never restated.
  */
-
-export const RESERVATION_MINUTES = 30;
 
 /**
  * Payment attribution, inherited from the sibling project.
@@ -47,7 +52,7 @@ export class RectangleTaken extends Error {
    * The blocking rows that belong to THIS caller, and nothing else.
    *
    * A buyer who drags a rectangle, presses Buy, then abandons the dialog
-   * collides with their own thirty-minute hold on every retry. Without this
+   * collides with their own live hold on every retry. Without this
    * they are locked out of their own pixels with nothing to do about it, so
    * the ids of their own holds travel with the refusal and the client offers
    * to release them.
@@ -123,11 +128,18 @@ export async function reserveRect(
           rect.x, rect.y, rect.w, rect.h,
           buyerPubkey, ipHash,
           perPixel, total, fraction,
-          String(RESERVATION_MINUTES),
+          String(holdMinutes(pixels)),
         ],
       );
 
       const row = inserted.rows[0];
+
+      // Inside the transaction, and priced off the row that was just written
+      // rather than off a second computation of the same numbers. A hold that
+      // is rolled back — the losing side of a race for overlapping pixels —
+      // is never charged, because this statement is rolled back with it.
+      await chargeHold(client, { blockId: row.id, ipHash });
+
       return {
         id: row.id,
         rect,

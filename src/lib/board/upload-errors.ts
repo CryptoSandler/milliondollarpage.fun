@@ -121,7 +121,7 @@ const GONE =
 const ALREADY_PAID =
   "These pixels are already paid for, and what is in a paid block cannot be changed.";
 const EXPIRED =
-  "The thirty minutes ran out, so the hold ended and these pixels went back on the board. Nothing was charged.";
+  "The clock ran out, so the hold ended and these pixels went back on the board. Nothing was charged.";
 const TOO_HEAVY_TO_SEND =
   "That picture was too heavy to send. Pick it again and we will shrink it further.";
 const NOTHING_ACCEPTED =
