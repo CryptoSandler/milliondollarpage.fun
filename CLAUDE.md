@@ -55,3 +55,24 @@ A new module's header comment says who calls it. Not what it does — the code s
 but which file reaches for it and why that file could not do the job itself. A module
 whose header cannot name a caller is a module nobody asked for, and the honest fix is to
 delete it rather than to write a paragraph explaining it.
+
+# Operating rules learned the hard way
+
+Each of these is here because ignoring it cost someone real work, in this repo
+or a sibling.
+
+**Kill by PID, never by name.** `pkill -f vitest` killed a test run belonging to
+a different project on this machine. Process names are shared across every repo
+a person has open; a PID is not. Find the process, read its PID, kill that.
+
+**A branch that carries migrations gets its own test database.** Create a Neon
+branch off `production`, point `TEST_DATABASE_URL` at it for the life of the
+branch, and delete it when the work merges. A migration under review must not
+be applied to a database another branch's suite is also using: the schema the
+other branch expects is gone, and its failures will look like its own bugs.
+
+**The suite's advisory lock runs on a direct connection, never `-pooler`.**
+PgBouncer in transaction pooling does not reliably keep a session-level lock on
+the backend later statements land on, so a run-scoped lock taken through the
+pooler is a lock that silently is not held. `vitest.globalSetup.ts` strips
+`-pooler` from the host for exactly this reason; leave it stripped.
