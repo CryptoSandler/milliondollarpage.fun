@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchBlockDetails } from "../lib/board/block-details";
 import { blockImageUrl } from "../lib/board/block-image";
@@ -430,6 +431,23 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
         <div className="ml-auto min-w-0">
           <BoardCounters stats={board.stats} perPixel={board.pricePerPixelBaseUnits} />
         </div>
+        {/*
+          The way to the answers, in the bar rather than buried in the
+          checkout. What losing a key costs and what a takedown does are things
+          somebody should be able to read BEFORE they have a rectangle held and
+          a clock running — the confirmation screen carries the short form and
+          links to the same page.
+
+          It is a real link and not a dialog, so it can be opened in a tab,
+          read at length and sent to somebody else. Below `sm` it gives way
+          with everything else the bar sheds.
+        */}
+        <Link
+          href="/faq"
+          className="btn-quiet ml-3 hidden shrink-0 px-2.5 py-1.5 text-[12.5px] sm:block"
+        >
+          Questions
+        </Link>
       </header>
 
       <div ref={controlsRef} className="board-controls">

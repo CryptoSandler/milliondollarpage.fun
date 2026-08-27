@@ -380,6 +380,16 @@ total, not an implied one. A million pixels at a dollar is the offer; what it
 adds up to is arithmetic a reader can do, and printing it would turn an offer
 into a forecast.
 
+**One link lives in the bar, and it goes to the questions.** What losing a key
+costs, what a takedown does, and what a dollar actually buys are things
+somebody should be able to read before a rectangle is held and a clock is
+running. It is a real page at `/faq` rather than a dialog, so it can be opened
+in a tab and sent to somebody; the confirmation screen carries the short form
+of the key answer and links to the same place. **It is also the one page in
+this product that scrolls** — inside a single full-height box, the same
+exemption the side panel already has. The document's own `overflow: hidden`
+does not move, because the board depends on it.
+
 Everything else — the size presets, the selection readout and price, the wallet
 field, the Buy button, the legend — is one block of controls that the layout
 puts in one of two places. It is one set of controls either way; there is never
