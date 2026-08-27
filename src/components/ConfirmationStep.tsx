@@ -124,8 +124,14 @@ export default function ConfirmationStep({
         that arrives later.
       </p>
 
+      {/* ASSERTIVE. The buyer pressed the button that spends their money and
+          is waiting to be told it worked; this is the sentence saying it did
+          not. Nothing queued behind it matters more. */}
       {confirmError && (
-        <p className="rounded-lg border border-danger-line bg-danger-soft px-3 py-2 text-[15px] text-ink-soft">
+        <p
+          role="alert"
+          className="rounded-lg border border-danger-line bg-danger-soft px-3 py-2 text-[15px] text-ink-soft"
+        >
           {confirmError}
         </p>
       )}

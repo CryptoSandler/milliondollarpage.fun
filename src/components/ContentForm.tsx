@@ -115,6 +115,7 @@ export default function ContentForm({
   const imageId = useId();
   const linkId = useId();
   const captionId = useId();
+  const fitId = useId();
 
   // Derived, not stored: the URL is a pure function of `draft.file`, so it is
   // recomputed with useMemo rather than pushed into state from an effect.
@@ -297,7 +298,10 @@ export default function ContentForm({
           }}
           onDragLeave={() => setDropActive(false)}
           onDrop={handleDrop}
-          className={`mt-1.5 flex cursor-pointer items-center gap-3.5 rounded-xl border-2 border-dashed bg-canvas p-4 transition-colors ${
+          // focus-proxy: the real control is the one-pixel `.sr-only` file
+          // input right after this label, and an outline on that is a focus
+          // ring nobody can see. See globals.css.
+          className={`focus-proxy mt-1.5 flex cursor-pointer items-center gap-3.5 rounded-xl border-2 border-dashed bg-canvas p-4 transition-[border-color] ${
             dropActive ? "border-primary" : "border-control-line hover:border-primary"
           }`}
         >
@@ -338,13 +342,15 @@ export default function ContentForm({
           accept="image/*"
           aria-label="Image"
           onChange={(event) => chooseFile(event.target.files?.[0] ?? null)}
+          aria-invalid={messages.fields.image ? true : undefined}
+          aria-describedby={messages.fields.image ? `${imageId}-error` : undefined}
           className="sr-only"
         />
         <Permanence>
           We resize it to fit your block, so bring the picture you want rather than one you have
           shrunk. Locked to the block the moment you pay: there is no later swap or crop.
         </Permanence>
-        <FieldError message={messages.fields.image} />
+        <FieldError id={`${imageId}-error`} message={messages.fields.image} />
       </div>
 
       <div>
@@ -364,13 +370,15 @@ export default function ContentForm({
           value={draft.link}
           onChange={(event) => edit({ link: event.target.value })}
           placeholder="yourproject.xyz"
+          aria-invalid={messages.fields.link ? true : undefined}
+          aria-describedby={messages.fields.link ? `${linkId}-error` : undefined}
           className="field-input mt-1.5"
         />
         <Permanence>
           Where your block sends people when they click it. Type just the domain if you like —
           yourproject.xyz becomes https://yourproject.xyz. Over https, and the destination for good.
         </Permanence>
-        <FieldError message={messages.fields.link} />
+        <FieldError id={`${linkId}-error`} message={messages.fields.link} />
       </div>
 
       <div>
@@ -389,16 +397,21 @@ export default function ContentForm({
           maxLength={CAPTION_MAX_LENGTH}
           onChange={(event) => edit({ caption: event.target.value })}
           placeholder="A short line about your block"
+          aria-invalid={messages.fields.caption ? true : undefined}
+          aria-describedby={messages.fields.caption ? `${captionId}-error` : undefined}
           className="field-input mt-1.5"
         />
         <Permanence>
           Shown whenever someone points at your block. Leave it blank and your block carries no
           caption at all. Set once, at payment.
         </Permanence>
-        <FieldError message={messages.fields.caption} />
+        <FieldError id={`${captionId}-error`} message={messages.fields.caption} />
       </div>
 
-      <fieldset>
+      <fieldset
+        aria-invalid={messages.fields.imageFit ? true : undefined}
+        aria-describedby={messages.fields.imageFit ? `${fitId}-error` : undefined}
+      >
         <legend className="text-[15px] font-bold text-ink">How the image fills the rectangle</legend>
         <div className="mt-1.5 flex gap-2">
           <FitOption
@@ -415,19 +428,30 @@ export default function ContentForm({
           />
         </div>
         <Permanence>Baked in with everything else the moment you pay.</Permanence>
-        <FieldError message={messages.fields.imageFit} />
+        <FieldError id={`${fitId}-error`} message={messages.fields.imageFit} />
       </fieldset>
 
       {/* Card-warm, like PurchaseDialog's own stalled screen — not the danger
-          styling below, because no answer is not the same as a bad one. */}
+          styling below, because no answer is not the same as a bad one. And
+          POLITE for exactly the same reason: nothing has been refused, the
+          request is simply still out. */}
       {messages.stalled && messages.form && (
-        <p className="rounded-xl border border-hairline-strong bg-card-warm px-4 py-3 text-[15px] leading-relaxed text-ink-soft">
+        <p
+          role="status"
+          className="rounded-xl border border-hairline-strong bg-card-warm px-4 py-3 text-[15px] leading-relaxed text-ink-soft"
+        >
           {messages.form}
         </p>
       )}
 
+      {/* ASSERTIVE. The buyer pressed Continue and believes it worked; this
+          says it did not. Everything they might be reading past this point is
+          about a submission that did not happen, so it interrupts. */}
       {!messages.stalled && messages.form && (
-        <p className="rounded-lg border border-danger-line bg-danger-soft px-3 py-2 text-[15px] text-ink-soft">
+        <p
+          role="alert"
+          className="rounded-lg border border-danger-line bg-danger-soft px-3 py-2 text-[15px] text-ink-soft"
+        >
           {messages.form}
         </p>
       )}
@@ -477,9 +501,23 @@ function Permanence({ children }: { children: ReactNode }) {
   );
 }
 
-function FieldError({ message }: { message?: string }) {
+/**
+ * One field's refusal, and it is ASSERTIVE.
+ *
+ * A field error appears because the buyer pressed Continue and it did not
+ * continue. Their attention is on a button they believe worked, and everything
+ * they hear after this until they fix it is about a submission that never
+ * happened — that is precisely the case interruption exists for. It carries an
+ * `id` as well, so the field it is about points at it with `aria-describedby`
+ * and it can be read again on the way back to fixing it.
+ */
+function FieldError({ id, message }: { id: string; message?: string }) {
   if (!message) return null;
-  return <p className="mt-1.5 text-[14px] font-semibold text-danger">{message}</p>;
+  return (
+    <p id={id} role="alert" className="mt-1.5 text-[14px] font-semibold text-danger">
+      {message}
+    </p>
+  );
 }
 
 function FitOption({
@@ -494,8 +532,10 @@ function FitOption({
   detail: string;
 }) {
   return (
+    // focus-proxy: same reason as the dropzone — the radio inside is
+    // `.sr-only`, so the ring goes on the box that is actually on screen.
     <label
-      className={`flex flex-1 cursor-pointer flex-col items-center rounded-lg border px-2 py-2 text-center transition-colors ${
+      className={`focus-proxy flex flex-1 cursor-pointer flex-col items-center rounded-lg border px-2 py-2 text-center transition-[color,background-color,border-color] ${
         checked
           ? "border-ink bg-ink text-canvas"
           : "border-control-line bg-canvas text-body hover:border-primary"
