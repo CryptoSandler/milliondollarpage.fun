@@ -161,14 +161,18 @@
   --bar-bottom-h: 88px;
 
   /* The side panel's width in the landscape layout.
-     The board is square and fits by its limiting dimension, so in a landscape
-     window it is exactly as tall as the space under the top bar and the width
-     left over is the panel's. `100vw - (100dvh - bar)` is precisely that
-     leftover. The floor is the narrowest the controls stay usable at; the
-     ceiling stops an ultrawide monitor from handing five buttons half a
-     screen, and the cream either side of the board there is the wall the
-     sheet hangs on rather than a letterbox. */
-  --panel-w: clamp(280px, calc(100vw - (100dvh - var(--bar-top-h))), 560px);
+     The board fits by its limiting dimension, so in a landscape window it is
+     as tall as the space under the top bar and as wide as that height times
+     its own aspect. The wall is 1250 x 800, so that factor is 1.5625, and
+     `100vw - 1.5625 * (100dvh - bar)` is the width left over for the panel.
+     The factor is not decoration: with the square board's `100vw - (100dvh -
+     bar)` the panel claimed width the board still needs, and the board came
+     back fitting by width instead of height — smaller than it had to be. The
+     floor is the narrowest the controls stay usable at; the ceiling stops an
+     ultrawide monitor from handing five buttons half a screen, and the cream
+     either side of the board there is the wall the sheet hangs on rather than
+     a letterbox. */
+  --panel-w: clamp(280px, calc(100vw - 1.5625 * (100dvh - var(--bar-top-h))), 560px);
 }
 
 @media (max-width: 640px) {

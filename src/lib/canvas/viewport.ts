@@ -4,9 +4,11 @@
  * Kept pure so the fiddly part — the part where a zoom drifts by half a pixel
  * and nobody can say why — is unit tested instead of eyeballed.
  *
- * This board is 1000x1000 pixels. THE WHOLE OF IT IS ALWAYS ON SCREEN at the
- * bottom of the zoom ladder, and zoom goes in far enough to pick out a single
- * 10-pixel block.
+ * This board is 1250x800 pixels — a million of them, and not a square. Nothing
+ * in this file knows those numbers: every function takes the board's size as a
+ * `{width, height}`, which is what let the wall change shape without the fit
+ * maths changing at all. THE WHOLE OF IT IS ALWAYS ON SCREEN at the bottom of
+ * the zoom ladder, and zoom goes in far enough to pick out a single pixel.
  *
  * The last section of the file is about crispness rather than position: the
  * backing-store size and the zoom ladder that keep a board pixel sitting on a
@@ -103,8 +105,8 @@ export function clampToBoard(v: Viewport, board: Size): Viewport {
  * The whole board is always on screen. It is scaled by its LIMITING dimension —
  * whichever of the free region's width and height runs out first — so all four
  * corners are visible at once, board pixels stay square, and nothing overflows
- * in either axis. A 1000×1000 board in a free region 1400 wide and 800 tall
- * renders 800×800 with the slack on the left and right.
+ * in either axis. A 1250×800 board in a free region 1400 wide and 848 tall
+ * renders 1325×848 with the slack on the left and right.
  *
  * This reverses the previous contract, which filled the viewport width and
  * panned the vertical overflow. That is a deliberate change of mind by the
@@ -300,8 +302,8 @@ export function backingStoreSize(css: Size, dpr: number): Size {
  * The scales the wheel is allowed to stop on.
  *
  * The bottom rung is `fit` itself — the scale at which the WHOLE BOARD is on
- * screen. It is almost never an integer (a 760px-tall free region over a
- * 1000-pixel board fits at 0.76) and it is not negotiable: anything below it
+ * screen. It is almost never an integer (a 608px-tall free region over an
+ * 800-pixel board fits at 0.76) and it is not negotiable: anything below it
  * would shrink a board that is already entirely visible, which buys nothing.
  * So the ladder is not simply the powers of two.
  *
@@ -310,10 +312,10 @@ export function backingStoreSize(css: Size, dpr: number): Size {
  * 4×4, 8×8 or 16×16 square of screen pixels and every edge in the artwork
  * lands on a pixel boundary.
  *
- *   760px free region → fit 0.76 → [0.76, 1, 2, 4, 8, 16]
- *  1400px free region → fit 1.40 → [1.4, 2, 4, 8, 16]
+ *   608px of free height → fit 0.76 → [0.76, 1, 2, 4, 8, 16]
+ *  1120px of free height → fit 1.40 → [1.4, 2, 4, 8, 16]
  *
- * Note the 1400 case skips 1 entirely: 1 is below fit, so it is not a rung —
+ * Note the second case skips 1 entirely: 1 is below fit, so it is not a rung —
  * and "zoom 1" in this project means this bottom rung, the whole board on
  * screen, never one screen pixel per board pixel. `fit` outranks `maxZoom` if
  * they ever conflict, because a board that does not fit breaks the contract in
