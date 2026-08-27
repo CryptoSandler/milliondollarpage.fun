@@ -76,3 +76,28 @@ PgBouncer in transaction pooling does not reliably keep a session-level lock on
 the backend later statements land on, so a run-scoped lock taken through the
 pooler is a lock that silently is not held. `vitest.globalSetup.ts` strips
 `-pooler` from the host for exactly this reason; leave it stripped.
+
+# Process rules, each of which corrected a real decision before it was built
+
+**Adversarial review before building any model change or large product
+decision.** One round, no code, that explicitly asks for three things: the
+strongest case AGAINST the proposal; the collision with the real code — what
+survives, what gets thrown away, and what the repository knows that the
+discussion does not; and an honest recommendation, with standing permission to
+say the idea is wrong. Nothing gets built until that round closes. Every time
+this has run here it changed the thing being built, which is the point.
+
+**Every verdict cites the written rule.** A gate, a critique or a design
+judgement is made against the governing document open in front of you —
+`DESIGN.md`, `SECURITY.md`, the spec — never against a memory of what it says.
+If a verdict cannot quote the line it rests on, read the document first. A
+review that recites the rule from memory is a review that will confidently
+enforce a rule that was edited last week.
+
+**Decisions with a door.** When the owner is not convinced of a one-way
+decision — a written promise, a prohibition in copy, a guarantee — do not
+decide it for them. Find the neutral wording that neither promises nor
+forbids, build the mechanism that stays compatible with both futures, and
+record the policy as the owner's open decision with both outcomes written out.
+What is irreversible gets written once, and only when they ask for it in as
+many words.
