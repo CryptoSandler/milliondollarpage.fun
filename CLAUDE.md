@@ -112,8 +112,10 @@ while the fix is still one `--amend` away. The pre-push author gate stays as the
 last net, but a gate that fires at the close is a gate that fires after twenty
 commits need rewriting.
 
-This repository is protected by a second thing worth keeping: `user.email` is
-set in `.git/config`, not only inherited from a conditional global include. A
-repo-local value is read by every process that touches the repository,
-subagents included. That is why the audit of every ref here returns one
-identity and no exceptions.
+**Commit identity lives in this repo's `.git/config`.** `user.name` and
+`user.email` are set locally, and were on the first day. The global `includeIf`
+is a net, not the source: a child process may fail to resolve its condition,
+while a repo-local value is read by every process that touches the repository.
+That is why the audit of every ref here returns one identity and no
+exceptions — it is configuration, not luck, and it does not survive being
+"cleaned up" into the global file.
