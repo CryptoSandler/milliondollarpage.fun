@@ -73,8 +73,13 @@ describe("listLiveBlocks", () => {
   });
 
   it("never selects the bytes, or the buyer's wallet, into the public payload", async () => {
-    await insert(0, 0, 10, 10, "paid");
-    await execute(`UPDATE blocks SET buyer_pubkey = 'AWalletNobodyMayLearn'`);
+    // The wallet goes in with the row rather than being UPDATEd on after: a
+    // paid row's buyer_pubkey is frozen by the ownership trigger (migration
+    // 005), which is the point of that trigger and would refuse this fixture.
+    await execute(
+      `INSERT INTO blocks (x, y, w, h, status, buyer_pubkey, price_per_pixel_usdc, total_usdc)
+       VALUES (0, 0, 10, 10, 'paid', 'AWalletNobodyMayLearn', 1000000, 100000000)`,
+    );
     const [block] = await listLiveBlocks();
     expect(Object.keys(block).sort()).toEqual(
       ["caption", "h", "hasImage", "id", "imageFit", "link", "status", "w", "x", "y"],

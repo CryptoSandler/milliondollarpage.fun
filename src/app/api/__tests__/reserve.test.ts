@@ -116,9 +116,27 @@ describe("POST /api/reserve", () => {
     expect(JSON.stringify(body)).not.toContain("BuyerPubkey");
   });
 
-  it("answers 400 for a rectangle off the grid", async () => {
-    const response = await POST(request({ rect: { x: 5, y: 0, w: 10, h: 10 }, buyerPubkey: BUYER }));
-    expect(response.status).toBe(400);
+  it("answers 400 for a rectangle the wall cannot hold", async () => {
+    // Off the right edge, off the bottom one, and one made of half pixels —
+    // which Postgres would round into its integer columns rather than refuse,
+    // so the route has to.
+    for (const rect of [
+      { x: 1240, y: 0, w: 20, h: 10 },
+      { x: 0, y: 790, w: 10, h: 20 },
+      { x: 137.5, y: 0, w: 10, h: 10 },
+      { x: 0, y: 0, w: 0, h: 10 },
+    ]) {
+      const response = await POST(request({ rect, buyerPubkey: BUYER }));
+      expect(response.status, JSON.stringify(rect)).toBe(400);
+    }
+  });
+
+  it("answers 201 for a single pixel at an odd coordinate, which used to be a 400", async () => {
+    const response = await POST(request({ rect: { x: 137, y: 41, w: 1, h: 1 }, buyerPubkey: BUYER }));
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body.rect).toEqual({ x: 137, y: 41, w: 1, h: 1 });
+    expect(body.pixels).toBe(1);
   });
 
   it("answers 400 for a malformed body", async () => {
