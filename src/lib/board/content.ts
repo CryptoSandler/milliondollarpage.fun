@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import sharp from "sharp";
+import { canHonourContain, type Box } from "./image-fit";
 import { STORED_MAX_BYTES, STORED_MAX_LONG_EDGE } from "./image-plan";
 import { LINK_MAX_LENGTH, checkLink, normaliseLink } from "./link";
 
@@ -19,6 +20,16 @@ import { LINK_MAX_LENGTH, checkLink, normaliseLink } from "./link";
  * from what the caller claims — because a caller can name any Content-Type
  * it likes. A `sharp` throw means "this is not a decodable image", not a
  * crash.
+ *
+ * THE FIT IS CHECKED AGAINST THE BLOCK, NOT ONLY AGAINST THE TWO WORDS. A
+ * `contain` that the rectangle is too small to letterbox renders as a fill,
+ * and the content on a paid block cannot be edited afterwards — so a stored
+ * `contain` that draws as something else is permanent. `canHonourContain` in
+ * image-fit.ts answers it from the same placement the board draws with, and
+ * the block it is measured against comes from the ORDER: a caller does not
+ * get to say how big their own rectangle is. The form hides the choice where
+ * this would fire (see ContentForm.tsx); hiding a radio is not enforcement,
+ * which is why the rule is here as well.
  */
 
 export const CONTENT_LIMITS = {
@@ -72,7 +83,8 @@ export type RejectionCode =
   | "link_not_https"
   | "link_invalid"
   | "caption_too_long"
-  | "fit_unknown";
+  | "fit_unknown"
+  | "fit_impossible";
 
 export type ContentRejection = {
   field: "image" | "link" | "caption" | "imageFit";
@@ -107,6 +119,15 @@ type ContentInput = {
   // chose, and the union is unenforceable there. validateImageFit narrows
   // it below; that narrowing is the entire point of checking it here.
   imageFit: string;
+  /**
+   * The rectangle the content is being attached to, in board pixels.
+   *
+   * Required rather than optional, and it is the caller's job to read it off
+   * the ORDER. A default would silently skip the fit check for whoever forgot
+   * to pass it, which is exactly the shape of the bug this field exists to
+   * make impossible.
+   */
+  block: Box;
 };
 
 type ValidateContentResult =
@@ -253,7 +274,23 @@ export async function validateContent(input: ContentInput): Promise<ValidateCont
   if (captionRejection) rejections.push(captionRejection);
 
   const imageFitResult = validateImageFit(input.imageFit);
-  if (!imageFitResult.ok) rejections.push(imageFitResult.rejection);
+  if (!imageFitResult.ok) {
+    rejections.push(imageFitResult.rejection);
+  } else if (
+    // Only once the image decoded: the answer needs its shape, and an
+    // unreadable file already has its own rejection saying so.
+    imageResult.ok &&
+    imageFitResult.imageFit === "contain" &&
+    !canHonourContain({ width: imageResult.width, height: imageResult.height }, input.block)
+  ) {
+    rejections.push({
+      field: "imageFit",
+      code: "fit_impossible",
+      reason:
+        `A ${input.block.width}x${input.block.height} block cannot draw the bars a contain fit ` +
+        `needs for a ${imageResult.width}x${imageResult.height} image.`,
+    });
+  }
 
   if (!imageResult.ok || !imageFitResult.ok || rejections.length > 0) {
     return { ok: false, rejections };

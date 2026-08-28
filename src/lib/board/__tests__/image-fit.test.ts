@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { centredCrop, placeImage } from "../image-fit";
+import { canHonourContain, centredCrop, placeImage } from "../image-fit";
 
 /**
  * The arithmetic that stopped the board squashing people's photographs.
@@ -207,4 +207,73 @@ describe("the board draws what the confirmation preview showed", () => {
       });
     }
   }
+});
+
+/**
+ * The rule the checkout and the server both ask before they let anybody buy a
+ * `contain`: can this rectangle actually be given the bars that fit promises?
+ *
+ * Every case reads the BAR out of `placeImage` first and only then asks the
+ * predicate, so nothing here restates the arithmetic it is guarding — if the
+ * placement changes, the bar these tests measure changes with it.
+ */
+describe("canHonourContain", () => {
+  /** The bar the board would draw down one side, in block pixels. */
+  const bar = (source: { width: number; height: number }, block: { width: number; height: number }) => {
+    const { dest } = placeImage(source, { x: 0, y: 0, ...block }, "contain");
+    return Math.max(dest.x, dest.y);
+  };
+
+  it("refuses a 1×1 block, which is the owner's worked example", () => {
+    const one = { width: 1, height: 1 };
+    for (const source of [
+      { width: 4, height: 3 },
+      { width: 3, height: 4 },
+      { width: 4000, height: 3000 },
+      { width: 100, height: 99 },
+    ]) {
+      // There is one pixel to draw into, so whatever is left over is a
+      // fraction of it and the wall has nowhere to put it.
+      expect(bar(source, one)).toBeLessThan(1);
+      expect(bar(source, one)).toBeGreaterThan(0);
+      expect(canHonourContain(source, one), `${source.width}×${source.height} in 1×1`).toBe(false);
+    }
+  });
+
+  it("allows a 1×1 block a picture that is already square, because there is no letterbox to draw", () => {
+    const one = { width: 1, height: 1 };
+    // `contain` and `cover` are the same pixel here, and both are honoured:
+    // the placement fills the block exactly and leaves nothing over.
+    const { dest } = placeImage({ width: 64, height: 64 }, { x: 0, y: 0, ...one }, "contain");
+    expect(dest).toEqual({ x: 0, y: 0, width: 1, height: 1 });
+    expect(canHonourContain({ width: 64, height: 64 }, one)).toBe(true);
+  });
+
+  it("holds the boundary from both sides", () => {
+    const block = { width: 10, height: 10 };
+
+    // Exactly one whole block pixel per side: the smallest bar the wall can
+    // actually draw.
+    expect(bar({ width: 100, height: 80 }, block)).toBeCloseTo(1, 10);
+    expect(canHonourContain({ width: 100, height: 80 }, block)).toBe(true);
+
+    // One pixel taller at the source, and the bar no longer reaches a whole
+    // block pixel — it exists in the arithmetic and not on the wall.
+    expect(bar({ width: 100, height: 81 }, block)).toBeLessThan(1);
+    expect(bar({ width: 100, height: 81 }, block)).toBeGreaterThan(0);
+    expect(canHonourContain({ width: 100, height: 81 }, block)).toBe(false);
+  });
+
+  it("leaves a wide picture in a large rectangle exactly as it was", () => {
+    const block = { width: 200, height: 50 };
+
+    // Bars, and big ones: 1200×200 in a 4:1 rectangle is 33 pixels tall.
+    expect(bar({ width: 1200, height: 200 }, block)).toBeGreaterThan(1);
+    expect(canHonourContain({ width: 1200, height: 200 }, block)).toBe(true);
+
+    // And the banner that already has the rectangle's own shape: no bars at
+    // all, nothing to fail to draw, and the choice stays a choice.
+    expect(bar({ width: 1200, height: 300 }, block)).toBeCloseTo(0, 10);
+    expect(canHonourContain({ width: 1200, height: 300 }, block)).toBe(true);
+  });
 });

@@ -49,6 +49,20 @@ Postgres exclusion constraint rather than a check in application code. See `DESI
 how the interface should look, and `.claude/commands/cierre.md` for what closing a batch
 requires.
 
+# Fraunces is never used in this repository
+
+It is another of the owner's projects and carrying it here links the two. No
+file loads it, names it as a candidate, or reasons about it — including to say
+it is not being used. A file that declares what it does not do is a file that
+reintroduces the fingerprint in the act of disowning it, which is how three
+superseded mockups kept pulling the family from Google Fonts long after the
+direction round chose otherwise.
+
+The rule lived only in conversation until now, which is why the mockups survived
+four batches: a standing prohibition nobody wrote down is one the next session
+cannot enforce. Fonts come from Google Fonts, and the chosen pair is in
+`DESIGN.md`.
+
 # Every module names its callers
 
 A new module's header comment says who calls it. Not what it does — the code says that —

@@ -224,7 +224,6 @@ We should not try to out-narrate them. We should out-build them.
 | --- | --- | --- |
 | original | Manual placement with a multi-day turnaround | The buyer picks their own rectangle; that *is* the interaction |
 | original | Exact-dimension image requirement | We scale and fit server-side; demanding exact pixel dimensions in 2026 is hostile |
-| original | Banning animation outright | The original's objection was aesthetic, and a per-block opt-in bounded by size, dimension and duration limits is a different thing. **How animation is paid for is an OPEN PRODUCT DECISION and this row must not be read as settling it.** An earlier draft said "we sell animated GIF as a paid upgrade", which collides with what the owner has since settled about content: every purchase, from 1×1 at a dollar, carries an image, a link and a caption, with no threshold and no tier — visibility is bought with area, never with features. What is built today is neither: an animated GIF that already fits is stored untouched, one that does not is shrunk to a still and the checkout says so before the money. Whether animation ever becomes something bought separately is for the owner |
 | 1mp | Committing in writing to whether a block can ever be resold | Not because we take the other side — we have not decided, and it is recorded as an open decision in `SECURITY.md`. What we decline is publishing an answer we do not have |
 | 1mp | Fill once, lock, auction the board as a single artwork | A fine story, but it makes the product an event with an end date. Ours is a live board that stays live, and the last pixels are sold at the same dollar as the first — the tail is a plain remaining-pixels counter, settled in `DESIGN.md`, not an auction. This row used to end "we are building a live board with a secondary market", which was a claim about resale that nobody had decided; see "On positioning" |
 | 1mp | A first-person confessional as the pitch | Not our voice, and imitating it would be transparent |
@@ -286,8 +285,12 @@ enough to be worth attacking.
     removed after publication is not. This gives the admin deletion path a
     published basis rather than an internal policy.
 11. **Link rot is explicitly the buyer's problem**, stated in the rules.
-12. **The upload cap is set by dimensions and bytes, not bytes alone**, and the
-    animated upgrade carries its own ceilings for size, dimensions and duration.
+12. **The upload cap is set by dimensions and bytes, not bytes alone.** There is
+    no animated upgrade to carry ceilings of its own: every purchase, from 1x1
+    at a dollar, already carries an image, a link and a caption, and visibility
+    is bought with area rather than with features. An animated GIF that fits the
+    caps is stored as it arrived; one that does not is shrunk to a still, and
+    the checkout says so before any money moves.
 13. **Permanence becomes headline copy; resale becomes no copy at all.** What
     the home page can say is the sentence with mechanisms under it: a sold
     pixel does not change owner or content without its owner's signature, and

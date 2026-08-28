@@ -24,7 +24,17 @@ async function singleFrameGif(): Promise<Buffer> {
     .toBuffer();
 }
 
-const GOOD = { link: "https://example.com/", caption: "A caption", imageFit: "contain" as const };
+// The block is part of the input now: `validateContent` refuses a `contain`
+// the rectangle is too small to letterbox (see `canHonourContain` in
+// image-fit.ts). It is generous here on purpose, so that every case about the
+// image, the link or the caption is answering its own question rather than
+// that one. The fit's own rules get their own rectangles, below.
+const GOOD = {
+  link: "https://example.com/",
+  caption: "A caption",
+  imageFit: "contain" as const,
+  block: { width: 400, height: 400 },
+};
 
 describe("validateContent — the image", () => {
   it("accepts a small PNG and reports its shape", async () => {
@@ -218,6 +228,57 @@ describe("validateContent — the image fit", () => {
     }
   });
 
+  /**
+   * THE OPTION THAT CANNOT BE HONOURED IS NOT ACCEPTED, and the ones that can
+   * are untouched. The form stops offering `contain` where the rectangle
+   * cannot draw the bars, but a form is not a boundary: content is immutable
+   * once paid, so a `contain` that renders as a fill would be permanent.
+   */
+  it("refuses a contain a 1x1 rectangle cannot letterbox, and takes the same bytes as a fill", async () => {
+    // The owner's worked example: a 1x1 stores 4x4, and a picture that is not
+    // square has nowhere in one pixel to put its bars.
+    const bytes = await png(4, 3);
+    const block = { width: 1, height: 1 };
+
+    const contained = await validateContent({ ...GOOD, block, imageFit: "contain", bytes, declaredMime: "image/png" });
+    expect(contained.ok).toBe(false);
+    if (!contained.ok) {
+      expect(contained.rejections.map((r) => [r.field, r.code])).toEqual([["imageFit", "fit_impossible"]]);
+    }
+
+    // Nothing else about the submission was wrong, which is the point: the
+    // fit is the only thing refused, and the fill goes straight through.
+    const covered = await validateContent({ ...GOOD, block, imageFit: "cover", bytes, declaredMime: "image/png" });
+    expect(covered.ok).toBe(true);
+    if (covered.ok) expect(covered.content.imageFit).toBe("cover");
+  });
+
+  it("leaves contain alone on a large rectangle with a wide picture", async () => {
+    const result = await validateContent({
+      ...GOOD,
+      block: { width: 200, height: 50 },
+      imageFit: "contain",
+      bytes: await png(800, 100),
+      declaredMime: "image/png",
+    });
+    expect(result.ok, "a wide picture in a large rectangle keeps its bars").toBe(true);
+    if (result.ok) expect(result.content.imageFit).toBe("contain");
+  });
+
+  it("says nothing about the fit when the picture itself could not be read", async () => {
+    // The shape is unknown, so the question is unanswerable — and the file
+    // already has its own rejection saying why.
+    const result = await validateContent({
+      ...GOOD,
+      block: { width: 1, height: 1 },
+      imageFit: "contain",
+      bytes: Buffer.from("nope"),
+      declaredMime: "image/png",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.rejections.map((r) => r.field)).toEqual(["image"]);
+  });
+
   it("is reported alongside every other bad field, not instead of them", async () => {
     const result = await validateContent({
       bytes: Buffer.from("nope"),
@@ -225,6 +286,7 @@ describe("validateContent — the image fit", () => {
       link: "javascript:alert(1)",
       caption: "x".repeat(99),
       imageFit: "banana",
+      block: { width: 400, height: 400 },
     });
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -246,6 +308,7 @@ describe("validateContent — reporting", () => {
       link: "javascript:alert(1)",
       caption: "x".repeat(99),
       imageFit: "contain",
+      block: { width: 400, height: 400 },
     });
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -333,6 +396,7 @@ describe("an 8 MB photograph ends in a valid block", () => {
       const result = await validateContent({
         ...GOOD,
         imageFit: fit,
+        block,
         bytes,
         declaredMime: "image/jpeg",
       });
