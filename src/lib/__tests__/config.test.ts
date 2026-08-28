@@ -70,10 +70,27 @@ describe("assertStubPaymentsNotInProduction", () => {
 
   it("leaves development and test alone, which is the whole point of the flag", () => {
     set("ALLOW_STUB_PAYMENTS", "true");
-    for (const env of ["development", "test", undefined]) {
+    for (const env of ["development", "test"]) {
       set("NODE_ENV", env);
       expect(() => assertStubPaymentsNotInProduction(), String(env)).not.toThrow();
     }
+  });
+
+  /**
+   * This case used to sit in the loop above, asserting that an UNSET `NODE_ENV`
+   * was a developer and the flag was fine. The 2026-08-28 audit is why it moved
+   * and inverted: the guard now asks whether it has been shown proof this is a
+   * developer's machine, and an absent value is not proof of anything. A bare
+   * container with no `NODE_ENV` is a deploy, and this flag makes every
+   * rectangle on the board free.
+   *
+   * The cost of the new answer is that a developer running a bare script has to
+   * set one variable. The cost of the old one was silent free pixels.
+   */
+  it("treats an unset NODE_ENV as deployed rather than as a developer", () => {
+    set("ALLOW_STUB_PAYMENTS", "true");
+    set("NODE_ENV", undefined);
+    expect(() => assertStubPaymentsNotInProduction()).toThrow(/ALLOW_STUB_PAYMENTS/);
   });
 });
 
