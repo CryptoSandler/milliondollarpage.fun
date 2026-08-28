@@ -8,9 +8,12 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
-  const { assertStubPaymentsNotInProduction, assertUntrustedClientIpNotInProduction } = await import(
-    "./lib/config"
-  );
+  const {
+    assertStubPaymentsNotInProduction,
+    assertUntrustedClientIpNotInProduction,
+    assertPaymentClusterNotMisconfigured,
+  } = await import("./lib/config");
   assertStubPaymentsNotInProduction();
   assertUntrustedClientIpNotInProduction();
+  assertPaymentClusterNotMisconfigured();
 }

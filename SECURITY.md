@@ -151,7 +151,7 @@ They are different things and must never be confused.
 | --- | --- | --- |
 | Purpose | Receives USDC for blocks and the SOL platform fee | Signs Core mints as the collection's update authority; signs Irys uploads |
 | Private key | **Never touches this codebase.** Operated entirely outside it | `COLLECTION_AUTHORITY_SECRET`, a Vercel environment variable |
-| Holds value | Yes, all of it | **Never.** Enforced at startup |
+| Holds value | Yes, all of it | **Never** — the contract. NOT YET ENFORCED: see condition 1 |
 | Configured as | `PAYMENT_WALLET`, a public address | A secret |
 
 The treasury is receive-only from the application's point of view. There is no
@@ -219,9 +219,18 @@ user loses a block, no block changes, and no money moves.
 
 ## Enforced conditions
 
-Three of these are conditions the code enforces today. The first is not yet:
-it is written here as the contract the key must arrive under, and it is called
-out as unbuilt so nobody reads this page and believes a guard is standing.
+**ONE of these is enforced by code today: condition 3, the 100 KiB cap, in
+`src/lib/board/content.ts`.** The other three are contracts the key must arrive
+under, and they are unenforceable until it does — there is no key, so there is
+nothing reading a secret to keep out of a log or off a disk. They are written
+here so the batch that introduces the key knows what it owes, and marked so that
+nobody reads this page and believes a guard is standing that is not.
+
+An audit of this repository checked exactly that and found the count above used
+to say three. It said three because conditions 2 and 4 are true of the code as
+written — nothing logs the secret, because nothing reads it. That is a property
+of absence, not a guard, and stating it as enforcement is how a document starts
+lying slowly.
 
 1. **Zero balance — SPECIFIED, NOT YET BUILT.** There is no `startup-check.ts`
    in this repository, nothing reads `COLLECTION_AUTHORITY_SECRET`, and no
@@ -268,8 +277,10 @@ server, and a new keypair generated offline.
 3. Verify on-chain that `updateAuthority` on the collection account is the new
    key before touching anything else.
 4. Replace `COLLECTION_AUTHORITY_SECRET` in the Vercel project settings and
-   redeploy. The startup check will refuse to boot if the new key holds any
-   balance, which is the intended smoke test.
+   redeploy. Once the startup check of condition 1 exists it will refuse to boot
+   on a funded key, and that is the intended smoke test — but it does not exist
+   yet, so until it ships this step is a manual balance check before the
+   redeploy, not an automatic one.
 5. Confirm a mint end to end on a paid order, or on a devnet equivalent.
 6. Destroy the old secret everywhere it exists: Vercel history, any local shell
    history, any password manager entry.

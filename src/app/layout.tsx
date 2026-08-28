@@ -32,6 +32,12 @@ export const metadata: Metadata = {
   // recorded as an open decision with neither answer claimed.
   description:
     "A million pixels at a dollar each, on a wall 1250 by 800. Buy any free rectangle — one pixel or ten thousand — pay in USDC on Solana, and those pixels stay yours.",
+  // Closed to crawlers until the owner launches by hand. This is the lock that
+  // works on a page a crawler already has in its hands — robots.txt is only
+  // advisory and is read before the fetch, so a URL shared anywhere would be
+  // indexed without this tag. See `src/app/robots.ts` for the other two, and
+  // lift all three together or none of them.
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
