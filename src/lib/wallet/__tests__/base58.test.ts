@@ -54,3 +54,30 @@ describe("base58Encode", () => {
     }
   });
 });
+
+describe("the length bound", () => {
+  /**
+   * The decoder is O(n^2), and `verifySignature` only learns the result is the
+   * wrong size AFTER paying for it. Without a bound, one unauthenticated
+   * request blocks the event loop for minutes.
+   *
+   * Timed rather than asserted on the return value alone: a guard that
+   * returned null after doing the work would satisfy a null check and would
+   * not fix anything.
+   */
+  it("refuses an input too long to be a key or a signature, without decoding it", () => {
+    const started = process.hrtime.bigint();
+    expect(base58Decode("z".repeat(100_000))).toBeNull();
+    const ms = Number(process.hrtime.bigint() - started) / 1e6;
+
+    // Unbounded, this input measured ~3,450ms on the machine this was written
+    // on. Anything in that neighbourhood means the guard is gone.
+    expect(ms).toBeLessThan(50);
+  });
+
+  it("still decodes both real lengths, so the bound did not break the product", () => {
+    // 32 bytes and 64 bytes: a Solana public key and an ed25519 signature.
+    expect(base58Decode("11111111111111111111111111111111")).not.toBeNull();
+    expect(base58Decode("1".repeat(88))).not.toBeNull();
+  });
+});

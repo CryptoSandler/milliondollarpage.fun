@@ -37,8 +37,26 @@ for (let i = 0; i < ALPHABET.length; i++) INDEX[ALPHABET[i]] = i;
  * string somebody sent us, and "this is not base58" is an ordinary answer
  * there rather than an exceptional one.
  */
+/**
+ * The longest input this decoder will look at.
+ *
+ * The loop below is O(n^2): every character walks the digits accumulated so
+ * far. That is fine for the two things this repo decodes — a 32-byte public
+ * key is at most 44 base58 characters and a 64-byte signature at most 88 —
+ * and it is a denial of service for anything larger, because the work happens
+ * BEFORE `verifySignature` gets to check that the result is the right number
+ * of bytes. Measured on this machine: 35ms at 10,000 characters, 3.45s at
+ * 100,000, and it grows with the square from there, on a route that
+ * deliberately carries no rate limit because it is how somebody proves they
+ * own a hold.
+ *
+ * 128 is both legitimate lengths with room to spare, and the guard lives here
+ * rather than at the caller so a future caller cannot reintroduce it.
+ */
+const MAX_INPUT_LENGTH = 128;
+
 export function base58Decode(input: string): Uint8Array | null {
-  if (input.length === 0) return null;
+  if (input.length === 0 || input.length > MAX_INPUT_LENGTH) return null;
 
   const bytes: number[] = [];
   for (const char of input) {
