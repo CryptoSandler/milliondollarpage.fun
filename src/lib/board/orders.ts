@@ -224,7 +224,7 @@ export async function attachContent(
             caption = $6,
             link = $7,
             image_fit = $8
-      WHERE id = $1
+      WHERE id = $1 AND status = 'reserved'
       RETURNING ${ORDER_COLUMNS}`,
     [
       id,
