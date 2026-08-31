@@ -7,7 +7,7 @@ import {
   toPublicOrder,
 } from "../../../../lib/board/orders";
 import { BUYER_PUBKEY_HEADER } from "../../../../lib/board/purchase-client";
-import { consumeReleaseChallenge } from "../../../../lib/board/release-challenge";
+import { consumeChallenge } from "../../../../lib/board/challenge";
 import { NO_STORE, isUuid, json, problem } from "../../../../lib/http";
 
 /**
@@ -19,9 +19,11 @@ import { NO_STORE, isUuid, json, problem } from "../../../../lib/http";
  *
  * This route is unauthenticated by design — polling a hold's status must not
  * require proving ownership of it. That is exactly why `toPublicOrder` runs
- * before the response goes out: `/board` already publishes every live
- * block's id, so an `Order` returned here with its `buyerPubkey` intact would
- * hand anyone the one credential `/content` and `/confirm` trust.
+ * before the response goes out: `/board` already publishes every live block's
+ * id, so everything this answers with reaches strangers, and `toPublicOrder`
+ * is the one place that decides what a stranger may have. It withholds two
+ * things — the buyer's address and the payable amount — and the reasoning for
+ * each is in `orders.ts`.
  *
  * Unauthenticated is not the same as undiscriminating. A caller MAY offer
  * their pubkey in `x-buyer-pubkey`, and if it is the buyer's, the caption and
@@ -30,6 +32,11 @@ import { NO_STORE, isUuid, json, problem } from "../../../../lib/http";
  * free hold serving a stranger's link to every visitor is exactly the abuse
  * this closes. Offering nothing is never an error — the status, the rectangle
  * and the clock answer any caller who has the id, as they always did.
+ *
+ * That header is a claim and not a proof, which is why nothing it unlocks is
+ * worth more than the caption and link the caller already typed. Anything a
+ * stranger must not have is not here at all: the signed routes hand it back
+ * to a wallet that has just proved the key.
  */
 export async function GET(
   request: Request,
@@ -74,13 +81,13 @@ const UNSIGNED =
  * attacker could look up, which made releasing a stranger's rectangle a
  * two-request walk of the board.
  *
- * Now the caller signs. `POST /api/orders/:id/release-challenge` mints a
- * single-use nonce bound to this order; the wallet signs the sentence it
- * comes back with; and the proof — nonce, address, signature — travels in
- * this body. `consumeReleaseChallenge` spends the nonce and verifies the
- * signature, and only an address it hands back is compared to the order's.
- * See `src/lib/board/release-challenge.ts`; the payment step will present the
- * same proof in the same shape.
+ * Now the caller signs. `POST /api/orders/:id/challenge` with
+ * `{"action":"release"}` mints a single-use nonce bound to this order and to
+ * that act; the wallet signs the sentence it comes back with; and the proof —
+ * nonce, address, signature — travels in this body. `consumeChallenge` spends
+ * the nonce and verifies the signature, and only an address it hands back is
+ * compared to the order's. See `src/lib/board/challenge.ts`; `/content` and
+ * `/confirm` present the same proof in the same shape, for their own acts.
  *
  * ## The ladder, and what it deliberately does not disclose
  *
@@ -123,7 +130,7 @@ export async function DELETE(
   // The nonce is spent whatever happens next, including on a wrong key: the
   // caller presented it, so it is used up. Nothing about the order is read
   // out of this — an address comes back, or nothing does.
-  const proven = await consumeReleaseChallenge(id, body);
+  const proven = await consumeChallenge(id, "release", body);
   if (proven === null || proven !== order.buyerPubkey) return problem(403, UNSIGNED);
 
   try {
