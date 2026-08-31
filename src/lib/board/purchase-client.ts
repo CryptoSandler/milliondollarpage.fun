@@ -1,7 +1,9 @@
 import type { ContentRejection } from "./content";
 import type { Rect } from "./geometry";
 import type { ProvenOrder, PublicOrder } from "./orders";
+import { base58Encode } from "../wallet/base58";
 import type { ChallengeAction } from "../wallet/signature";
+import { shortAddress } from "../wallet/standard";
 
 /**
  * The browser side of the four order endpoints.
@@ -14,9 +16,11 @@ import type { ChallengeAction } from "../wallet/signature";
  *
  * `PublicOrder` and `Rect` are imported with `import type` only: both are
  * erased at compile time, so this module never pulls `../db` (which
- * `orders.ts` imports) into a client bundle. That is deliberate — this file
- * is consumed by "use client" components, and `../db` opens a real `pg`
- * connection at module scope.
+ * `orders.ts` imports) into a client bundle. That is deliberate — this file is
+ * consumed by "use client" components, and `../db` opens a real `pg` connection
+ * at module scope. `base58Encode` is the one VALUE import here, and it is safe
+ * for the same reason said the other way round: `../wallet/base58` imports
+ * nothing whatsoever.
  *
  * `ClientOrder` is built from `PublicOrder`, not from `Order`: the server
  * never sends a buyer's pubkey back over the wire (see `toPublicOrder` in
@@ -248,25 +252,63 @@ export type ReleaseResult = { ok: true } | ClientFailure;
  * passed through untouched: a client that reassembled the format would be a
  * second copy of it, free to drift from the one the verifier uses.
  */
-export type WalletSigner = (message: string) => Promise<{ publicKey: string; signature: string }>;
+export type WalletSigner = ((message: string) => Promise<{ publicKey: string; signature: string }>) & {
+  /**
+   * The address this signer signs with, carried on the function so a refusal
+   * can name it. See `refusedMessage`: a wallet that has moved to another
+   * account throws exactly like a person pressing Cancel, and the two cannot be
+   * told apart from here — so the message covers both and names the account
+   * this rectangle actually belongs to.
+   */
+  address?: string;
+};
 
 /**
- * The wallet that would sign. There isn't one.
+ * What a connected wallet looks like from here: an address, and something
+ * that turns bytes into a signature.
+ *
+ * Two fields and no wallet vocabulary at all, so this module stays the browser
+ * half of four HTTP endpoints and does not become a second place that knows
+ * about the Wallet Standard. `src/components/useWallet.ts` builds one of these
+ * out of a live `solana:signMessage` feature; `standard.ts` explains why that
+ * is the only feature this product asks a wallet for.
+ */
+export type MessageSigner = {
+  /** base58, exactly as `verifySignature` on the server decodes it. */
+  address: string;
+  /** Resolves with the raw 64 signature bytes, or rejects when the person says no. */
+  signMessage: (message: Uint8Array) => Promise<Uint8Array>;
+};
+
+/**
+ * The wallet that signs, or null when nothing is connected.
  *
  * A function rather than a constant so nothing narrows it to `null` at the
- * point of use, and so wiring a real adapter in later is an edit to one
- * return statement rather than a hunt through the dialog.
+ * point of use, and it takes the connected wallet rather than reaching for one
+ * so that this module keeps no state and the dialog cannot be handed a signer
+ * for an address its hold does not belong to. It returned a bare `null` for
+ * the whole of batch 3 — there was no wallet in the browser, only an address
+ * somebody typed into a field, which proved nothing because an address is
+ * public. This is the one return statement that comment said would change.
  *
- * `buyerPubkey` in this app is a string somebody typed into a field. Nothing
- * in the browser holds the key behind it, so nothing in the browser can sign
- * anything, and every call below that needs a signature says so rather than
- * sending a request the server will rightly refuse. It was `releaseSigner`
- * when letting a hold go was the only signed step; attaching content and
- * settling an order are signed now too. See DESIGN.md for what the buyer is
- * told while there is nothing here to sign with.
+ * The two conversions are here rather than in the hook because they are what
+ * the WIRE needs: the server signs and verifies UTF-8 bytes of the exact text
+ * `challengeMessage` built (`src/lib/wallet/signature.ts`), and it reads the
+ * signature as base58. Doing them beside the fetch that carries them keeps one
+ * spelling of the proof rather than two.
+ *
+ * It does not catch. A wallet rejects when the person declines, and `prove`
+ * below is what turns that into the sentence they read — one place, for all
+ * three acts.
  */
-export function walletSigner(): WalletSigner | null {
-  return null;
+export function walletSigner(signer: MessageSigner | null): WalletSigner | null {
+  if (!signer) return null;
+  const sign: WalletSigner = async (message: string) => ({
+    publicKey: signer.address,
+    signature: base58Encode(await signer.signMessage(new TextEncoder().encode(message))),
+  });
+  sign.address = signer.address;
+  return sign;
 }
 
 /**
@@ -278,14 +320,14 @@ export function walletSigner(): WalletSigner | null {
  */
 const NO_WALLET_MESSAGE: Record<ChallengeAction, string> = {
   release:
-    "Letting a hold go has to be signed by the wallet that started it, and there is no wallet " +
-    "connected to this page yet.",
+    "Letting a hold go has to be signed by the wallet that started it, and no wallet is " +
+    "connected to this page.",
   attach:
-    "What goes in a block has to be signed by the wallet holding it, and there is no wallet " +
-    "connected to this page yet.",
+    "What goes in a block has to be signed by the wallet holding it, and no wallet is " +
+    "connected to this page.",
   pay:
-    "Settling an order has to be signed by the wallet that holds it, and there is no wallet " +
-    "connected to this page yet.",
+    "Settling an order has to be signed by the wallet that holds it, and no wallet is " +
+    "connected to this page.",
 };
 
 /**
@@ -295,11 +337,36 @@ const NO_WALLET_MESSAGE: Record<ChallengeAction, string> = {
  * than a fault — so each of these says what did NOT happen, in the words of
  * the step they were on.
  */
-const REFUSED_MESSAGE: Record<ChallengeAction, string> = {
-  release: "That signature was not given, so the hold was left exactly as it was.",
-  attach: "That signature was not given, so nothing was attached to your block.",
-  pay: "That signature was not given, so nothing was paid and these pixels are still held for you.",
+const REFUSED_TAIL: Record<ChallengeAction, string> = {
+  release: "the hold was left exactly as it was.",
+  attach: "nothing was attached to your block.",
+  pay: "nothing was paid and these pixels are still held for you.",
 };
+
+/**
+ * What a buyer is told when no signature came back.
+ *
+ * TWO CAUSES, ONE ERROR, AND WE CANNOT TELL THEM APART. A wallet throws the
+ * same way whether the person pressed Cancel or the extension has since moved
+ * to a different account — there is no `standard:events` subscription here (see
+ * `useWallet.ts` for why that is deliberate), so this page still believes in the
+ * account it connected with. Saying "you declined" would be a guess, and it is
+ * the wrong guess for the buyer who cannot work out why the button does
+ * nothing.
+ *
+ * So the message names the account instead. Only that key can sign for this
+ * rectangle — the server accepts no other — which makes "switch back to it"
+ * useful advice whichever of the two actually happened.
+ */
+function refusedMessage(action: ChallengeAction, address?: string): string {
+  const tail = REFUSED_TAIL[action];
+  if (!address) return `That signature was not given, so ${tail}`;
+  return (
+    `No signature came back, so ${tail} If you cancelled, press it again. If you ` +
+    `switched accounts in your wallet, switch back to ${shortAddress(address)} — ` +
+    "these pixels are held by that account and only it can sign for them."
+  );
+}
 
 /** Reads `problem()`'s body off a failed response, falling back to `fallback`. */
 async function failureFrom(response: Response, fallback: string): Promise<ClientFailure> {
@@ -366,7 +433,7 @@ async function prove(
     return { ok: true, proof: { nonce: challenge.nonce, ...signed } };
   } catch {
     // A wallet throws when the person says no. That is an answer, not a fault.
-    return { ok: false, status: 0, message: REFUSED_MESSAGE[action] };
+    return { ok: false, status: 0, message: refusedMessage(action, sign.address) };
   }
 }
 

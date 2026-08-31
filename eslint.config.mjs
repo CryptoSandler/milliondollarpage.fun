@@ -9,6 +9,10 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    // The same thing under another name: the output directory the end-to-end
+    // suite's `next dev` writes to, so its cache never lands in `.next` and
+    // trips `check-build-secrets`. See `distDir` in next.config.ts.
+    ".next-e2e/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

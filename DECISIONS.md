@@ -97,3 +97,44 @@ of something that exists:
 **Status: settled 2026-08-28 — see the traffic-stats batch.**
 
 Recorded when that batch lands.
+
+---
+
+## Settled: mobile wallets are reached through Wallet Standard, not deep links
+
+**Status: settled 2026-08-31. Reversible on a named trigger.**
+
+The supported path on a phone is a wallet's own in-app browser, where the
+Wallet Standard registry works exactly as it does on a desktop. A wallet
+reachable only by a deep link is not supported.
+
+**Why:** deep linking is a second, different integration — its own redirect
+handling, its own session resumption, its own failure modes — for a population
+whose size is currently unknown.
+
+**The door, and what opens it: REAL FRICTION FROM MOBILE BUYERS.** Not a guess
+about how many people browse on a phone; evidence that mobile buyers are
+arriving and failing to complete. When that shows up, deep linking becomes
+worth its cost.
+
+**Recorded so it is not rediscovered as a bug:** `src/lib/wallet/standard.ts`
+states the limitation, and it is a product decision rather than an oversight.
+
+---
+
+## Settled: no `standard:events` subscription, but the error names the account
+
+**Status: settled 2026-08-31.**
+
+The page does not subscribe to a wallet's account-change events. It keeps
+showing the address it connected with, which is the address the hold belongs to
+and the only one the server accepts.
+
+**The one thing that was cheap and is now built:** a wallet that has moved to
+another account throws exactly like a person pressing Cancel, and the two cannot
+be told apart from the page. So the message no longer guesses. It names the
+account and says to switch back to it, which is useful advice whichever of the
+two actually happened. `refusedMessage` in `src/lib/board/purchase-client.ts`.
+
+**The door:** if this ever needs to disconnect itself when the extension moves
+on, subscribe to `change`. The upgrade path is named in `useWallet.ts`.

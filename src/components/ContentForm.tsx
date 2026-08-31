@@ -44,17 +44,23 @@ const MAX_INPUT_MB = Math.round(MAX_INPUT_BYTES / (1024 * 1024));
  * Attaching content is signed by the wallet holding the rectangle, because
  * these three fields are what a payment makes permanent and an address on its
  * own proved nothing — it is public, so anyone reading the board could have
- * written on somebody else's hold. This page has an address typed into a field
- * and no wallet behind it, so there is nothing here that can sign.
+ * written on somebody else's hold.
+ *
+ * This is reachable now in one way rather than in every way: a buyer who
+ * disconnected their wallet after starting the hold. It used to be the ONLY
+ * state this form had, because there was no wallet anywhere on the page; the
+ * sentence moved with the situation and no longer says "an address typed into
+ * a field", which stopped being true when WalletConnect replaced that field.
  *
  * It costs the buyer nothing they cannot get back, and the sentence says so.
  */
 const NOTHING_TO_SIGN_WITH =
   "What goes in a block is signed by the wallet holding it — the picture, the link and the " +
   "caption are locked to the rectangle when it is paid for, and a signature is what proves the " +
-  "person choosing them holds it. This page has a wallet address typed into a field and no " +
-  "wallet behind it, so there is nothing here that can sign yet. Nothing has been charged, and " +
-  "these pixels go back on the board by themselves when the hold's clock runs out.";
+  "person choosing them holds it. No wallet is connected to this page, so there is nothing here " +
+  "that can sign. Connect the wallet that started this hold and Continue comes back. Nothing has " +
+  "been charged, and these pixels go back on the board by themselves when the hold's clock runs " +
+  "out.";
 
 /** What the button says, which is also where the submission has got to. */
 type Stage = "idle" | "preparing" | "sending";

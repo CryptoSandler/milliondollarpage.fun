@@ -276,6 +276,17 @@ that.
 `outline-color`, the ring spends its first 160ms measuring under 3:1 while the
 stylesheet still reads as `primary`. Transition the border, never the ring.
 
+**And a focus ring is never clipped, which is the same failure from the other
+side.** The ring is drawn 2px outside the control at a 2px offset, so any
+ancestor with `overflow` other than `visible` cuts it off — `overflow-x: auto`
+included, and that clips vertically too. A scrolling row of controls therefore
+carries four pixels of padding for the ring to live in, handed back to the
+layout with an equal negative margin so nothing moves. Found the only way it
+can be found: three of the four sides of the wallet's Connect button came back
+`#fbf5e8` out of a screenshot while the stylesheet said `2px solid
+var(--primary)` the whole time. **The size-preset row has the same shape and
+the same clipping, and is recorded here rather than changed on the way past.**
+
 **The accent deepened by six points of lightness, and that was measured rather
 than chosen.** It used to be `#dd4e22`. On-primary cream (`#fff8ef`) on that
 measures **3.84:1**, and the label on every Buy, Continue, Confirm and "Ask
@@ -391,9 +402,9 @@ exemption the side panel already has. The document's own `overflow: hidden`
 does not move, because the board depends on it.
 
 Everything else — the size presets, the selection readout and price, the wallet
-field, the Buy button, the legend — is one block of controls that the layout
+control, the Buy button, the legend — is one block of controls that the layout
 puts in one of two places. It is one set of controls either way; there is never
-a second Buy button or a second wallet field for a screen reader to find.
+a second Buy button or a second Connect control for a screen reader to find.
 
 **In a landscape window it is a side panel**, a column down the left, filling
 the width the board does not need. There is **no bottom bar** in that layout.
@@ -464,19 +475,44 @@ hold is free, it expires on its own, and asking a person to sign before they
 have seen what they are buying is asking them to approve nothing in
 particular.
 
-**Right now nothing here can sign.** The wallet field takes an address a buyer
-types in; there is no wallet connected, no key in the browser, and so no
-signature to give. Each of the three buttons is therefore **off, and says
-why** — greyed, with the reason in plain words beside it, rather than looking
-ready and refusing when it is pressed. A control that looks live and then
-fails costs more trust than one that was honest about being unavailable.
+**A wallet connects, and the typed address is gone.** This paragraph used to
+open "right now nothing here can sign", and it does not any more. The controls
+carry a **Connect** button per wallet the browser actually has, and once one is
+connected the same slot shows the two ends of its address and a **Disconnect**
+beside it. The address is READ from that connection and is never typed:
+an address somebody pastes in can hold a rectangle and can then never attach
+content to it, never pay for it and never let it go, because all three of those
+are signed by the key behind it. A field that could start a purchase nobody
+could finish was worse than no field.
 
-Nothing is lost while they are off, and each sentence says so: nothing has
-been charged, a hold ends by itself and the pixels go back on the board, and a
-hold the buyer still wants is theirs to pick up again straight off the board,
-ring and countdown intact. This is temporary, and it undoes itself the day a
-wallet is connected — every one of those buttons reads whether anything can
-sign rather than a flag somebody has to remember to flip.
+**The wallets are listed, never ranked, and nothing is recommended.** They
+appear in the order the browser registered them, which is at least not an
+opinion we invented, and when a browser has none the control says so in one
+plain sentence and names no product to go and install. A checkout is not a
+place to advertise.
+
+**The three signed buttons still read whether anything can sign**, which is why
+they came back on together rather than one at a time. Disconnect mid-purchase
+and all three go off again, each with the reason in plain words beside it and
+`aria-describedby` pointing at it — greyed rather than looking ready and
+refusing when pressed, because a control that looks live and then fails costs
+more trust than one that was honest about being unavailable. Nothing is lost
+while they are off, and each sentence says so: nothing has been charged, a hold
+ends by itself and the pixels go back on the board, and a hold the buyer still
+wants is theirs to pick up again straight off the board, ring and countdown
+intact.
+
+**Connecting is announced, and politely.** It confirms what the buyer just set
+out to do rather than invalidating what they were doing, so it takes the polite
+role by the rule above. The sentence is `sr-only` in the bottom bar and printed
+in the side panel — not two behaviours, but this document's own shed order: the
+bar runs out of width and the panel has the height to keep it.
+
+**The wallet is frozen while a purchase dialog is open**, exactly as the typed
+field was disabled in the same condition. The hold inside that dialog belongs
+to the address it was created with and all three of its signed steps are
+checked against it, so a wallet swapped underneath it would be a dialog whose
+every button answers 403.
 
 When a release *is* attempted, what the buyer is told afterwards is whatever
 actually happened, never what was assumed beforehand: the hold is gone and the

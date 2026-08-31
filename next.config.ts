@@ -15,6 +15,25 @@ import type { NextConfig } from "next";
 const NOINDEX_UNTIL_LAUNCH = [{ key: "X-Robots-Tag", value: "noindex, nofollow" }];
 
 const nextConfig: NextConfig = {
+  /**
+   * Where this process writes its output, and why that is a variable.
+   *
+   * `.next` for every build and every `next dev` a person starts by hand. The
+   * one caller that sets `NEXT_DIST_DIR` is
+   * `src/components/__tests__/dev-server.ts`, which starts a `next dev` from
+   * inside the test suite — and a dev server writes a turbopack cache with
+   * environment VALUES in it, so a run of the suite would leave `RATE_LIMIT_SALT`
+   * and `ADMIN_TOKEN` sitting under `.next` for the next `npm run build` to trip
+   * over. It does trip: `check-build-secrets` fails that build, correctly.
+   *
+   * THIS DOES NOT WEAKEN THAT GUARD, and the direction matters. The guard scans
+   * the build output that gets deployed; a test's dev cache was never part of
+   * that output and only landed in its directory because the two shared one.
+   * Giving the test its own directory is what makes the guard's finding mean
+   * what it says again. The scanner's root stays `.next` and is not touched.
+   */
+  distDir: process.env.NEXT_DIST_DIR || ".next",
+
   async headers() {
     return [{ source: "/:path*", headers: NOINDEX_UNTIL_LAUNCH }];
   },
