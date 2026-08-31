@@ -138,3 +138,34 @@ two actually happened. `refusedMessage` in `src/lib/board/purchase-client.ts`.
 
 **The door:** if this ever needs to disconnect itself when the extension moves
 on, subscribe to `change`. The upgrade path is named in `useWallet.ts`.
+
+---
+
+## Settled: the payment fraction travels only to a caller who earned it
+
+**Status: settled 2026-08-31.**
+
+`paymentBaseUnits` is the order total plus a unique fraction, and the fraction
+is what lets an observer watching the treasury match an incoming transfer to a
+specific order id. It reaches a caller in exactly two ways now:
+
+- on a **freshly inserted** hold, because that caller created the row in that
+  same request and there is nobody else to withhold it from;
+- past a **signature**, on `/content` — which is also the screen that pays, so
+  it arrives exactly when it is needed.
+
+**What was closed:** resuming a hold. A resume is asked for with a wallet
+address and a rectangle, both public by construction, so anyone who knew both
+could ask for a stranger's fraction. That was the residue the 2026-08-28 audit
+left open after the signed-writes batch.
+
+**Why not a signature or a session secret on resume**, the two mechanisms
+considered: a hold is the step before anybody has agreed to anything, and
+requiring a wallet to ask for one would put a signature in front of the cheapest
+action on the site. A session secret would be new state to mint, store and
+expire for a single field. Withholding the field costs nothing and needs no
+mechanism — the buyer who resumed still gets it at `/content`.
+
+**The property that had to survive:** a resume must not mint a NEW fraction, or
+a payment already in flight becomes unattributable. That is still tested, now
+read off the database row instead of the response.

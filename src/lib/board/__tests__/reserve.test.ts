@@ -29,9 +29,12 @@ describe("reserveRect", () => {
     // The fraction is how an incoming transfer is attributed to an order, so a
     // round amount is exactly the one that cannot be attributed.
     const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
-    expect(held.paymentBaseUnits).toBeGreaterThan(held.totalBaseUnits);
-    expect(held.paymentBaseUnits - held.totalBaseUnits).toBeGreaterThanOrEqual(1);
-    expect(held.paymentBaseUnits - held.totalBaseUnits).toBeLessThanOrEqual(999_999);
+    // A FRESH hold carries it: this caller created the row in this request.
+    expect(held.paymentBaseUnits).toBeDefined();
+    const payment = held.paymentBaseUnits!;
+    expect(payment).toBeGreaterThan(held.totalBaseUnits);
+    expect(payment - held.totalBaseUnits).toBeGreaterThanOrEqual(1);
+    expect(payment - held.totalBaseUnits).toBeLessThanOrEqual(999_999);
   });
 
   it("snapshots the price so a settings change cannot move a live hold", async () => {
@@ -356,6 +359,28 @@ describe("resuming your own hold", () => {
     expect(again.rect).toEqual(RECT);
   });
 
+  /**
+   * The residue the 2026-08-28 audit left open, closed.
+   *
+   * A resume is asked for with a wallet address and a rectangle, both of which
+   * are public — so this is the one path that could hand the attribution
+   * fraction to somebody who proved nothing, and the fraction is what lets an
+   * observer match a transfer on the chain to an order id. A fresh hold still
+   * carries it, because that caller made the row in the same request.
+   */
+  it("does not hand the payment fraction back on a resume", async () => {
+    const fresh = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    expect(fresh.paymentBaseUnits, "a fresh hold still carries it").toBeDefined();
+
+    const resumed = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    expect(resumed.id, "same hold, not a second one").toBe(fresh.id);
+    expect(resumed.paymentBaseUnits).toBeUndefined();
+    // And the rest of the hold still comes back, so this withheld one field
+    // rather than breaking the resume.
+    expect(resumed.totalBaseUnits).toBe(fresh.totalBaseUnits);
+    expect(resumed.expiresAt).toBeTruthy();
+  });
+
   it("resumes the hold that exists rather than creating a second row", async () => {
     await reserveRect(RECT, BUYER, CALLER);
     await reserveRect(RECT, BUYER, CALLER);
@@ -367,12 +392,19 @@ describe("resuming your own hold", () => {
     const first = await reserveRect(RECT, BUYER, CALLER);
     const again = await reserveRect(RECT, BUYER, CALLER);
     expect(again.expiresAt).toBe(first.expiresAt);
-    // The fraction attributes an incoming transfer to this order; a resume
-    // that minted a new one would leave a payment already in flight
-    // unattributable.
-    expect(again.paymentBaseUnits).toBe(first.paymentBaseUnits);
     expect(again.totalBaseUnits).toBe(first.totalBaseUnits);
     expect(again.pricePerPixelBaseUnits).toBe(first.pricePerPixelBaseUnits);
+
+    // The fraction attributes an incoming transfer to this order; a resume that
+    // minted a new one would leave a payment already in flight unattributable.
+    // Read off the ROW rather than off the response, because the response
+    // deliberately no longer carries it — the property is about what the
+    // database holds, and publishing it was only ever how it was observed.
+    const [row] = await query<{ payment_fraction: number }>(
+      "SELECT payment_fraction FROM blocks WHERE id = $1",
+      [first.id],
+    );
+    expect(row.payment_fraction).toBe(first.paymentBaseUnits! - first.totalBaseUnits);
   });
 
   it("does NOT resume a different buyer's hold on the same rectangle", async () => {
