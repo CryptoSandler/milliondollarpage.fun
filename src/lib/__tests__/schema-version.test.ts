@@ -49,6 +49,20 @@ describe("assertSchemaIsCurrent", () => {
     vi.unstubAllEnvs();
   });
 
+
+  it("accepts a database AHEAD of the build, because that is a rolling deploy", async () => {
+    // Migrating before the new build finishes is the correct order for a
+    // migration that adds things. The first version of this check compared for
+    // equality and took production down for the minutes in between.
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.doMock("../schema-version", () => ({ EXPECTED_MIGRATION: "000_bootstrap" }));
+    vi.resetModules();
+    const { assertSchemaIsCurrent: older } = await import("../config");
+    await expect(older()).resolves.toBeUndefined();
+    vi.doUnmock("../schema-version");
+    vi.resetModules();
+    vi.unstubAllEnvs();
+  });
   it("leaves a developer alone", async () => {
     const { assertSchemaIsCurrent } = await import("../config");
     vi.stubEnv("VERCEL_ENV", "");
