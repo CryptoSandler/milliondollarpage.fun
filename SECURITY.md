@@ -283,7 +283,15 @@ server, and a new keypair generated offline.
    redeploy, not an automatic one.
 5. Confirm a mint end to end on a paid order, or on a devnet equivalent.
 6. Destroy the old secret everywhere it exists: Vercel history, any local shell
-   history, any password manager entry.
+   history, any password manager entry — **and the build cache.** The 2026-08-28
+   audit found `ADMIN_TOKEN`, `RATE_LIMIT_SALT` and the database password
+   written verbatim into `.next/cache/turbopack/*.sst`: Turbopack stores the
+   environment it uses as cache keys, and Vercel preserves that cache between
+   builds, so a rotated secret would go on living in build infrastructure after
+   the rotation was declared done. `npm run build` now deletes that cache and
+   then runs `scripts/check-build-secrets.mts`, which refuses the build if any
+   secret's value is anywhere in `.next` — and refuses just as loudly if it
+   cannot prove its own scan works.
 
 **What rotation does not do.** Already-minted assets are unaffected either way —
 that is the point of the plugins in §"It cannot". Rotation stops future misuse;
