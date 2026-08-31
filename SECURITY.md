@@ -19,16 +19,39 @@ Each clause is held up by something, and this section says by what — including
 where the answer is "nothing yet", because a promise with no mechanism under it
 is the kind of thing this file exists to stop us believing.
 
-**Does not change owner.** A Postgres trigger, `blocks_owner_is_final`, added
-by `migrations/005_owner_is_final.sql`, re-stated by 006 when `removed` was
-retired. It refuses any UPDATE that changes `buyer_pubkey` on a row that has
-been paid for — `paid` or `minted`, which since 006 is every status a sold row
-can hold, taken-down ones included.
+**Does not change owner.** THREE Postgres triggers, and it takes all three —
+the first one alone was walked around by an audit, and this paragraph now says
+exactly what they guarantee and nothing more.
+
+- `blocks_owner_is_final` (`migrations/005_owner_is_final.sql`, re-stated by
+  006) refuses any UPDATE that changes `buyer_pubkey` on a row that is `paid`
+  or `minted`.
+- `blocks_stay_sold` (`migrations/011_permanence.sql`) refuses any UPDATE that
+  moves a `paid` or `minted` row to any other status.
+- `blocks_sale_is_not_deletable` (011) refuses DELETE on a `paid` or `minted`
+  row.
+
+**Why the second and third exist.** The first trigger's condition reads
+`OLD.status`, which is the right question one statement too late: an UPDATE
+could set `status = 'reserved'` first, change the owner on a row that was no
+longer sold, and set it back. The 2026-08-28 audit reported that and it was
+reproduced against a test database before 011 was written. DELETE was never
+guarded at all, and deleting a sale hands its pixels straight back to the
+exclusion constraint, which is ownership lapsing by the shortest route there is.
+
+**What they do NOT cover, stated so the guarantee is not read as wider than it
+is.** They bind statements against this database. A superuser can disable a
+trigger, and `TRUNCATE` does not fire row-level DELETE triggers at all — which
+is deliberate and load-bearing here, because the test suite truncates between
+tests. These are a guard against a mistaken migration, a wrong query in a
+console, and a route that forgets a check. They are not a guard against
+somebody who already owns the database.
+
 This is the same family of control as 001's exclusion constraint and it is here
 for the same reason: the database refuses the write, so no route, no script and
-no console session can reassign a sold rectangle by forgetting a check.
-`blocks_owner_is_final` is the answer to "what stops somebody taking my
-pixels", and it is a mechanism rather than a policy.
+no console session can reassign a sold rectangle by forgetting a check. The
+attempts are exercised in `src/lib/board/__tests__/permanence.test.ts`, which
+runs the statements rather than checking the triggers exist.
 
 It forbids an unauthorised mutation, not the concept of transfer. Whether a
 block may change hands on a signature from its owner is an open decision — see
