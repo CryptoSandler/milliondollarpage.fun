@@ -1,26 +1,48 @@
 import { describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
-import { execute } from "../../../lib/db";
+import { execute, queryOne } from "../../../lib/db";
 import { reserveRect } from "../../../lib/board/reserve";
 import { CONTENT_LIMITS, MULTIPART_FRAMING_ALLOWANCE_BYTES } from "../../../lib/board/content";
 import { BUYER_PUBKEY_HEADER } from "../../../lib/board/purchase-client";
 import { testWallet, type TestWallet } from "../../../lib/wallet/__tests__/keypair";
+import { challengeFor, proofFor } from "./proof";
 import { DELETE, GET } from "../orders/[id]/route";
 import { POST as POST_CONTENT } from "../orders/[id]/content/route";
 import { POST as POST_CONFIRM } from "../orders/[id]/confirm/route";
-import { POST as POST_CHALLENGE } from "../orders/[id]/release-challenge/route";
+import { POST as POST_CHALLENGE } from "../orders/[id]/challenge/route";
 
 // Reserving, attaching content and confirming each cost their own round trips
 // to the remote Neon test branch, and several tests chain two or three of
-// them. The 5s default is tuned for a single query, so it's raised only here
-// rather than repo-wide.
+// them — plus a challenge apiece now that every write is signed. The 5s
+// default is tuned for a single query, so it's raised only here rather than
+// repo-wide.
 vi.setConfig({ testTimeout: 20_000 });
 
-const BUYER = "BuyerPubkey1111111111111111111111111111111";
-const STRANGER = "StrangerPubkey11111111111111111111111111111";
+/**
+ * The wallets. Real keys the server has never seen, generated once per file:
+ * these tests care about which key signed, not about which addresses they are.
+ *
+ * `OWNER.address` is what every fixture reserves with, so the address a
+ * stranger would look up off the board IS `OWNER.address` — which is the
+ * whole point of the tests below that hand it to them.
+ */
+const OWNER: TestWallet = testWallet();
+const STRANGER_WALLET: TestWallet = testWallet();
 const CALLER = "e".repeat(64);
 
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
+
+/**
+ * A different client address for every content submission.
+ *
+ * `checkContentSubmissionLimits` counts twenty per ten minutes per address,
+ * in a module-level Map that no `beforeEach` truncate can reach — so a file
+ * that posts content more than twenty times from one address starts failing
+ * with 429s that are about the fixture rather than about the code. Signing
+ * every write made this file post a great deal more content than it used to.
+ */
+let addresses = 0;
+const freshIp = () => `198.51.100.${(addresses += 1) % 250}`;
 
 async function png(): Promise<Buffer> {
   return sharp({ create: { width: 50, height: 50, channels: 3, background: { r: 1, g: 2, b: 3 } } })
@@ -44,22 +66,68 @@ async function withContentLength(form: FormData, headers: Record<string, string>
   });
 }
 
-async function contentRequest(overrides: Record<string, string> = {}, bytes?: Buffer, ip = "203.0.113.9") {
+/** The image, link, caption and fit, with no proof of anything attached. */
+async function contentForm(overrides: Record<string, string> = {}, bytes?: Buffer): Promise<FormData> {
   const form = new FormData();
   form.set("image", new Blob([new Uint8Array(bytes ?? (await png()))], { type: "image/png" }), "block.png");
   form.set("link", overrides.link ?? "https://example.com/");
   form.set("caption", overrides.caption ?? "A caption");
   form.set("imageFit", overrides.imageFit ?? "contain");
-  form.set("buyerPubkey", overrides.buyerPubkey ?? BUYER);
+  return form;
+}
+
+/**
+ * A content submission signed by `wallet`, exactly as the browser builds it:
+ * a fresh `attach` challenge for this order, signed, presented in the form.
+ */
+async function contentRequest(
+  orderId: string,
+  wallet: TestWallet,
+  overrides: Record<string, string> = {},
+  bytes?: Buffer,
+  ip = freshIp(),
+): Promise<Request> {
+  const form = await contentForm(overrides, bytes);
+  for (const [field, value] of Object.entries(await proofFor(orderId, "attach", wallet))) {
+    form.set(field, value);
+  }
   return withContentLength(form, { "x-forwarded-for": ip });
 }
 
-function confirmRequest(buyerPubkey = BUYER, ip = "203.0.113.9") {
+/**
+ * A content submission carrying whatever fields the caller hands in — a proof,
+ * half of one, none at all, or a different caption — over a valid image, link
+ * and caption.
+ */
+async function contentRequestWith(fields: Record<string, unknown>, ip = freshIp()): Promise<Request> {
+  const form = await contentForm();
+  for (const [field, value] of Object.entries(fields)) {
+    if (typeof value === "string") form.set(field, value);
+  }
+  return withContentLength(form, { "x-forwarded-for": ip });
+}
+
+function confirmRequestWith(body: unknown, ip = "203.0.113.9"): Request {
   return new Request("http://localhost/api/orders/x/confirm", {
     method: "POST",
     headers: { "content-type": "application/json", "x-forwarded-for": ip },
-    body: JSON.stringify({ buyerPubkey }),
+    body: JSON.stringify(body),
   });
+}
+
+async function confirmRequest(orderId: string, wallet: TestWallet, ip = "203.0.113.9"): Promise<Request> {
+  return confirmRequestWith(await proofFor(orderId, "pay", wallet), ip);
+}
+
+/** A hold with content on it, which is what `/confirm` requires. */
+async function heldWithContent(
+  rect = { x: 0, y: 0, w: 10, h: 10 },
+  overrides: Record<string, string> = {},
+): Promise<string> {
+  const held = await reserveRect(rect, OWNER.address, CALLER);
+  const attached = await POST_CONTENT(await contentRequest(held.id, OWNER, overrides), ctx(held.id));
+  expect(attached.status, "the owner's own attach should have worked").toBe(200);
+  return held.id;
 }
 
 describe("GET /api/orders/:id", () => {
@@ -69,7 +137,7 @@ describe("GET /api/orders/:id", () => {
   });
 
   it("returns the order's state and never caches it", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
     const response = await GET(new Request("http://localhost/"), ctx(held.id));
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
@@ -83,11 +151,63 @@ describe("GET /api/orders/:id", () => {
     expect(response.status).toBe(404);
   });
 
-  it("never publishes the buyer's pubkey, which is the only thing the other routes check", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+  it("never publishes the buyer's pubkey", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
     const body = await (await GET(new Request("http://localhost/"), ctx(held.id))).json();
     expect(body).not.toHaveProperty("buyerPubkey");
-    expect(JSON.stringify(body)).not.toContain(BUYER);
+    expect(JSON.stringify(body)).not.toContain(OWNER.address);
+  });
+
+  /**
+   * The payable amount is the total plus this order's unique fraction, and
+   * the fraction is the attribution key a payment verifier reads. Published
+   * to strangers it is a watchpoint: see a transfer of exactly that amount
+   * land in the treasury and you have the pair (order id, payer pubkey) off a
+   * public chain. That was the discovery half of F1.
+   */
+  describe("the payable amount", () => {
+    it("is absent for a caller who proves nothing, whatever the total is", async () => {
+      const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+      const raw = await (await GET(new Request("http://localhost/"), ctx(held.id))).text();
+      const body = JSON.parse(raw);
+
+      expect(body).not.toHaveProperty("paymentBaseUnits");
+      // Read out of the row rather than recomputed here: the number that must
+      // not be on the wire is the one the database actually holds.
+      const row = await queryOne<{ total_usdc: string; payment_fraction: number }>(
+        "SELECT total_usdc, payment_fraction FROM blocks WHERE id = $1",
+        [held.id],
+      );
+      const payable = Number(row!.total_usdc) + row!.payment_fraction;
+      expect(payable).toBeGreaterThan(Number(row!.total_usdc));
+      expect(raw).not.toContain(String(payable));
+      // The total itself is still published; /board quotes a price for every
+      // rectangle, and the total is the thing a stranger can compute anyway.
+      expect(body.totalBaseUnits).toBe(Number(row!.total_usdc));
+    });
+
+    it("is absent even for a caller who offers the buyer's own address", async () => {
+      const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+      const request = new Request("http://localhost/", {
+        headers: { [BUYER_PUBKEY_HEADER]: OWNER.address },
+      });
+      const body = await (await GET(request, ctx(held.id))).json();
+      // The header is a claim, not a proof. It widens the caption and the
+      // link — words the caller wrote — and nothing that costs money.
+      expect(body).not.toHaveProperty("paymentBaseUnits");
+    });
+
+    it("comes back to a wallet that signed for it", async () => {
+      const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+      const response = await POST_CONTENT(await contentRequest(held.id, OWNER), ctx(held.id));
+      const body = await response.json();
+
+      const row = await queryOne<{ total_usdc: string; payment_fraction: number }>(
+        "SELECT total_usdc, payment_fraction FROM blocks WHERE id = $1",
+        [held.id],
+      );
+      expect(body.paymentBaseUnits).toBe(Number(row!.total_usdc) + row!.payment_fraction);
+    });
   });
 
   /**
@@ -97,18 +217,10 @@ describe("GET /api/orders/:id", () => {
    * caption and a link somebody attached and never paid for.
    */
   describe("an unpaid hold's caption and link", () => {
-    async function heldWithContent(): Promise<string> {
-      const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
-      const attached = await POST_CONTENT(
-        await contentRequest({ caption: "Claim your airdrop", link: "https://not-really-us.example/claim" }),
-        ctx(held.id),
-      );
-      expect(attached.status).toBe(200);
-      return held.id;
-    }
+    const WORDS = { caption: "Claim your airdrop", link: "https://not-really-us.example/claim" };
 
     it("are absent for a caller who proves nothing", async () => {
-      const id = await heldWithContent();
+      const id = await heldWithContent({ x: 0, y: 0, w: 10, h: 10 }, WORDS);
       const raw = await (await GET(new Request("http://localhost/"), ctx(id))).text();
       expect(raw).not.toContain("Claim your airdrop");
       expect(raw).not.toContain("not-really-us.example");
@@ -121,26 +233,28 @@ describe("GET /api/orders/:id", () => {
       expect(body.expiresAt).not.toBeNull();
     });
 
-    it("are absent for a caller who proves somebody else's wallet", async () => {
-      const id = await heldWithContent();
-      const request = new Request("http://localhost/", { headers: { [BUYER_PUBKEY_HEADER]: STRANGER } });
+    it("are absent for a caller who offers somebody else's wallet", async () => {
+      const id = await heldWithContent({ x: 0, y: 0, w: 10, h: 10 }, WORDS);
+      const request = new Request("http://localhost/", {
+        headers: { [BUYER_PUBKEY_HEADER]: STRANGER_WALLET.address },
+      });
       const body = await (await GET(request, ctx(id))).json();
       expect(body.caption).toBeNull();
       expect(body.link).toBeNull();
     });
 
     it("come back to the buyer who wrote them, who needs them to finish paying", async () => {
-      const id = await heldWithContent();
-      const request = new Request("http://localhost/", { headers: { [BUYER_PUBKEY_HEADER]: BUYER } });
+      const id = await heldWithContent({ x: 0, y: 0, w: 10, h: 10 }, WORDS);
+      const request = new Request("http://localhost/", { headers: { [BUYER_PUBKEY_HEADER]: OWNER.address } });
       const body = await (await GET(request, ctx(id))).json();
       expect(body.caption).toBe("Claim your airdrop");
       expect(body.link).toBe("https://not-really-us.example/claim");
-      // Proving ownership still does not buy a copy of the credential.
+      // Offering an address still does not buy a copy of the credential.
       expect(body).not.toHaveProperty("buyerPubkey");
     });
 
     it("are published to every stranger once the block is paid for", async () => {
-      const id = await heldWithContent();
+      const id = await heldWithContent({ x: 0, y: 0, w: 10, h: 10 }, WORDS);
       await execute("UPDATE blocks SET status = 'paid', expires_at = NULL WHERE id = $1", [id]);
       const body = await (await GET(new Request("http://localhost/"), ctx(id))).json();
       expect(body.status).toBe("paid");
@@ -151,9 +265,18 @@ describe("GET /api/orders/:id", () => {
 });
 
 describe("POST /api/orders/:id/content", () => {
-  it("accepts a valid image, link and caption", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
-    const response = await POST_CONTENT(await contentRequest(), ctx(held.id));
+  /** The row itself, because a refusal that wrote anything is not a refusal. */
+  async function contentOnRow(id: string): Promise<{ caption: string | null; link: string | null }> {
+    const row = await queryOne<{ caption: string | null; link: string | null }>(
+      "SELECT caption, link FROM blocks WHERE id = $1",
+      [id],
+    );
+    return row!;
+  }
+
+  it("accepts a valid image, link and caption from the wallet that signed for it", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const response = await POST_CONTENT(await contentRequest(held.id, OWNER), ctx(held.id));
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.hasContent).toBe(true);
@@ -164,8 +287,11 @@ describe("POST /api/orders/:id/content", () => {
   // with no caption at all, not one carrying an empty string that would draw
   // an empty chip on the board.
   it("accepts a blank caption and stores it as null", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
-    const response = await POST_CONTENT(await contentRequest({ caption: "   " }), ctx(held.id));
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const response = await POST_CONTENT(
+      await contentRequest(held.id, OWNER, { caption: "   " }),
+      ctx(held.id),
+    );
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.hasContent).toBe(true);
@@ -173,8 +299,10 @@ describe("POST /api/orders/:id/content", () => {
   });
 
   it("reports EVERY rejected field at once, not just the first", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
     const bad = await contentRequest(
+      held.id,
+      OWNER,
       { link: "javascript:alert(1)", caption: "x".repeat(99) },
       Buffer.from("not an image"),
     );
@@ -188,34 +316,161 @@ describe("POST /api/orders/:id/content", () => {
     ]);
   });
 
-  it("answers 403 when a different pubkey tries to attach content", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
-    const response = await POST_CONTENT(await contentRequest({ buyerPubkey: STRANGER }), ctx(held.id));
+  /**
+   * F1, stated as a test. The attacker has everything the old check asked
+   * for: the order id off the board, and the buyer's address — which is
+   * public wherever it exists, and which a payment would have published
+   * beside the order anyway. What they do not have is the key.
+   */
+  it("refuses a stranger who knows the order id AND the buyer's address", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+
+    // Their own challenge for this very order, signed with their own key,
+    // presenting the owner's address as the claimant.
+    const challenge = await challengeFor(held.id, "attach");
+    const response = await POST_CONTENT(
+      await contentRequestWith({
+        nonce: challenge.nonce,
+        publicKey: OWNER.address,
+        signature: STRANGER_WALLET.sign(challenge.message),
+      }),
+      ctx(held.id),
+    );
     expect(response.status).toBe(403);
+    expect(await contentOnRow(held.id)).toEqual({ caption: null, link: null });
   });
 
-  it("answers 410 for an expired hold", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+  it("refuses a stranger signing for themselves, however valid their signature", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const response = await POST_CONTENT(
+      await contentRequest(held.id, STRANGER_WALLET),
+      ctx(held.id),
+    );
+    expect(response.status).toBe(403);
+    expect(await contentOnRow(held.id)).toEqual({ caption: null, link: null });
+  });
+
+  it("refuses a form carrying no proof at all, and one carrying half of it", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const challenge = await challengeFor(held.id, "attach");
+    const proofs: Record<string, unknown>[] = [
+      {},
+      { publicKey: OWNER.address },
+      { nonce: challenge.nonce, publicKey: OWNER.address },
+      { nonce: challenge.nonce, publicKey: OWNER.address, signature: "not-a-signature" },
+      { nonce: "", publicKey: OWNER.address, signature: OWNER.sign(challenge.message) },
+    ];
+    for (const proof of proofs) {
+      const response = await POST_CONTENT(await contentRequestWith(proof), ctx(held.id));
+      expect(response.status, JSON.stringify(proof)).toBe(403);
+    }
+    expect(await contentOnRow(held.id)).toEqual({ caption: null, link: null });
+  });
+
+  /**
+   * The cross-action test the stored `action` column exists for. This
+   * signature is real, fresh, unspent, from the right wallet, and for the
+   * right order — and it says `Action: release`. A wallet asked to let a hold
+   * go must not thereby have agreed to what goes in the block.
+   */
+  it("refuses a challenge the owner signed for a release", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const misdirected = await proofFor(held.id, "release", OWNER);
+
+    const response = await POST_CONTENT(await contentRequestWith(misdirected), ctx(held.id));
+    expect(response.status).toBe(403);
+    expect(await contentOnRow(held.id)).toEqual({ caption: null, link: null });
+
+    // And it is spent by being presented, so it is no good for its own act
+    // afterwards either.
+    const release = await DELETE(
+      new Request("http://localhost/api/orders/x", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(misdirected),
+      }),
+      ctx(held.id),
+    );
+    expect(release.status).toBe(403);
+  });
+
+  it("refuses a challenge issued for another order", async () => {
+    const mine = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const other = await reserveRect({ x: 40, y: 40, w: 10, h: 10 }, OWNER.address, CALLER);
+
+    const response = await POST_CONTENT(
+      await contentRequestWith(await proofFor(mine.id, "attach", OWNER)),
+      ctx(other.id),
+    );
+    expect(response.status).toBe(403);
+    expect(await contentOnRow(other.id)).toEqual({ caption: null, link: null });
+  });
+
+  it("refuses a replayed nonce, and the second attempt changes nothing", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const proof = await proofFor(held.id, "attach", OWNER);
+
+    const first = await POST_CONTENT(
+      await contentRequestWith({ ...proof, caption: "the first one" }),
+      ctx(held.id),
+    );
+    expect(first.status).toBe(200);
+    const after = await contentOnRow(held.id);
+
+    // Same proof, again, with different words. A captured signature must be
+    // worth nothing the moment its nonce has been spent.
+    const replay = await POST_CONTENT(
+      await contentRequestWith({ ...proof, link: "https://evil.example/" }),
+      ctx(held.id),
+    );
+    expect(replay.status).toBe(403);
+    expect(await contentOnRow(held.id)).toEqual(after);
+  });
+
+  it("refuses an expired challenge", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const proof = await proofFor(held.id, "attach", OWNER);
+
+    // Age the row rather than wait two minutes for it. issued_at moves with
+    // expires_at because the table refuses a row that expired before it was
+    // issued.
+    await execute(
+      `UPDATE release_challenges
+          SET issued_at = now() - interval '10 minutes',
+              expires_at = now() - interval '1 second'
+        WHERE nonce = $1`,
+      [proof.nonce],
+    );
+
+    const response = await POST_CONTENT(await contentRequestWith(proof), ctx(held.id));
+    expect(response.status).toBe(403);
+    expect(await contentOnRow(held.id)).toEqual({ caption: null, link: null });
+  });
+
+  it("answers 410 for an expired hold, to the wallet that can prove it holds it", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const request = await contentRequest(held.id, OWNER);
     await execute("UPDATE blocks SET expires_at = now() - interval '1 minute' WHERE id = $1", [held.id]);
-    const response = await POST_CONTENT(await contentRequest(), ctx(held.id));
+    const response = await POST_CONTENT(request, ctx(held.id));
     expect(response.status).toBe(410);
   });
 
   it("answers 404 for an unknown order", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
     const response = await POST_CONTENT(
-      await contentRequest(),
+      await contentRequest(held.id, OWNER),
       ctx("00000000-0000-0000-0000-000000000000"),
     );
     expect(response.status).toBe(404);
   });
 
   it("answers 404 for an id that is not a uuid, rather than 500ing", async () => {
-    const response = await POST_CONTENT(await contentRequest(), ctx("not-a-uuid"));
+    const response = await POST_CONTENT(await contentRequestWith({}), ctx("not-a-uuid"));
     expect(response.status).toBe(404);
   });
 
   it("answers 413 for a declared content-length over the cap, before the body is ever read", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
     const oversized = new Request("http://localhost/api/orders/x/content", {
       method: "POST",
       headers: {
@@ -232,7 +487,7 @@ describe("POST /api/orders/:id/content", () => {
   });
 
   it("answers 413 when content-length is absent entirely", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
     const noLength = new Request("http://localhost/api/orders/x/content", {
       method: "POST",
       headers: { "x-forwarded-for": "203.0.113.9" },
@@ -247,10 +502,15 @@ describe("POST /api/orders/:id/content", () => {
 });
 
 describe("POST /api/orders/:id/confirm", () => {
+  /** The status on the row, because a refused confirm must not have paid. */
+  async function statusOf(id: string): Promise<string> {
+    const row = await queryOne<{ status: string }>("SELECT status FROM blocks WHERE id = $1", [id]);
+    return row!.status;
+  }
+
   it("marks a described order paid and clears its expiry", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
-    await POST_CONTENT(await contentRequest(), ctx(held.id));
-    const response = await POST_CONFIRM(confirmRequest(), ctx(held.id));
+    const id = await heldWithContent();
+    const response = await POST_CONFIRM(await confirmRequest(id, OWNER), ctx(id));
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.status).toBe("paid");
@@ -258,28 +518,98 @@ describe("POST /api/orders/:id/confirm", () => {
   });
 
   it("refuses an order with no content", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
-    const response = await POST_CONFIRM(confirmRequest(), ctx(held.id));
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const response = await POST_CONFIRM(await confirmRequest(held.id, OWNER), ctx(held.id));
     expect(response.status).toBe(409);
+    expect(await statusOf(held.id)).toBe("reserved");
   });
 
-  it("answers 403 for a different pubkey", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
-    await POST_CONTENT(await contentRequest(), ctx(held.id));
-    const response = await POST_CONFIRM(confirmRequest(STRANGER), ctx(held.id));
+  it("refuses a stranger who knows the order id AND the buyer's address", async () => {
+    const id = await heldWithContent();
+    const challenge = await challengeFor(id, "pay");
+
+    const response = await POST_CONFIRM(
+      confirmRequestWith({
+        nonce: challenge.nonce,
+        publicKey: OWNER.address,
+        signature: STRANGER_WALLET.sign(challenge.message),
+      }),
+      ctx(id),
+    );
     expect(response.status).toBe(403);
+    expect(await statusOf(id)).toBe("reserved");
+  });
+
+  it("refuses a stranger signing for themselves", async () => {
+    const id = await heldWithContent();
+    const response = await POST_CONFIRM(await confirmRequest(id, STRANGER_WALLET), ctx(id));
+    expect(response.status).toBe(403);
+    expect(await statusOf(id)).toBe("reserved");
   });
 
   it("answers 403 to a stranger even when the order has no content", async () => {
-    // Without an explicit ownership check this returns 409 and tells the
-    // stranger what state somebody else's order is in.
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
-    const response = await POST_CONFIRM(confirmRequest(STRANGER), ctx(held.id));
+    // Without an ownership check this returns 409 and tells the stranger what
+    // state somebody else's order is in.
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const response = await POST_CONFIRM(await confirmRequest(held.id, STRANGER_WALLET), ctx(held.id));
     expect(response.status).toBe(403);
   });
 
+  it("refuses a challenge the owner signed for attaching content", async () => {
+    const id = await heldWithContent();
+    const response = await POST_CONFIRM(confirmRequestWith(await proofFor(id, "attach", OWNER)), ctx(id));
+    expect(response.status).toBe(403);
+    expect(await statusOf(id)).toBe("reserved");
+  });
+
+  it("refuses a challenge issued for another order", async () => {
+    const mine = await heldWithContent({ x: 0, y: 0, w: 10, h: 10 });
+    const other = await heldWithContent({ x: 40, y: 40, w: 10, h: 10 });
+
+    const response = await POST_CONFIRM(confirmRequestWith(await proofFor(mine, "pay", OWNER)), ctx(other));
+    expect(response.status).toBe(403);
+    expect(await statusOf(other)).toBe("reserved");
+  });
+
+  it("refuses a replayed nonce, and the order is left exactly as it was", async () => {
+    const id = await heldWithContent();
+    const proof = await proofFor(id, "pay", OWNER);
+
+    expect((await POST_CONFIRM(confirmRequestWith(proof), ctx(id))).status).toBe(200);
+    // A second order, and the same captured proof aimed at it.
+    const other = await heldWithContent({ x: 40, y: 40, w: 10, h: 10 });
+    const replay = await POST_CONFIRM(confirmRequestWith(proof), ctx(other));
+    expect(replay.status).toBe(403);
+    expect(await statusOf(other)).toBe("reserved");
+  });
+
+  it("refuses an expired challenge", async () => {
+    const id = await heldWithContent();
+    const proof = await proofFor(id, "pay", OWNER);
+    await execute(
+      `UPDATE release_challenges
+          SET issued_at = now() - interval '10 minutes',
+              expires_at = now() - interval '1 second'
+        WHERE nonce = $1`,
+      [proof.nonce],
+    );
+
+    const response = await POST_CONFIRM(confirmRequestWith(proof), ctx(id));
+    expect(response.status).toBe(403);
+    expect(await statusOf(id)).toBe("reserved");
+  });
+
+  it("answers 403 to a body carrying no proof at all", async () => {
+    const id = await heldWithContent();
+    for (const body of [{}, null, { buyerPubkey: OWNER.address }, { nonce: 42 }]) {
+      const response = await POST_CONFIRM(confirmRequestWith(body), ctx(id));
+      expect(response.status, JSON.stringify(body)).toBe(403);
+    }
+    expect(await statusOf(id)).toBe("reserved");
+  });
+
   it("answers 404 for an id that is not a uuid, rather than 500ing", async () => {
-    const response = await POST_CONFIRM(confirmRequest(), ctx("not-a-uuid"));
+    const response = await POST_CONFIRM(confirmRequestWith({}), ctx("not-a-uuid"));
     expect(response.status).toBe(404);
   });
 
@@ -289,8 +619,8 @@ describe("POST /api/orders/:id/confirm", () => {
     const previous = process.env.ALLOW_STUB_PAYMENTS;
     delete process.env.ALLOW_STUB_PAYMENTS;
     try {
-      const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
-      const response = await POST_CONFIRM(confirmRequest(), ctx(held.id));
+      const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+      const response = await POST_CONFIRM(confirmRequestWith({}), ctx(held.id));
       expect(response.status).toBe(404);
     } finally {
       if (previous !== undefined) process.env.ALLOW_STUB_PAYMENTS = previous;
@@ -298,58 +628,103 @@ describe("POST /api/orders/:id/confirm", () => {
   });
 });
 
-/**
- * A wallet the server has never seen, and a second one to be refused with.
- * Generated once per file: the tests below care about which key signed, not
- * about which addresses they are.
- */
-const OWNER: TestWallet = testWallet();
-const STRANGER_WALLET: TestWallet = testWallet();
+describe("the whole signed purchase, end to end", () => {
+  it("holds, attaches and pays with three signatures and nothing else", async () => {
+    const held = await reserveRect({ x: 200, y: 200, w: 20, h: 20 }, OWNER.address, CALLER);
 
-type Challenge = { nonce: string; message: string; expiresAt: string };
+    const attached = await POST_CONTENT(await contentRequest(held.id, OWNER), ctx(held.id));
+    expect(attached.status).toBe(200);
+    expect((await attached.json()).hasContent).toBe(true);
 
-async function challengeFor(orderId: string): Promise<Challenge> {
-  const response = await POST_CHALLENGE(new Request("http://localhost/"), ctx(orderId));
-  expect(response.status, "the challenge endpoint should have issued one").toBe(200);
-  return (await response.json()) as Challenge;
-}
+    const paid = await POST_CONFIRM(await confirmRequest(held.id, OWNER), ctx(held.id));
+    expect(paid.status).toBe(200);
+    const receipt = await paid.json();
+    expect(receipt.status).toBe("paid");
+    expect(receipt.expiresAt).toBeNull();
+    expect(receipt.caption).toBe("A caption");
 
-/** The proof body a wallet would build: ask for a challenge, sign it, present it. */
-async function proofFor(orderId: string, wallet: TestWallet): Promise<Record<string, string>> {
-  const challenge = await challengeFor(orderId);
-  return { nonce: challenge.nonce, publicKey: wallet.address, signature: wallet.sign(challenge.message) };
-}
+    // The row, not the response: a purchase is what the database now holds.
+    const row = await queryOne<{ status: string; buyer_pubkey: string; payment_signature: string }>(
+      "SELECT status, buyer_pubkey, payment_signature FROM blocks WHERE id = $1",
+      [held.id],
+    );
+    expect(row!.status).toBe("paid");
+    expect(row!.buyer_pubkey).toBe(OWNER.address);
+    expect(row!.payment_signature).toBe(`stub-${held.id}`);
+  });
+});
 
-describe("POST /api/orders/:id/release-challenge", () => {
-  it("issues a fresh single-use challenge naming the order", async () => {
+describe("POST /api/orders/:id/challenge", () => {
+  it("issues a fresh single-use challenge naming the order and the act", async () => {
     const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
 
-    const response = await POST_CHALLENGE(new Request("http://localhost/"), ctx(held.id));
-    expect(response.status).toBe(200);
-    expect(response.headers.get("cache-control")).toBe("no-store");
+    for (const action of ["release", "attach", "pay"] as const) {
+      const response = await POST_CHALLENGE(
+        new Request("http://localhost/", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action }),
+        }),
+        ctx(held.id),
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("no-store");
 
-    const body = await response.json();
-    expect(body.nonce).toMatch(/^[0-9a-f]{64}$/);
-    expect(body.message).toContain(`Order: ${held.id}`);
-    expect(body.message).toContain(`Nonce: ${body.nonce}`);
-    expect(body.message).toContain("Action: release");
-    expect(new Date(body.expiresAt).getTime()).toBeGreaterThan(Date.now());
+      const body = await response.json();
+      expect(body.nonce).toMatch(/^[0-9a-f]{64}$/);
+      expect(body.message).toContain(`Order: ${held.id}`);
+      expect(body.message).toContain(`Nonce: ${body.nonce}`);
+      expect(body.message).toContain(`Action: ${action}`);
+      expect(new Date(body.expiresAt).getTime()).toBeGreaterThan(Date.now());
+    }
+  });
+
+  it("stores the act on the row, so the message cannot be rebuilt as another one", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const challenge = await challengeFor(held.id, "attach");
+    const row = await queryOne<{ action: string }>(
+      "SELECT action FROM release_challenges WHERE nonce = $1",
+      [challenge.nonce],
+    );
+    expect(row!.action).toBe("attach");
+  });
+
+  it("refuses an act it does not issue, rather than defaulting to one", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    for (const action of ["mint", "", null, undefined, 7]) {
+      const response = await POST_CHALLENGE(
+        new Request("http://localhost/", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action }),
+        }),
+        ctx(held.id),
+      );
+      expect(response.status, JSON.stringify(action)).toBe(400);
+    }
+    const rows = await queryOne<{ n: string }>("SELECT count(*)::text AS n FROM release_challenges");
+    expect(rows!.n).toBe("0");
   });
 
   it("never issues the same nonce twice", async () => {
     const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
-    const first = await challengeFor(held.id);
-    const second = await challengeFor(held.id);
+    const first = await challengeFor(held.id, "release");
+    const second = await challengeFor(held.id, "release");
     expect(first.nonce).not.toBe(second.nonce);
   });
 
   it("answers 404 for a non-uuid and for an id that names nothing", async () => {
-    expect((await POST_CHALLENGE(new Request("http://localhost/"), ctx("not-a-uuid"))).status).toBe(404);
-    const unknown = await POST_CHALLENGE(
-      new Request("http://localhost/"),
-      ctx("00000000-0000-0000-0000-000000000000"),
-    );
-    expect(unknown.status).toBe(404);
+    const asking = (id: string) =>
+      POST_CHALLENGE(
+        new Request("http://localhost/", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "release" }),
+        }),
+        ctx(id),
+      );
+    expect((await asking("not-a-uuid")).status).toBe(404);
+    expect((await asking("00000000-0000-0000-0000-000000000000")).status).toBe(404);
   });
 });
 
@@ -374,7 +749,7 @@ describe("DELETE /api/orders/:id", () => {
   it("answers 204 to a fresh signature from the owner, and the rectangle is reservable again", async () => {
     const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
 
-    const response = await DELETE(releaseRequest(await proofFor(held.id, OWNER)), ctx(held.id));
+    const response = await DELETE(releaseRequest(await proofFor(held.id, "release", OWNER)), ctx(held.id));
     expect(response.status).toBe(204);
     expect(response.headers.get("cache-control")).toBe("no-store");
 
@@ -392,7 +767,10 @@ describe("DELETE /api/orders/:id", () => {
     // for this very order — with their own key.
     const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
 
-    const response = await DELETE(releaseRequest(await proofFor(held.id, STRANGER_WALLET)), ctx(held.id));
+    const response = await DELETE(
+      releaseRequest(await proofFor(held.id, "release", STRANGER_WALLET)),
+      ctx(held.id),
+    );
     expect(response.status).toBe(403);
 
     // The status code on its own would also be returned by a handler that
@@ -402,7 +780,7 @@ describe("DELETE /api/orders/:id", () => {
 
   it("answers 403 when the stranger sends the owner's address without the owner's key", async () => {
     const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
-    const challenge = await challengeFor(held.id);
+    const challenge = await challengeFor(held.id, "release");
 
     const response = await DELETE(
       releaseRequest({
@@ -416,9 +794,16 @@ describe("DELETE /api/orders/:id", () => {
     await stillReserved(held.id);
   });
 
+  it("refuses a challenge the owner signed for attaching content", async () => {
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
+    const response = await DELETE(releaseRequest(await proofFor(held.id, "attach", OWNER)), ctx(held.id));
+    expect(response.status).toBe(403);
+    await stillReserved(held.id);
+  });
+
   it("refuses a replayed challenge, even the owner's own", async () => {
     const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
-    const proof = await proofFor(held.id, OWNER);
+    const proof = await proofFor(held.id, "release", OWNER);
 
     // Same proof, twice. The first release succeeds, so the second is aimed at
     // a fresh hold on the same rectangle: a captured signature must be worth
@@ -433,7 +818,7 @@ describe("DELETE /api/orders/:id", () => {
 
   it("refuses a replayed challenge on the same order when the first attempt failed", async () => {
     const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
-    const challenge = await challengeFor(held.id);
+    const challenge = await challengeFor(held.id, "release");
 
     // A fumbled first attempt spends the nonce too, so the owner's own second
     // try with the same nonce is refused rather than accepted.
@@ -457,7 +842,7 @@ describe("DELETE /api/orders/:id", () => {
 
   it("refuses an expired challenge", async () => {
     const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
-    const proof = await proofFor(held.id, OWNER);
+    const proof = await proofFor(held.id, "release", OWNER);
 
     // Age the row rather than wait two minutes for it. issued_at moves with
     // expires_at because the table refuses a row that expired before it was
@@ -481,7 +866,7 @@ describe("DELETE /api/orders/:id", () => {
 
     // Signed correctly, by the owner of both — but the nonce names `mine`, so
     // it cannot spend `other`. This is what binds a proof to one rectangle.
-    const proof = await proofFor(mine.id, OWNER);
+    const proof = await proofFor(mine.id, "release", OWNER);
     const response = await DELETE(releaseRequest(proof), ctx(other.id));
     expect(response.status).toBe(403);
 
@@ -507,20 +892,22 @@ describe("DELETE /api/orders/:id", () => {
   });
 
   it("answers 409 for a paid order, and only to the wallet that can prove it owns it", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
-    await POST_CONTENT(await contentRequest({ buyerPubkey: OWNER.address }), ctx(held.id));
-    const paid = await POST_CONFIRM(confirmRequest(OWNER.address), ctx(held.id));
+    const id = await heldWithContent();
+    const paid = await POST_CONFIRM(await confirmRequest(id, OWNER), ctx(id));
     expect(paid.status).toBe(200);
 
     // A stranger gets the same 403 they would get on a held rectangle, so the
     // status code never tells them this one is a sale.
-    const stranger = await DELETE(releaseRequest(await proofFor(held.id, STRANGER_WALLET)), ctx(held.id));
+    const stranger = await DELETE(
+      releaseRequest(await proofFor(id, "release", STRANGER_WALLET)),
+      ctx(id),
+    );
     expect(stranger.status).toBe(403);
 
-    const response = await DELETE(releaseRequest(await proofFor(held.id, OWNER)), ctx(held.id));
+    const response = await DELETE(releaseRequest(await proofFor(id, "release", OWNER)), ctx(id));
     expect(response.status).toBe(409);
 
-    const survivor = await GET(new Request("http://localhost/"), ctx(held.id));
+    const survivor = await GET(new Request("http://localhost/"), ctx(id));
     expect(survivor.status).toBe(200);
     expect((await survivor.json()).status).toBe("paid");
   });

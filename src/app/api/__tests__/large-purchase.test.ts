@@ -5,6 +5,8 @@ import { query } from "../../../lib/db";
 import { POST as POST_CONFIRM } from "../orders/[id]/confirm/route";
 import { POST as POST_CONTENT } from "../orders/[id]/content/route";
 import { POST as POST_RESERVE } from "../reserve/route";
+import { testWallet } from "../../../lib/wallet/__tests__/keypair";
+import { proofFor } from "./proof";
 
 /**
  * The purchase this batch's limits are not allowed to break.
@@ -29,7 +31,10 @@ import { POST as POST_RESERVE } from "../reserve/route";
 // four webp encodes.
 vi.setConfig({ testTimeout: 90_000 });
 
-const BUYER = "LargeBuyerPubkey11111111111111111111111111";
+// A real keypair: content and payment are signed, so a bare address is only
+// half of what those two routes ask for. See ./proof.ts.
+const BUYER_WALLET = testWallet();
+const BUYER = BUYER_WALLET.address;
 const ADDRESS = "203.0.113.180";
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 
@@ -56,7 +61,9 @@ async function describeBlock(orderId: string, bytes: Buffer): Promise<Response> 
   form.set("link", "https://example.com/a-large-rectangle");
   form.set("caption", "A large rectangle");
   form.set("imageFit", "cover");
-  form.set("buyerPubkey", BUYER);
+  for (const [field, value] of Object.entries(await proofFor(orderId, "attach", BUYER_WALLET))) {
+    form.set(field, value);
+  }
   const framed = await new Response(form).arrayBuffer();
   return POST_CONTENT(
     new Request("http://localhost/api/orders/x/content", {
@@ -73,7 +80,7 @@ async function pay(orderId: string): Promise<Response> {
     new Request("http://localhost/api/orders/x/confirm", {
       method: "POST",
       headers: { "content-type": "application/json", "x-forwarded-for": ADDRESS },
-      body: JSON.stringify({ buyerPubkey: BUYER }),
+      body: JSON.stringify(await proofFor(orderId, "pay", BUYER_WALLET)),
     }),
     ctx(orderId),
   );

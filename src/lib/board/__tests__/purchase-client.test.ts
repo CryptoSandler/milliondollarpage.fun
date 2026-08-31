@@ -36,6 +36,35 @@ function stubFetchOnce(response: Response): ReturnType<typeof vi.fn> {
   return stub;
 }
 
+/** Answers each call in turn, so a two-request signed write can be scripted. */
+function stubFetchSequence(...responses: Response[]): ReturnType<typeof vi.fn> {
+  const stub = vi.fn();
+  for (const response of responses) stub.mockResolvedValueOnce(response);
+  globalThis.fetch = stub as unknown as typeof fetch;
+  return stub;
+}
+
+const SIGNED_TEXT = "milliondollarpage.fun needs to know this wallet is yours.";
+
+const challenge = () =>
+  jsonResponse(200, {
+    nonce: "a".repeat(64),
+    message: SIGNED_TEXT,
+    expiresAt: "2026-08-25T12:02:00.000Z",
+  });
+
+/** A wallet that signs whatever it is shown, so the text can be asserted on. */
+const signer = vi.fn(async (message: string) => ({
+  publicKey: "OwnerAddress",
+  signature: `signed:${message}`,
+}));
+
+/** What the challenge request asked to be signed. */
+function actionAsked(stub: ReturnType<typeof vi.fn>): unknown {
+  const [, init] = stub.mock.calls[0] as [string, RequestInit];
+  return JSON.parse(init.body as string).action;
+}
+
 describe("createHold", () => {
   it("turns a 201 into ok:true, filling in an order shape from the reservation", async () => {
     stubFetchOnce(
@@ -126,13 +155,15 @@ describe("createHold", () => {
 
 describe("fetchOrder", () => {
   it("passes a 200 body straight through as the order", async () => {
+    // No `paymentBaseUnits`: a GET is answered by `toPublicOrder`, which
+    // withholds the payable amount from every caller. This fixture is the
+    // shape polling actually receives.
     const order = {
       id: "11111111-1111-1111-1111-111111111111",
       rect: { x: 0, y: 0, w: 10, h: 10 },
       status: "reserved",
       pricePerPixelBaseUnits: 1_000_000,
       totalBaseUnits: 100_000_000,
-      paymentBaseUnits: 100_000_042,
       expiresAt: "2026-08-25T12:30:00.000Z",
       hasContent: false,
       caption: null,
@@ -165,8 +196,9 @@ describe("fetchOrder", () => {
   /**
    * A hold publishes no caption and no link to anyone but its buyer, so the
    * buyer has to be able to say who they are — in a header, never in the URL,
-   * because the pubkey is the only credential this site has and a query
-   * string ends up in access logs.
+   * because a query string ends up in access logs, in `Referer` and in a
+   * browser's own history. It is a claim rather than a proof, which is why
+   * the only thing it widens is the caption and link the caller wrote.
    */
   it("offers the buyer's wallet in a header, not in the path", async () => {
     const fetchMock = stubFetchOnce(jsonResponse(404, { message: "no" }));
@@ -179,7 +211,8 @@ describe("fetchOrder", () => {
 
 describe("submitContent", () => {
   it("carries the whole rejections array through a 422", async () => {
-    stubFetchOnce(
+    stubFetchSequence(
+      challenge(),
       jsonResponse(422, {
         message: "That content could not be accepted.",
         rejections: [
@@ -189,7 +222,7 @@ describe("submitContent", () => {
       }),
     );
 
-    const result = await submitContent("11111111-1111-1111-1111-111111111111", new FormData());
+    const result = await submitContent("11111111-1111-1111-1111-111111111111", new FormData(), signer);
 
     expect(result).toEqual({
       ok: false,
@@ -202,18 +235,48 @@ describe("submitContent", () => {
     });
   });
 
-  it("posts the given form data to the order's content endpoint", async () => {
-    const stub = stubFetchOnce(jsonResponse(403, { message: "That order does not belong to you." }));
+  it("asks for an attach challenge, signs it, and posts the proof in the form", async () => {
+    const stub = stubFetchSequence(challenge(), jsonResponse(200, { id: "order-1" }));
     const form = new FormData();
     form.set("caption", "hi");
 
-    await submitContent("order-1", form);
+    await submitContent("order-1", form, signer);
 
-    expect(stub).toHaveBeenCalledTimes(1);
-    const [url, init] = stub.mock.calls[0] as [string, RequestInit];
+    expect(stub).toHaveBeenCalledTimes(2);
+    const [challengeUrl] = stub.mock.calls[0] as [string, RequestInit];
+    expect(challengeUrl).toBe("/api/orders/order-1/challenge");
+    // The act is named in the request, so what the wallet is shown is a
+    // sentence about attaching content and not about anything else.
+    expect(actionAsked(stub)).toBe("attach");
+
+    const [url, init] = stub.mock.calls[1] as [string, RequestInit];
     expect(url).toBe("/api/orders/order-1/content");
     expect(init.method).toBe("POST");
     expect(init.body).toBe(form);
+    // Read off the form that was actually sent, not off what was passed in.
+    expect(form.get("nonce")).toBe("a".repeat(64));
+    expect(form.get("publicKey")).toBe("OwnerAddress");
+    expect(form.get("signature")).toBe(`signed:${SIGNED_TEXT}`);
+    // The address alone never travels any more: that was the whole hole.
+    expect(form.get("buyerPubkey")).toBeNull();
+  });
+
+  it("refuses without ever calling the network when there is no wallet to sign with", async () => {
+    const stub = stubFetchSequence();
+    const result = await submitContent("order-1", new FormData(), null);
+    expect(result.ok).toBe(false);
+    expect((result as { status: number }).status).toBe(0);
+    expect((result as { message: string }).message).toContain("no wallet");
+    expect(stub).not.toHaveBeenCalled();
+  });
+
+  it("sends no content when the person refuses to sign", async () => {
+    const stub = stubFetchSequence(challenge());
+    const result = await submitContent("order-1", new FormData(), async () => {
+      throw new Error("User rejected the request.");
+    });
+    expect(result.ok).toBe(false);
+    expect(stub).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -225,6 +288,8 @@ describe("confirmOrder", () => {
       status: "paid",
       pricePerPixelBaseUnits: 1_000_000,
       totalBaseUnits: 100_000_000,
+      // Present here and absent from the GET fixture above, which is the
+      // whole distinction: this body answers a caller who signed.
       paymentBaseUnits: 100_000_042,
       expiresAt: null,
       hasContent: true,
@@ -233,28 +298,51 @@ describe("confirmOrder", () => {
       imageFit: "contain",
       isAnimated: false,
     };
-    stubFetchOnce(jsonResponse(200, order));
+    stubFetchSequence(challenge(), jsonResponse(200, order));
 
-    const result = await confirmOrder("order-1", "buyer-pubkey-1");
+    const result = await confirmOrder("order-1", signer);
 
     expect(result).toEqual({ ok: true, order });
   });
 
-  it("turns a 410 into ok:false with the server's message", async () => {
-    stubFetchOnce(jsonResponse(410, { message: "That hold has expired." }));
+  it("asks for a pay challenge and presents nonce, address and signature", async () => {
+    const stub = stubFetchSequence(challenge(), jsonResponse(200, { id: "order-1" }));
+    await confirmOrder("order-1", signer);
 
-    const result = await confirmOrder("order-1", "buyer-pubkey-1");
+    expect(actionAsked(stub)).toBe("pay");
+    const [url, init] = stub.mock.calls[1] as [string, RequestInit];
+    expect(url).toBe("/api/orders/order-1/confirm");
+    expect(JSON.parse(init.body as string)).toEqual({
+      nonce: "a".repeat(64),
+      publicKey: "OwnerAddress",
+      signature: `signed:${SIGNED_TEXT}`,
+    });
+    expect(init.body as string).not.toContain("buyerPubkey");
+  });
+
+  it("turns a 410 into ok:false with the server's message", async () => {
+    stubFetchSequence(challenge(), jsonResponse(410, { message: "That hold has expired." }));
+
+    const result = await confirmOrder("order-1", signer);
 
     expect(result).toEqual({ ok: false, status: 410, message: "That hold has expired." });
   });
 
   it("becomes ok:false when the response body is not JSON", async () => {
-    stubFetchOnce(new Response("not json", { status: 500 }));
+    stubFetchSequence(challenge(), new Response("not json", { status: 500 }));
 
-    const result = await confirmOrder("order-1", "buyer-pubkey-1");
+    const result = await confirmOrder("order-1", signer);
 
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.status).toBe(500);
+  });
+
+  it("refuses without ever calling the network when there is no wallet to sign with", async () => {
+    const stub = stubFetchSequence();
+    const result = await confirmOrder("order-1", null);
+    expect(result.ok).toBe(false);
+    expect((result as { message: string }).message).toContain("no wallet");
+    expect(stub).not.toHaveBeenCalled();
   });
 });
 
@@ -286,34 +374,15 @@ describe("createHold, on a 409 carrying your own blocking holds", () => {
 describe("releaseHold", () => {
   const ORDER = "33333333-3333-3333-3333-333333333333";
 
-  /** Answers each call in turn, so a two-request release can be scripted. */
-  function stubFetchSequence(...responses: Response[]): ReturnType<typeof vi.fn> {
-    const stub = vi.fn();
-    for (const response of responses) stub.mockResolvedValueOnce(response);
-    globalThis.fetch = stub as unknown as typeof fetch;
-    return stub;
-  }
-
-  const challenge = () =>
-    jsonResponse(200, {
-      nonce: "a".repeat(64),
-      message: "milliondollarpage.fun needs to know this wallet is yours.",
-      expiresAt: "2026-08-25T12:02:00.000Z",
-    });
-
-  const signer = vi.fn(async (message: string) => ({
-    publicKey: "OwnerAddress",
-    signature: `signed:${message}`,
-  }));
-
   it("asks for a challenge, signs it, and presents nonce, address and signature", async () => {
     const stub = stubFetchSequence(challenge(), new Response(null, { status: 204 }));
     const result = await releaseHold(ORDER, signer);
     expect(result).toEqual({ ok: true });
 
     const [challengeUrl, challengeInit] = stub.mock.calls[0];
-    expect(challengeUrl).toBe(`/api/orders/${ORDER}/release-challenge`);
+    expect(challengeUrl).toBe(`/api/orders/${ORDER}/challenge`);
     expect(challengeInit.method).toBe("POST");
+    expect(JSON.parse(challengeInit.body as string).action).toBe("release");
 
     const [deleteUrl, deleteInit] = stub.mock.calls[1];
     expect(deleteUrl).toBe(`/api/orders/${ORDER}`);
@@ -321,7 +390,7 @@ describe("releaseHold", () => {
     expect(JSON.parse(deleteInit.body as string)).toEqual({
       nonce: "a".repeat(64),
       publicKey: "OwnerAddress",
-      signature: "signed:milliondollarpage.fun needs to know this wallet is yours.",
+      signature: `signed:${SIGNED_TEXT}`,
     });
     // The address alone never travels any more: that was the whole hole.
     expect(deleteInit.body as string).not.toContain("buyerPubkey");
