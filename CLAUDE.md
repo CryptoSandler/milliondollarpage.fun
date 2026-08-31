@@ -63,6 +63,34 @@ four batches: a standing prohibition nobody wrote down is one the next session
 cannot enforce. Fonts come from Google Fonts, and the chosen pair is in
 `DESIGN.md`.
 
+# Every transaction a wallet is asked to sign
+
+Learned across projects, and binding on any money path here.
+
+**One signer, and it is the user.** A transaction needing a second signature is
+one the wallet cannot fully account for, and one this project has no business
+building: the server holds no key that spends.
+
+**The chain is named — `solana:mainnet` — never inferred** from whatever mode
+the wallet happens to be in. A wallet in Testnet Mode gets told it is in Testnet
+Mode; it does not get quietly served a testnet transaction.
+
+**`signAndSendTransaction`**, so the wallet owns the send and the retry rather
+than the page holding a signed transaction it must broadcast itself.
+
+**Nothing opens a wallet until the server has checked it would work.** Balance
+must cover amount plus estimated fee, and `simulateTransaction` with
+`sigVerify: false` must pass on our own RPC — `sigVerify` is false because
+nobody has signed yet, which is the point. If either fails the wallet does not
+open and the interface says why in ONE sentence, naming the number where there
+is one: "You need 0.0021 more SOL for this."
+
+Phantom's "this dApp could be malicious" is a SIMULATION FAILURE, not a
+reputation problem. Diagnose the transaction before the domain — the reflex to
+request a domain review costs a week during which every buyer sees a red banner.
+`docs/wallet-warnings.md` has the three warnings, their causes, and the
+rehearsal that runs against a real wallet before any change to how money moves.
+
 # Every module names its callers
 
 A new module's header comment says who calls it. Not what it does — the code says that —
