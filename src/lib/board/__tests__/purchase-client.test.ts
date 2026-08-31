@@ -6,7 +6,9 @@ import {
   fetchOrder,
   releaseHold,
   submitContent,
+  walletSigner,
 } from "../purchase-client";
+import { shortAddress } from "../../wallet/standard";
 
 /**
  * `purchase-client.ts` does exactly one thing: turn a `fetch` response into
@@ -440,5 +442,33 @@ describe("releaseHold", () => {
     const result = await releaseHold(ORDER, signer);
     expect(result.ok).toBe(false);
     expect((result as { status: number }).status).toBe(0);
+  });
+});
+
+describe("what a buyer is told when no signature came back", () => {
+  /**
+   * A wallet that has moved to another account throws exactly like a person
+   * pressing Cancel. The message must not guess which, and must name the
+   * account, because only that key can sign for this rectangle.
+   */
+  it("names the connected account so a switched extension is diagnosable", async () => {
+    const sign = walletSigner({
+      address: "9xQeWvG816bUx9EPa2fD3T4mCbXxKpEmVoJ4rKX5Zy7B",
+      signMessage: async () => {
+        throw new Error("wallet said no");
+      },
+    })!;
+
+    stubFetchOnce(jsonResponse(201, { nonce: "a".repeat(64), message: "sign me" }));
+
+    const result = await confirmOrder("11111111-1111-1111-1111-111111111111", sign);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    // Compared against what shortAddress actually produces, so a change to how
+    // an address is abbreviated moves this test rather than breaking it wrongly.
+    expect(result.message).toContain(shortAddress("9xQeWvG816bUx9EPa2fD3T4mCbXxKpEmVoJ4rKX5Zy7B"));
+    expect(result.message).toMatch(/switch back to/i);
+    // It must not assert the cause it cannot know.
+    expect(result.message).not.toMatch(/you declined|you cancelled the/i);
   });
 });
