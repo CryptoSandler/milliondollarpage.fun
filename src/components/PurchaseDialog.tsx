@@ -8,7 +8,7 @@ import {
   confirmOrder,
   createHold,
   releaseHold,
-  releaseSigner,
+  walletSigner,
   type ClientOrder,
 } from "../lib/board/purchase-client";
 import { tellRelease } from "../lib/board/release-outcome";
@@ -58,10 +58,13 @@ const RETRY_LABEL = "Ask again";
  *
  * Releasing a rectangle is signed by the wallet that holds it now, because
  * the address on its own proved nothing — it is public, and anyone reading
- * the board could have used it to let go of somebody else's pixels. This page
- * has a wallet ADDRESS, typed into a field, and no wallet: there is no key
- * here and nothing that can sign. So the button is off, and says why, rather
- * than looking live and failing when it is pressed.
+ * the board could have used it to let go of somebody else's pixels. The same
+ * is true of the two steps inside this dialog: attaching content and settling
+ * the order are signed too, and each says so where its own button is (see
+ * `ContentForm` and `ConfirmationStep`). This page has a wallet ADDRESS,
+ * typed into a field, and no wallet: there is no key here and nothing that
+ * can sign. So the button is off, and says why, rather than looking live and
+ * failing when it is pressed.
  *
  * Temporary, and it costs the buyer nothing they cannot get back: an
  * abandoned hold expires by itself, and a hold they still want is theirs to
@@ -196,11 +199,14 @@ export default function PurchaseDialog({
 
   const hasLiveHold = order !== null && step !== "done" && fatalMessage === null;
 
-  // Whether anything on this page can sign a release challenge at all. False
-  // for the whole of batch 3 — see NO_WALLET_TO_SIGN above — and read at
-  // render time so the day a wallet adapter lands, the button turns itself
-  // back on and the explanation beside it disappears.
-  const canSign = releaseSigner() !== null;
+  // Whether anything on this page can sign a challenge at all — for any of
+  // the three signed steps, which is why it is read here and handed down
+  // rather than asked again inside each child. False for the whole of batch 3
+  // — see NO_WALLET_TO_SIGN above — and read at render time so the day a
+  // wallet adapter lands, every control turns itself back on and the
+  // explanations beside them disappear.
+  const sign = walletSigner();
+  const canSign = sign !== null;
 
   /**
    * Asks for the rectangle, and sorts the answer into the three things it can
@@ -324,7 +330,7 @@ export default function PurchaseDialog({
         if (!abandon) return;
         let result;
         try {
-          result = await call.release(order.id, releaseSigner());
+          result = await call.release(order.id, sign);
         } catch (error) {
           if (!(error instanceof TimedOut)) throw error;
           // A close that has already been agreed to must close. The hold is
@@ -347,7 +353,11 @@ export default function PurchaseDialog({
       }
       onClose(notice);
     },
-    [hasLiveHold, order, call, onHoldEnded, onPurchased, onClose],
+    // `sign` is in here because this closure sends it: today it is null on
+    // every render, and the day an adapter returns a fresh function per render
+    // this callback has to be the one holding that render's signer rather than
+    // the first one it ever saw.
+    [hasLiveHold, order, call, sign, onHoldEnded, onPurchased, onClose],
   );
 
   // Reports to BoardView whether its background poll should hold off right
@@ -426,7 +436,7 @@ export default function PurchaseDialog({
     for (const id of releasable) {
       let result;
       try {
-        result = await call.release(id, releaseSigner());
+        result = await call.release(id, sign);
       } catch (error) {
         if (!(error instanceof TimedOut)) throw error;
         setReleasing(false);
@@ -459,7 +469,7 @@ export default function PurchaseDialog({
     setConfirmError(null);
     let result;
     try {
-      result = await call.confirm(order.id, ownerPubkey);
+      result = await call.confirm(order.id, sign);
     } catch (error) {
       if (!(error instanceof TimedOut)) throw error;
       setStalled("confirm");
@@ -716,7 +726,7 @@ export default function PurchaseDialog({
             <p className="label-caps mt-5">Step 1 of 2 · what goes in the block</p>
             <ContentForm
               order={order}
-              buyerPubkey={ownerPubkey}
+              sign={sign}
               draft={draft}
               onDraftChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
               onSubmitted={(updated, notes) => {
@@ -737,6 +747,7 @@ export default function PurchaseDialog({
               prepared={prepared}
               stillFromAnimation={stillFromAnimation}
               confirming={step === "paying"}
+              canSign={canSign}
               confirmError={confirmError}
               onBack={() => setStep("describing")}
               onConfirm={() => void handleConfirm()}
