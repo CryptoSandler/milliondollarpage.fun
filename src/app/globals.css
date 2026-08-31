@@ -397,9 +397,9 @@ h3 {
   }
 
   /*
-   * The controls: the presets, the readout, the wallet field, the Buy button
+   * The controls: the presets, the readout, the wallet control, the Buy button
    * and the legend. ONE element and one DOM tree, which the two layouts below
-   * move rather than duplicate — a second copy would mean two wallet inputs
+   * move rather than duplicate — a second copy would mean two Connect controls
    * and two Buy buttons for a screen reader to find.
    *
    * Which layout applies is decided here in CSS and nowhere else. No JS media
@@ -849,9 +849,37 @@ h3 {
       order: 4;
     }
 
-    .board-controls .wallet-field input {
-      width: 100%;
+    /*
+     * The panel has the height the bottom bar does not, so it PRINTS what a
+     * connect did instead of only announcing it.
+     *
+     * DESIGN.md's shed order is what decides this: "the bottom bar runs out of
+     * width; the side panel runs out of height, and sheds the same things in
+     * the same order". Wherever there is room, an outcome a screen reader is
+     * told is an outcome everybody else can read too. The declarations undo
+     * Tailwind's `.sr-only`, which is why they are spelled out rather than
+     * simply switched off.
+     */
+    .board-controls .wallet-notice {
+      position: static;
+      width: auto;
+      height: auto;
+      margin: 0;
+      padding: 0;
+      overflow: visible;
+      clip: auto;
+      clip-path: none;
+      white-space: normal;
+      font-size: 12.5px;
+      line-height: 1.45;
+      color: var(--body);
     }
+
+    /* No `:empty { display: none }` here on purpose. A live region has to be
+       in the accessibility tree BEFORE the sentence lands for the sentence to
+       be announced, and a region that appears at the same moment its text does
+       is a region assistive technology may never have been watching. An empty
+       <p> lays out no line boxes and is already zero pixels tall. */
 
     .board-controls .selection-buy {
       order: 5;

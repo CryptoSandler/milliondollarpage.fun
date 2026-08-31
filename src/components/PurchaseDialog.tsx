@@ -8,8 +8,8 @@ import {
   confirmOrder,
   createHold,
   releaseHold,
-  walletSigner,
   type ClientOrder,
+  type WalletSigner,
 } from "../lib/board/purchase-client";
 import { tellRelease } from "../lib/board/release-outcome";
 import type { Selection } from "../lib/board/selection";
@@ -61,20 +61,21 @@ const RETRY_LABEL = "Ask again";
  * the board could have used it to let go of somebody else's pixels. The same
  * is true of the two steps inside this dialog: attaching content and settling
  * the order are signed too, and each says so where its own button is (see
- * `ContentForm` and `ConfirmationStep`). This page has a wallet ADDRESS,
- * typed into a field, and no wallet: there is no key here and nothing that
- * can sign. So the button is off, and says why, rather than looking live and
- * failing when it is pressed.
+ * `ContentForm` and `ConfirmationStep`). So the button is off, and says why,
+ * rather than looking live and failing when it is pressed.
  *
- * Temporary, and it costs the buyer nothing they cannot get back: an
- * abandoned hold expires by itself, and a hold they still want is theirs to
- * carry on with straight off the board.
+ * This used to be every visit, because the page had a wallet ADDRESS typed
+ * into a field and no wallet behind it. It is now the one case that survives a
+ * connected wallet: a buyer who disconnected after the hold was made. The way
+ * out is named, and it costs them nothing they cannot get back — an abandoned
+ * hold expires by itself, and a hold they still want is theirs to carry on
+ * with straight off the board.
  */
 const NO_WALLET_TO_SIGN =
-  "Handing a hold back is signed by the wallet that started it, and there is no wallet connected " +
-  "here yet — only an address typed into a field, which proves nothing. These pixels go back on " +
-  "the board by themselves when the hold's clock runs out, and until then you can pick the hold " +
-  "up again from the board and carry on with it.";
+  "Handing a hold back is signed by the wallet that started it, and no wallet is connected to " +
+  "this page. Connect it again and this button comes back. These pixels go back on the board by " +
+  "themselves when the hold's clock runs out, and until then you can pick the hold up again from " +
+  "the board and carry on with it.";
 
 /**
  * The step machine a buyer walks through: holding -> describing -> confirming
@@ -108,6 +109,7 @@ const NO_WALLET_TO_SIGN =
 export default function PurchaseDialog({
   selection,
   buyerPubkey,
+  sign,
   knownHoldIds,
   onHoldStarted,
   onHoldEnded,
@@ -119,6 +121,17 @@ export default function PurchaseDialog({
 }: {
   selection: Selection;
   buyerPubkey: string;
+  /**
+   * The connected wallet's signer, or null when nothing is connected.
+   *
+   * A prop rather than something this dialog reaches for, because the wallet
+   * and the address have to be the same decision: `ownerPubkey` below is
+   * snapshotted from `buyerPubkey` at open time and every signed step is
+   * checked against it, so a dialog that read the connection separately could
+   * end up holding one buyer's rectangle and another buyer's key. BoardView
+   * derives both from the one connection and hands both down.
+   */
+  sign: WalletSigner | null;
   /** Holds this browser already started, so a returned order can be recognised as a resumed one rather than a new one. */
   knownHoldIds: string[];
   /** A hold now exists (fresh or resumed) — the board marks it as this buyer's. */
@@ -135,10 +148,11 @@ export default function PurchaseDialog({
   returnFocusRef: RefObject<HTMLElement | null>;
 }) {
   // Snapshotted at open time: the order this dialog holds belongs to this
-  // exact address for its whole life. If the buyer edits the wallet field
-  // behind the dialog while it's open, later calls must keep using the
-  // address the hold was created with, or attachContent/markPaid would see a
-  // mismatch and answer 403 "not yours" against their own hold.
+  // exact address for its whole life. The connect control is disabled while a
+  // dialog is open for exactly this reason, and this is the belt to that
+  // brace: later calls must keep using the address the hold was created with,
+  // or attachContent/markPaid would see a mismatch and answer 403 "not yours"
+  // against their own hold.
   const [ownerPubkey] = useState(buyerPubkey);
 
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -200,12 +214,13 @@ export default function PurchaseDialog({
   const hasLiveHold = order !== null && step !== "done" && fatalMessage === null;
 
   // Whether anything on this page can sign a challenge at all — for any of
-  // the three signed steps, which is why it is read here and handed down
-  // rather than asked again inside each child. False for the whole of batch 3
-  // — see NO_WALLET_TO_SIGN above — and read at render time so the day a
-  // wallet adapter lands, every control turns itself back on and the
-  // explanations beside them disappear.
-  const sign = walletSigner();
+  // the three signed steps, which is why it is read once here and handed down
+  // rather than asked again inside each child. It was `walletSigner()` called
+  // with nothing and answering null for the whole of batch 3; BoardView now
+  // builds it from the connected wallet and passes it in, and that is the day
+  // this comment promised: every control turns itself back on and the
+  // explanations beside them disappear, with no flag anybody had to remember
+  // to flip.
   const canSign = sign !== null;
 
   /**

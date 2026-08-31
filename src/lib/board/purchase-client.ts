@@ -1,6 +1,7 @@
 import type { ContentRejection } from "./content";
 import type { Rect } from "./geometry";
 import type { ProvenOrder, PublicOrder } from "./orders";
+import { base58Encode } from "../wallet/base58";
 import type { ChallengeAction } from "../wallet/signature";
 
 /**
@@ -14,9 +15,11 @@ import type { ChallengeAction } from "../wallet/signature";
  *
  * `PublicOrder` and `Rect` are imported with `import type` only: both are
  * erased at compile time, so this module never pulls `../db` (which
- * `orders.ts` imports) into a client bundle. That is deliberate — this file
- * is consumed by "use client" components, and `../db` opens a real `pg`
- * connection at module scope.
+ * `orders.ts` imports) into a client bundle. That is deliberate — this file is
+ * consumed by "use client" components, and `../db` opens a real `pg` connection
+ * at module scope. `base58Encode` is the one VALUE import here, and it is safe
+ * for the same reason said the other way round: `../wallet/base58` imports
+ * nothing whatsoever.
  *
  * `ClientOrder` is built from `PublicOrder`, not from `Order`: the server
  * never sends a buyer's pubkey back over the wire (see `toPublicOrder` in
@@ -251,22 +254,49 @@ export type ReleaseResult = { ok: true } | ClientFailure;
 export type WalletSigner = (message: string) => Promise<{ publicKey: string; signature: string }>;
 
 /**
- * The wallet that would sign. There isn't one.
+ * What a connected wallet looks like from here: an address, and something
+ * that turns bytes into a signature.
+ *
+ * Two fields and no wallet vocabulary at all, so this module stays the browser
+ * half of four HTTP endpoints and does not become a second place that knows
+ * about the Wallet Standard. `src/components/useWallet.ts` builds one of these
+ * out of a live `solana:signMessage` feature; `standard.ts` explains why that
+ * is the only feature this product asks a wallet for.
+ */
+export type MessageSigner = {
+  /** base58, exactly as `verifySignature` on the server decodes it. */
+  address: string;
+  /** Resolves with the raw 64 signature bytes, or rejects when the person says no. */
+  signMessage: (message: Uint8Array) => Promise<Uint8Array>;
+};
+
+/**
+ * The wallet that signs, or null when nothing is connected.
  *
  * A function rather than a constant so nothing narrows it to `null` at the
- * point of use, and so wiring a real adapter in later is an edit to one
- * return statement rather than a hunt through the dialog.
+ * point of use, and it takes the connected wallet rather than reaching for one
+ * so that this module keeps no state and the dialog cannot be handed a signer
+ * for an address its hold does not belong to. It returned a bare `null` for
+ * the whole of batch 3 — there was no wallet in the browser, only an address
+ * somebody typed into a field, which proved nothing because an address is
+ * public. This is the one return statement that comment said would change.
  *
- * `buyerPubkey` in this app is a string somebody typed into a field. Nothing
- * in the browser holds the key behind it, so nothing in the browser can sign
- * anything, and every call below that needs a signature says so rather than
- * sending a request the server will rightly refuse. It was `releaseSigner`
- * when letting a hold go was the only signed step; attaching content and
- * settling an order are signed now too. See DESIGN.md for what the buyer is
- * told while there is nothing here to sign with.
+ * The two conversions are here rather than in the hook because they are what
+ * the WIRE needs: the server signs and verifies UTF-8 bytes of the exact text
+ * `challengeMessage` built (`src/lib/wallet/signature.ts`), and it reads the
+ * signature as base58. Doing them beside the fetch that carries them keeps one
+ * spelling of the proof rather than two.
+ *
+ * It does not catch. A wallet rejects when the person declines, and `prove`
+ * below is what turns that into the sentence they read — one place, for all
+ * three acts.
  */
-export function walletSigner(): WalletSigner | null {
-  return null;
+export function walletSigner(signer: MessageSigner | null): WalletSigner | null {
+  if (!signer) return null;
+  return async (message: string) => ({
+    publicKey: signer.address,
+    signature: base58Encode(await signer.signMessage(new TextEncoder().encode(message))),
+  });
 }
 
 /**
@@ -278,14 +308,14 @@ export function walletSigner(): WalletSigner | null {
  */
 const NO_WALLET_MESSAGE: Record<ChallengeAction, string> = {
   release:
-    "Letting a hold go has to be signed by the wallet that started it, and there is no wallet " +
-    "connected to this page yet.",
+    "Letting a hold go has to be signed by the wallet that started it, and no wallet is " +
+    "connected to this page.",
   attach:
-    "What goes in a block has to be signed by the wallet holding it, and there is no wallet " +
-    "connected to this page yet.",
+    "What goes in a block has to be signed by the wallet holding it, and no wallet is " +
+    "connected to this page.",
   pay:
-    "Settling an order has to be signed by the wallet that holds it, and there is no wallet " +
-    "connected to this page yet.",
+    "Settling an order has to be signed by the wallet that holds it, and no wallet is " +
+    "connected to this page.",
 };
 
 /**

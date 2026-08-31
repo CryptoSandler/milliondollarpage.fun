@@ -362,7 +362,7 @@ type Props = {
    * The sentence already printed under the Buy button, for the live mirror.
    *
    * Passed in rather than written again here: it is the only place that knows
-   * about the wallet field, and two wordings of "why can you not buy this"
+   * about the wallet control, and two wordings of "why can you not buy this"
    * would drift until the one a screen reader hears is the one nobody was
    * reading when they wrote it.
    */

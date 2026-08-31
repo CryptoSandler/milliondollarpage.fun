@@ -65,7 +65,7 @@ export default function SelectionPanel({
   onZoomOut: () => void;
   onZoomFit: () => void;
   /**
-   * Whatever else the controls carry — the legend, the wallet field —
+   * Whatever else the controls carry — the legend, the wallet control —
    * rendered between the readout and the Buy button. DESIGN.md puts the
    * primary action last, so nothing sits to the right of it in the bar or
    * below it in the panel.

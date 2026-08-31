@@ -8,11 +8,13 @@
  * could not do this itself without becoming two unrelated things in one file,
  * and this half has an exact, boring specification worth pinning on its own.
  *
- * `base58Encode` is the direction the application does not need yet — nothing
- * here produces an address or a signature — and it is kept because the test
- * fixtures build both from a generated keypair, and because the wallet
- * adapter that arrives with the real signing path hands back raw bytes that
- * have to be spelled this way to be sent.
+ * `base58Encode` is the browser's direction, and it now has a caller:
+ * `walletSigner` in `src/lib/board/purchase-client.ts` spells a connected
+ * wallet's raw 64 signature bytes this way before sending them, because that
+ * is how `base58Decode` above reads them back on the server. It is imported
+ * into a "use client" module, which is safe precisely because this file has no
+ * imports at all — no `node:crypto`, no dependency, sixty lines of integer
+ * arithmetic. The test fixtures in `__tests__/keypair.ts` use it too.
  *
  * Copied from `outbid-tokens/src/lib/base58.ts` rather than written again,
  * with one correction: that version seeds the decode accumulator with a

@@ -8,6 +8,7 @@ import type { BlockDetails, BoardRect, BoardStats } from "../lib/board/blocks";
 import type { Wall } from "../lib/board/composite";
 import type { Point } from "../lib/board/geometry";
 import { holdMinutes } from "../lib/board/hold-clock";
+import { walletSigner } from "../lib/board/purchase-client";
 import type { Selection } from "../lib/board/selection";
 import { BOARD_BOTTOM_GAP, type Chrome } from "../lib/canvas/viewport";
 import BlockCard from "./BlockCard";
@@ -16,6 +17,8 @@ import BoardCounters from "./BoardCounters";
 import InteractionLegend from "./InteractionLegend";
 import PurchaseDialog from "./PurchaseDialog";
 import SelectionPanel from "./SelectionPanel";
+import WalletConnect from "./WalletConnect";
+import { useWallet } from "./useWallet";
 
 /**
  * What `/api/board` ships, and what the page is rendered from on the server.
@@ -60,9 +63,35 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
   const [activePreset, setActivePreset] = useState<number | null>(null);
   const [hovered, setHovered] = useState<{ rect: BoardRect; at: Point } | null>(null);
   const [chrome, setChrome] = useState<Chrome>(FALLBACK_CHROME);
-  // A plain text field until a real wallet arrives in a later batch: there is
-  // no connection and no signature yet, only an address the buyer types in.
-  const [buyerPubkey, setBuyerPubkey] = useState("");
+  /**
+   * The connected wallet, and with it the buyer's address.
+   *
+   * It was a `useState("")` behind a text input until this batch, and the
+   * comment here said so: "no connection and no signature yet, only an address
+   * the buyer types in". There is one now. The address is READ from the
+   * connection rather than stored beside it, because two copies of it are two
+   * things that can disagree about which key is going to sign — and every one
+   * of the three signed steps is checked against this exact string.
+   */
+  const wallet = useWallet();
+  const buyerPubkey = wallet.connected?.address ?? "";
+
+  /**
+   * The one seam every signed step goes through.
+   *
+   * `walletSigner` returned a bare null for the whole of batch 3, which is
+   * what turned Continue, Pay and the buyer's own release off and put a
+   * sentence beside each of them. Handing it a real signer here turns all
+   * three back on at once, because all three go through `prove(...)` in
+   * purchase-client.ts — one seam, not three.
+   *
+   * Memoised on the signer itself so a re-render for any other reason does not
+   * hand PurchaseDialog a new function identity for the same wallet.
+   */
+  const sign = useMemo(
+    () => walletSigner(wallet.connected?.signer ?? null),
+    [wallet.connected?.signer],
+  );
   // The selection a purchase is in progress for. Frozen separately from
   // `selection` so the canvas remains free to change (or clear) the live
   // selection underneath a dialog that is already holding a rectangle.
@@ -221,7 +250,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
         if (walletMissing) {
           return {
             canBuy: false,
-            hint: "These are already yours to finish — add your wallet address to pick the hold back up.",
+            hint: "These are already yours to finish — connect the wallet that started them to pick the hold back up.",
             tone: "info",
           };
         }
@@ -266,7 +295,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
     if (walletMissing) {
       return {
         canBuy: false,
-        hint: "Add your wallet address to buy. Nothing is held until you do.",
+        hint: "Connect a wallet to buy. Nothing is held until you do.",
         tone: "info",
       };
     }
@@ -469,33 +498,21 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
         >
           <InteractionLegend />
 
-          <label className="wallet-field flex shrink-0 flex-col justify-center gap-1">
-            <span className="label-caps hidden items-center gap-1.5 sm:flex">
-              Wallet
-              {walletNeeded && <span className="font-bold text-primary-pressed">needed</span>}
-            </span>
-            <input
-              type="text"
-              value={buyerPubkey}
-              onChange={(event) => setBuyerPubkey(event.target.value)}
-              // The one field on the page that is not inside a form, so
-              // nothing would otherwise happen when a buyer finishes pasting
-              // an address and presses the key that means "done". `handleBuy`
-              // refuses on its own if the rectangle is not buyable yet.
-              onKeyDown={(event) => {
-                if (event.key !== "Enter") return;
-                event.preventDefault();
-                handleBuy();
-              }}
-              aria-label="Wallet address"
-              title="Where the block will be minted. A connected wallet replaces this field later."
-              disabled={purchaseSelection !== null}
-              placeholder="Solana address"
-              className={`field-input w-20 shrink-0 py-1.5 text-[12.5px] sm:w-44 ${
-                walletNeeded ? "border-primary" : ""
-              }`}
-            />
-          </label>
+          {/* The wallet lives exactly where the address field lived — same
+              slot, same `.wallet-field` hook — so the panel and the bar place
+              it without either layout knowing it changed. See WalletConnect
+              for why the typed field is gone rather than kept alongside. */}
+          <WalletConnect
+            wallets={wallet.wallets}
+            connected={wallet.connected}
+            connecting={wallet.connecting}
+            notice={wallet.notice}
+            ready={wallet.ready}
+            disabled={purchaseSelection !== null}
+            needed={walletNeeded}
+            onConnect={wallet.connect}
+            onDisconnect={wallet.disconnect}
+          />
         </SelectionPanel>
       </div>
 
@@ -554,6 +571,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
         <PurchaseDialog
           selection={purchaseSelection}
           buyerPubkey={buyerPubkey}
+          sign={sign}
           knownHoldIds={ownHoldIds}
           onHoldStarted={rememberOwnHold}
           onHoldEnded={forgetOwnHold}

@@ -188,10 +188,10 @@ export default function ConfirmationStep({
           id="pay-unavailable"
           className="rounded-lg border border-hairline-strong bg-canvas px-3 py-2 text-[15px] leading-relaxed text-ink-soft"
         >
-          Settling an order is signed by the wallet that holds it, and there is no wallet connected
-          here yet — only an address typed into a field, which proves nothing. Nothing has been
-          charged, and these pixels go back on the board by themselves when the hold&rsquo;s clock
-          runs out.
+          Settling an order is signed by the wallet that holds it, and no wallet is connected to
+          this page. Connect the wallet that started this hold and this button comes back. Nothing
+          has been charged, and these pixels go back on the board by themselves when the
+          hold&rsquo;s clock runs out.
         </p>
       )}
 
