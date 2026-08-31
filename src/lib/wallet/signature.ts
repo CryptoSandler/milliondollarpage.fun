@@ -4,27 +4,29 @@ import { base58Decode } from "./base58";
 /**
  * Does this wallet's owner actually stand behind this sentence?
  *
- * Called by `src/lib/board/release-challenge.ts`, which is the database half
- * of the same question — it issues the nonce, spends it once, and asks here
- * whether the claimed address really produced the signature that came back.
- * That module cannot answer this itself: this half must be pure, because a
+ * Called by `src/lib/board/challenge.ts`, which is the database half of the
+ * same question — it issues the nonce, spends it once, and asks here whether
+ * the claimed address really produced the signature that came back. That
+ * module cannot answer this itself: this half must be pure, because a
  * verifier that needs a database is a verifier nobody can exercise against a
  * key they generated in a test.
  *
- * ## What the payment step reuses
+ * ## What the three acts share
  *
- * Payment verification lands in a later batch and needs the same proof —
- * "this wallet, right now, asked for this" — before it will look for a USDC
- * transfer on chain. It reuses ALL of this file: `verifySignature` unchanged,
- * and `challengeMessage` with a second action added to `ChallengeAction`
- * (`"pay"`). The five fields are already the ones a payment challenge needs:
- * the domain says which site asked, the action says what was agreed to, the
- * order id binds the proof to one rectangle so a signature collected for a
- * release cannot settle a purchase, the nonce makes it single-use, and the
- * issued-at bounds how long a captured message is worth anything. Nothing in
- * the message is payment-specific, and nothing needs to be: the amount, the
- * treasury and the transfer are all read from the order and from the chain,
- * never from something the buyer typed.
+ * Handing a hold back, attaching the content a rectangle will carry, and
+ * settling a purchase all ask the same question — "this wallet, right now,
+ * asked for this" — so all three present the same proof over the same five
+ * fields. The domain says which site asked, the action says what was agreed
+ * to, the order id binds the proof to one rectangle, the nonce makes it
+ * single-use, and the issued-at bounds how long a captured message is worth
+ * anything. `ChallengeAction` is what keeps them apart: a signature is only
+ * ever good for the act named in the text that was signed, and the row the
+ * text is rebuilt from stores that name (`migrations/010_challenge_actions.sql`).
+ *
+ * The on-chain half of payment lands in a later batch and adds nothing here.
+ * Nothing in the message is payment-specific, and nothing needs to be: the
+ * amount, the treasury and the transfer are all read from the order and from
+ * the chain, never from something the buyer typed.
  *
  * ## Why there is no dependency here
  *
@@ -53,8 +55,30 @@ const SIGNATURE_BYTES = 64;
  */
 export const SIGNING_DOMAIN = "milliondollarpage.fun";
 
-/** What the signature authorises. Payment adds `"pay"`; see the header. */
-export type ChallengeAction = "release";
+/**
+ * What the signature authorises, and the whole of what it authorises.
+ *
+ * `release` hands a hold back, `attach` writes the image, link and caption a
+ * rectangle will carry, and `pay` settles the purchase. Three acts rather than
+ * one blanket "this is my wallet", because a proof that did not name its act
+ * would let a signature collected for the cheapest of them perform the most
+ * permanent: content on a paid block can never be edited, by anyone.
+ *
+ * The same three strings are listed in `release_challenges_action_known`
+ * (`migrations/010_challenge_actions.sql`), which is what refuses a fourth.
+ *
+ * An array, with the type derived from it, so the challenge route can check a
+ * string a caller sent against the same list the type is made of rather than
+ * against a second copy of it that is free to drift.
+ */
+export const CHALLENGE_ACTIONS = ["release", "attach", "pay"] as const;
+
+export type ChallengeAction = (typeof CHALLENGE_ACTIONS)[number];
+
+/** The action a caller named, or null if it is not one we issue. */
+export function readChallengeAction(value: unknown): ChallengeAction | null {
+  return CHALLENGE_ACTIONS.find((action) => action === value) ?? null;
+}
 
 export type Challenge = {
   action: ChallengeAction;

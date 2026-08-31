@@ -35,6 +35,7 @@ export default function ConfirmationStep({
   prepared,
   stillFromAnimation,
   confirming,
+  canSign,
   confirmError,
   onBack,
   onConfirm,
@@ -57,6 +58,16 @@ export default function ConfirmationStep({
    */
   stillFromAnimation: boolean;
   confirming: boolean;
+  /**
+   * Whether anything on this page can sign at all.
+   *
+   * Settling an order is signed by the wallet that holds it, so with nothing
+   * to sign with the button that spends money is off and says why — the same
+   * treatment the release button gets in `PurchaseDialog`, and for the same
+   * reason: a control that looks live and then fails costs more trust than
+   * one that was honest about being unavailable.
+   */
+  canSign: boolean;
   confirmError: string | null;
   onBack: () => void;
   onConfirm: () => void;
@@ -162,10 +173,27 @@ export default function ConfirmationStep({
       </p>
 
       <p className="rounded-lg border border-hairline-strong bg-canvas px-3 py-2 text-[14px] leading-relaxed text-body">
-        Nothing is charged in this preview build: no wallet is connected, no signature is asked for,
-        and no funds move. Confirm marks the order paid on the spot, standing in for the payment step
-        that arrives later.
+        No funds move in this preview build: confirming marks the order paid on the spot, standing
+        in for the transfer that the payment step will read off the chain later. The signature is
+        not a stand-in — the server settles nothing it was not asked to settle by the wallet that
+        holds these pixels.
       </p>
+
+      {/* Said beside the greyed-out button rather than instead of it, and
+          before the money rather than after: this is the screen where a buyer
+          decides to spend, and finding out at the press that they cannot is
+          the worst moment to be told. */}
+      {!canSign && (
+        <p
+          id="pay-unavailable"
+          className="rounded-lg border border-hairline-strong bg-canvas px-3 py-2 text-[15px] leading-relaxed text-ink-soft"
+        >
+          Settling an order is signed by the wallet that holds it, and there is no wallet connected
+          here yet — only an address typed into a field, which proves nothing. Nothing has been
+          charged, and these pixels go back on the board by themselves when the hold&rsquo;s clock
+          runs out.
+        </p>
+      )}
 
       {/* ASSERTIVE. The buyer pressed the button that spends their money and
           is waiting to be told it worked; this is the sentence saying it did
@@ -191,7 +219,8 @@ export default function ConfirmationStep({
         <button
           type="button"
           onClick={onConfirm}
-          disabled={confirming}
+          disabled={confirming || !canSign}
+          aria-describedby={canSign ? undefined : "pay-unavailable"}
           className="btn-primary px-5 py-2.5 text-[15px]"
         >
           {confirming ? "Paying…" : `Pay ${formatUsdc(order.totalBaseUnits)} and claim it`}

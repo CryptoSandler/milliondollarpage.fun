@@ -12,6 +12,8 @@ import {
   type Fit,
 } from "../../../lib/board/image-plan";
 import { reserveRect } from "../../../lib/board/reserve";
+import { testWallet } from "../../../lib/wallet/__tests__/keypair";
+import { proofFor } from "./proof";
 import { GET as IMAGE } from "../blocks/[id]/image/route";
 import { POST as POST_CONFIRM } from "../orders/[id]/confirm/route";
 import { POST as POST_CONTENT } from "../orders/[id]/content/route";
@@ -43,7 +45,10 @@ import { POST as POST_CONTENT } from "../orders/[id]/content/route";
 // encodes a six-megapixel photograph several times over.
 vi.setConfig({ testTimeout: 60_000 });
 
-const BUYER = "SmallBuyerPubkey11111111111111111111111111";
+// A real keypair, because attaching content and paying are both signed now:
+// the address is only half of what those routes ask for. See ./proof.ts.
+const BUYER_WALLET = testWallet();
+const BUYER = BUYER_WALLET.address;
 const CALLER = "1".repeat(64);
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 
@@ -125,7 +130,9 @@ async function submitContent(orderId: string, bytes: Buffer, fit: Fit = "cover")
   form.set("link", "https://example.com/one-pixel");
   form.set("caption", "One pixel");
   form.set("imageFit", fit);
-  form.set("buyerPubkey", BUYER);
+  for (const [field, value] of Object.entries(await proofFor(orderId, "attach", BUYER_WALLET))) {
+    form.set(field, value);
+  }
   const framed = await new Response(form).arrayBuffer();
   return POST_CONTENT(
     new Request("http://localhost/api/orders/x/content", {
@@ -142,7 +149,7 @@ async function confirm(orderId: string): Promise<Response> {
     new Request("http://localhost/api/orders/x/confirm", {
       method: "POST",
       headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.44" },
-      body: JSON.stringify({ buyerPubkey: BUYER }),
+      body: JSON.stringify(await proofFor(orderId, "pay", BUYER_WALLET)),
     }),
     ctx(orderId),
   );

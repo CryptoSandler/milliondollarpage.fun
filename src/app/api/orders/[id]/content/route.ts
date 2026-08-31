@@ -6,28 +6,63 @@ import {
   OrderNotFound,
   OrderNotReady,
   OrderNotYours,
-  toPublicOrder,
+  toProvenOrder,
 } from "../../../../../lib/board/orders";
+import { consumeChallenge } from "../../../../../lib/board/challenge";
 import { checkContentSubmissionLimits } from "../../../../../lib/callers/limits";
 import { NO_STORE, identify, isUuid, json, problem } from "../../../../../lib/http";
 
 const MAX_REQUEST_BYTES = CONTENT_LIMITS.maxBytes + MULTIPART_FRAMING_ALLOWANCE_BYTES;
 
 /**
+ * The one thing every 403 here says, whatever went wrong.
+ *
+ * A missing proof, an expired challenge, a replayed one, a challenge issued
+ * for a different order, a challenge issued to let a hold go rather than to
+ * write on it, and a signature from somebody else's wallet all answer this —
+ * the same shape `DELETE /api/orders/:id` uses, and for the same reason: the
+ * differences between them are facts about somebody else's order.
+ */
+const UNSIGNED =
+  "What goes in a block has to be signed by the wallet holding it, and this was not. " +
+  "Ask for a fresh challenge and sign that.";
+
+/**
  * Attach the image, link and caption a buyer chose to their held rectangle.
  *
- * Ownership and expiry are checked BEFORE the uploaded bytes are ever handed
- * to `validateContent` (which decodes them with `sharp`): decoding is the
- * expensive, attacker-controlled step, and an unauthenticated stranger must
- * never be able to trigger it against an id they don't own just by POSTing a
- * file to it.
+ * ## What replaced the address in the form
  *
- * But `buyerPubkey` — the only thing that check compares against — arrives
- * INSIDE the body, so ownership genuinely cannot be checked before the body
- * is read at all. What can be bounded is the damage: the content-length gate
- * below refuses an oversized request before a single byte is buffered, and
- * `checkContentSubmissionLimits` caps how often one caller can even reach
- * that point.
+ * This route used to read `buyerPubkey` out of the multipart body and treat a
+ * match against `blocks.buyer_pubkey` as proof the caller was the buyer. That
+ * proved nothing: a wallet address is public by construction, `/api/board`
+ * publishes every live block's id, and the payable amount published beside it
+ * made the pair (order id, payer) readable off a public chain the moment a
+ * transfer landed. Anyone holding that pair could write their own picture,
+ * link and caption onto a stranger's hold seconds before the buyer's own
+ * confirm — and content on a paid block can never be edited, by anyone, so
+ * that write is permanent. The 2026-08-28 audit called it F1; the argument is
+ * the one `migrations/003_release_challenges.sql` had already made about the
+ * DELETE next door.
+ *
+ * Now the caller signs. `POST /api/orders/:id/challenge` with
+ * `{"action":"attach"}` mints a single-use nonce bound to this order and to
+ * this act; the wallet signs the sentence that comes back; and the proof —
+ * nonce, address, signature — travels as three more fields in this form.
+ * `consumeChallenge` spends the nonce and verifies the signature, and only an
+ * address it hands back is compared to the order's.
+ *
+ * ## The order the checks run in, which is the same order it always was
+ *
+ * Ownership is proved BEFORE the uploaded bytes are ever handed to
+ * `validateContent` (which decodes them with `sharp`): decoding is the
+ * expensive, attacker-controlled step, and a stranger must never be able to
+ * trigger it against an id they don't own just by POSTing a file to it.
+ *
+ * The proof arrives INSIDE the body, so it genuinely cannot be checked before
+ * the body is read at all. What can be bounded is the damage: the
+ * content-length gate below refuses an oversized request before a single byte
+ * is buffered, and `checkContentSubmissionLimits` caps how often one caller
+ * can even reach that point.
  *
  * A 422 here always carries the WHOLE `rejections` array, not just the first
  * failing field: a form that only ever reports one bad field at a time makes
@@ -70,14 +105,21 @@ export async function POST(
     return problem(400, "That request body is not a form.");
   }
 
-  const buyerPubkey = form.get("buyerPubkey");
-  if (typeof buyerPubkey !== "string" || buyerPubkey.trim() === "") {
-    return problem(400, "A wallet address is required.");
-  }
-
   const order = await getOrder(id);
   if (!order) return problem(404, "That order does not exist.");
-  if (order.buyerPubkey !== buyerPubkey) return problem(403, new OrderNotYours().message);
+
+  // The nonce is spent whatever happens next, including on a wrong key: the
+  // caller presented it, so it is used up. A form field that is missing or is
+  // a file rather than a string arrives here as something `consumeChallenge`
+  // refuses, which is the same 403 as a bad signature — a stranger learns
+  // nothing from which mistake they made.
+  const proven = await consumeChallenge(id, "attach", {
+    nonce: form.get("nonce"),
+    publicKey: form.get("publicKey"),
+    signature: form.get("signature"),
+  });
+  if (proven === null || proven !== order.buyerPubkey) return problem(403, UNSIGNED);
+
   if (order.status === "reserved" && order.expiresAt !== null && Date.parse(order.expiresAt) <= Date.now()) {
     return problem(410, new OrderExpired().message);
   }
@@ -105,15 +147,14 @@ export async function POST(
   }
 
   try {
-    const updated = await attachContent(id, buyerPubkey, validated.content);
-    // The caller proved ownership two statements ago, so they get their
-    // own caption and link back — the redaction in `toPublicOrder` is for
-    // strangers reading somebody else's unpaid hold, not for the buyer
-    // reading back what they just uploaded.
-    return json(toPublicOrder(updated, buyerPubkey), { headers: NO_STORE });
+    const updated = await attachContent(id, proven, validated.content);
+    // The caller proved the key a few statements ago, so they get back their
+    // own caption and link — and the payable amount, which is the number they
+    // need next and the one `toPublicOrder` withholds from everybody else.
+    return json(toProvenOrder(updated), { headers: NO_STORE });
   } catch (error) {
     if (error instanceof OrderNotFound) return problem(404, error.message);
-    if (error instanceof OrderNotYours) return problem(403, error.message);
+    if (error instanceof OrderNotYours) return problem(403, UNSIGNED);
     if (error instanceof OrderExpired) return problem(410, error.message);
     if (error instanceof OrderNotReady) return problem(409, error.message);
     throw error;

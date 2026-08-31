@@ -34,7 +34,6 @@ describe("assertSchemaIsCurrent", () => {
   });
 
   it("names both versions when the database is behind", async () => {
-    const { assertSchemaIsCurrent } = await import("../config");
     vi.stubEnv("VERCEL_ENV", "production");
     // Hide the newest migration from the check the way a un-migrated database
     // would, then confirm the message says what to do about it.

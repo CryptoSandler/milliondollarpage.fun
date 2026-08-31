@@ -4,14 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && rm -rf .next/cache && tsx scripts/check-build-secrets.mts",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:migrate": "tsx scripts/migrate.mts",
     "db:migrate:test": "tsx scripts/migrate.mts --test",
-    "db:up": "npm run db:migrate && npm run db:migrate:test"
+    "db:up": "npm run db:migrate && npm run db:migrate:test",
+    "check:secrets": "tsx scripts/check-build-secrets.mts"
   },
   "dependencies": {
     "next": "16.3.2",

@@ -5,7 +5,7 @@ import { prepareImage, type PreparedImage } from "../lib/board/image-encode";
 import { canHonourContain, type Box } from "../lib/board/image-fit";
 import { MAX_INPUT_BYTES, targetBox } from "../lib/board/image-plan";
 import { checkLink, normaliseLink } from "../lib/board/link";
-import { submitContent, type ClientOrder } from "../lib/board/purchase-client";
+import { submitContent, type ClientOrder, type WalletSigner } from "../lib/board/purchase-client";
 import { singleFlight } from "../lib/board/single-flight";
 import { STEP_CEILING_MS } from "../lib/board/timing";
 import {
@@ -36,6 +36,25 @@ export const EMPTY_DRAFT: ContentDraft = { file: null, link: "", caption: "", im
 const CAPTION_MAX_LENGTH = 32;
 
 const MAX_INPUT_MB = Math.round(MAX_INPUT_BYTES / (1024 * 1024));
+
+/**
+ * Why Continue is greyed out, said in the buyer's terms rather than in the
+ * protocol's.
+ *
+ * Attaching content is signed by the wallet holding the rectangle, because
+ * these three fields are what a payment makes permanent and an address on its
+ * own proved nothing — it is public, so anyone reading the board could have
+ * written on somebody else's hold. This page has an address typed into a field
+ * and no wallet behind it, so there is nothing here that can sign.
+ *
+ * It costs the buyer nothing they cannot get back, and the sentence says so.
+ */
+const NOTHING_TO_SIGN_WITH =
+  "What goes in a block is signed by the wallet holding it — the picture, the link and the " +
+  "caption are locked to the rectangle when it is paid for, and a signature is what proves the " +
+  "person choosing them holds it. This page has a wallet address typed into a field and no " +
+  "wallet behind it, so there is nothing here that can sign yet. Nothing has been charged, and " +
+  "these pixels go back on the board by themselves when the hold's clock runs out.";
 
 /** What the button says, which is also where the submission has got to. */
 type Stage = "idle" | "preparing" | "sending";
@@ -72,14 +91,22 @@ const FIELD_OF: Record<keyof ContentDraft, UploadField> = {
  */
 export default function ContentForm({
   order,
-  buyerPubkey,
+  sign,
   draft,
   onDraftChange,
   onSubmitted,
   onFatalError,
 }: {
   order: ClientOrder;
-  buyerPubkey: string;
+  /**
+   * The wallet that signs "attach this content to this order", or null when
+   * there is nothing on this page that can sign at all.
+   *
+   * Null disables Continue and says why beside it, rather than letting a
+   * buyer resize a photograph and fill in three fields for a request the
+   * server will refuse. See `NOTHING_TO_SIGN_WITH` above.
+   */
+  sign: WalletSigner | null;
   draft: ContentDraft;
   onDraftChange: (patch: Partial<ContentDraft>) => void;
   /**
@@ -124,6 +151,7 @@ export default function ContentForm({
   const linkId = useId();
   const captionId = useId();
   const fitId = useId();
+  const unsignedId = useId();
 
   // Derived, not stored: the URL is a pure function of `draft.file`, so it is
   // recomputed with useMemo rather than pushed into state from an effect.
@@ -298,7 +326,6 @@ export default function ContentForm({
     }
 
     const form = new FormData();
-    form.set("buyerPubkey", buyerPubkey);
     form.set("image", prepared.image.blob, prepared.image.filename);
     form.set("link", link);
     form.set("caption", draft.caption);
@@ -307,7 +334,7 @@ export default function ContentForm({
     setStage("sending");
     let result;
     try {
-      result = await call(order.id, form);
+      result = await call(order.id, form, sign);
     } catch (error) {
       if (!(error instanceof TimedOut)) throw error;
       setStage("idle");
@@ -539,6 +566,19 @@ export default function ContentForm({
         </p>
       )}
 
+      {/* Said beside the greyed-out button, not instead of it: a button that
+          is off with no reason given reads as broken. The same shape the
+          release button in PurchaseDialog uses, because it is the same
+          situation — a step that is signed, and nothing here to sign with. */}
+      {!sign && (
+        <p
+          id={unsignedId}
+          className="rounded-lg border border-hairline-strong bg-canvas px-3 py-2 text-[15px] leading-relaxed text-ink-soft"
+        >
+          {NOTHING_TO_SIGN_WITH}
+        </p>
+      )}
+
       <div className="flex items-center justify-between gap-4 border-t border-hairline pt-4">
         <p className="text-[14px] text-body">
           {ready ? (
@@ -551,7 +591,8 @@ export default function ContentForm({
         </p>
         <button
           type="submit"
-          disabled={!ready || busy}
+          disabled={!ready || busy || !sign}
+          aria-describedby={sign ? undefined : unsignedId}
           className="btn-primary shrink-0 px-5 py-2.5 text-[15px]"
         >
           {stage === "preparing"

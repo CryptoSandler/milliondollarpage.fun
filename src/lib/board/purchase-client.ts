@@ -1,6 +1,7 @@
 import type { ContentRejection } from "./content";
 import type { Rect } from "./geometry";
-import type { PublicOrder } from "./orders";
+import type { ProvenOrder, PublicOrder } from "./orders";
+import type { ChallengeAction } from "../wallet/signature";
 
 /**
  * The browser side of the four order endpoints.
@@ -17,20 +18,32 @@ import type { PublicOrder } from "./orders";
  * is consumed by "use client" components, and `../db` opens a real `pg`
  * connection at module scope.
  *
- * `ClientOrder` is `PublicOrder`, not `Order`: the server never sends a
- * buyer's pubkey back over the wire (see `toPublicOrder` in `orders.ts`), and
- * this type says so at compile time rather than a caller finding out by
- * reading `undefined` off a field that used to be there.
+ * `ClientOrder` is built from `PublicOrder`, not from `Order`: the server
+ * never sends a buyer's pubkey back over the wire (see `toPublicOrder` in
+ * `orders.ts`), and this type says so at compile time rather than a caller
+ * finding out by reading `undefined` off a field that used to be there.
  */
 
-export type ClientOrder = PublicOrder;
+/**
+ * An order as this browser holds it.
+ *
+ * `paymentBaseUnits` is OPTIONAL, and the `?` is the wire contract rather than
+ * an oversight. The amount is only ever sent to a caller who proved the key —
+ * the reservation this browser created, and the two signed responses — so a
+ * poll of `GET /api/orders/:id` comes back without it (see `toPublicOrder`).
+ * Anything that comes to need it has to handle its absence, which is exactly
+ * the situation a stranger's view puts it in.
+ */
+export type ClientOrder = PublicOrder & Partial<Pick<ProvenOrder, "paymentBaseUnits">>;
 
 /**
  * The header a buyer proves a hold is theirs with, on a GET.
  *
- * A HEADER and not a query string, for the same reason `releaseHold` puts the
- * pubkey in a DELETE body: it is the only credential this codebase has, and a
- * URL ends up in access logs, in `Referer`, and in a browser's own history.
+ * A HEADER and not a query string, for the same reason `releaseHold` puts its
+ * proof in a DELETE body: a URL ends up in access logs, in `Referer`, and in a
+ * browser's own history. Unlike that proof this header is a claim and nothing
+ * more, which is why the only thing it unlocks is the caption and link the
+ * caller wrote themselves.
  *
  * It lives in this file — imported by `src/app/api/orders/[id]/route.ts`,
  * which reads it — because this is the one module describing these four
@@ -170,23 +183,57 @@ export function fetchOrder(orderId: string, buyerPubkey?: string): Promise<Clien
   return send(() => fetch(`/api/orders/${orderId}`, { headers }));
 }
 
+const ATTACH_FALLBACK = "That content could not be attached.";
+const PAY_FALLBACK = "That order could not be settled.";
+
 /**
- * Attaches an image, link and caption to a held order. `form` is built by the
- * caller (it must include `buyerPubkey`, `image`, `link`, `caption` and
- * `imageFit`) so this module stays request/response mapping and does not
- * also own form assembly.
+ * Attaches an image, link and caption to a held order.
+ *
+ * `form` is built by the caller (it must include `image`, `link`, `caption`
+ * and `imageFit`) so this module stays request/response mapping and does not
+ * also own form assembly. The proof is NOT the caller's to assemble: the three
+ * fields below are added here, from a challenge this function asked for and
+ * the wallet signed, because what the buyer is shown before they sign is a
+ * sentence about attaching content and a form that could name its own act
+ * would be a form that could ask for a signature over something else.
+ *
+ * `buyerPubkey` used to be one of those fields, and it authenticated nobody:
+ * an address is public, so a stranger who knew it could write their own
+ * picture and link onto a hold moments before its buyer paid — permanently,
+ * because content on a paid block can never be edited.
  */
-export function submitContent(orderId: string, form: FormData): Promise<ClientResult> {
+export async function submitContent(
+  orderId: string,
+  form: FormData,
+  sign: WalletSigner | null,
+): Promise<ClientResult> {
+  const proven = await prove(orderId, "attach", sign, ATTACH_FALLBACK);
+  if (!proven.ok) return proven;
+
+  form.set("nonce", proven.proof.nonce);
+  form.set("publicKey", proven.proof.publicKey);
+  form.set("signature", proven.proof.signature);
+
   return send(() => fetch(`/api/orders/${orderId}/content`, { method: "POST", body: form }));
 }
 
-/** Confirms payment via the batch-3 payment stub. */
-export function confirmOrder(orderId: string, buyerPubkey: string): Promise<ClientResult> {
+/**
+ * Confirms payment via the batch-3 payment stub, signed the same way.
+ *
+ * The signature is the buyer saying "settle this order", and it is what the
+ * server checks before it marks anything paid. When the on-chain half lands
+ * this call does not change shape: the transfer is read from the chain, and
+ * this proof is still what says the wallet asked for it.
+ */
+export async function confirmOrder(orderId: string, sign: WalletSigner | null): Promise<ClientResult> {
+  const proven = await prove(orderId, "pay", sign, PAY_FALLBACK);
+  if (!proven.ok) return proven;
+
   return send(() =>
     fetch(`/api/orders/${orderId}/confirm`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ buyerPubkey }),
+      body: JSON.stringify(proven.proof),
     }),
   );
 }
@@ -201,10 +248,10 @@ export type ReleaseResult = { ok: true } | ClientFailure;
  * passed through untouched: a client that reassembled the format would be a
  * second copy of it, free to drift from the one the verifier uses.
  */
-export type ReleaseSigner = (message: string) => Promise<{ publicKey: string; signature: string }>;
+export type WalletSigner = (message: string) => Promise<{ publicKey: string; signature: string }>;
 
 /**
- * The wallet that would sign a release. There isn't one.
+ * The wallet that would sign. There isn't one.
  *
  * A function rather than a constant so nothing narrows it to `null` at the
  * point of use, and so wiring a real adapter in later is an edit to one
@@ -212,16 +259,47 @@ export type ReleaseSigner = (message: string) => Promise<{ publicKey: string; si
  *
  * `buyerPubkey` in this app is a string somebody typed into a field. Nothing
  * in the browser holds the key behind it, so nothing in the browser can sign
- * anything, and `releaseHold` says so rather than sending a request the
- * server will rightly refuse. See DESIGN.md for what the buyer is told.
+ * anything, and every call below that needs a signature says so rather than
+ * sending a request the server will rightly refuse. It was `releaseSigner`
+ * when letting a hold go was the only signed step; attaching content and
+ * settling an order are signed now too. See DESIGN.md for what the buyer is
+ * told while there is nothing here to sign with.
  */
-export function releaseSigner(): ReleaseSigner | null {
+export function walletSigner(): WalletSigner | null {
   return null;
 }
 
-const NO_WALLET_MESSAGE =
-  "Letting a hold go has to be signed by the wallet that started it, and there is no wallet " +
-  "connected to this page yet.";
+/**
+ * Why a signed step cannot start, said per act.
+ *
+ * Three sentences rather than one, because a buyer meets these at three
+ * different moments and a generic "no wallet connected" would not tell them
+ * what they have just failed to do.
+ */
+const NO_WALLET_MESSAGE: Record<ChallengeAction, string> = {
+  release:
+    "Letting a hold go has to be signed by the wallet that started it, and there is no wallet " +
+    "connected to this page yet.",
+  attach:
+    "What goes in a block has to be signed by the wallet holding it, and there is no wallet " +
+    "connected to this page yet.",
+  pay:
+    "Settling an order has to be signed by the wallet that holds it, and there is no wallet " +
+    "connected to this page yet.",
+};
+
+/**
+ * What a buyer reads when they said no to their own wallet.
+ *
+ * A wallet throws when the person declines, and declining is an answer rather
+ * than a fault — so each of these says what did NOT happen, in the words of
+ * the step they were on.
+ */
+const REFUSED_MESSAGE: Record<ChallengeAction, string> = {
+  release: "That signature was not given, so the hold was left exactly as it was.",
+  attach: "That signature was not given, so nothing was attached to your block.",
+  pay: "That signature was not given, so nothing was paid and these pixels are still held for you.",
+};
 
 /** Reads `problem()`'s body off a failed response, falling back to `fallback`. */
 async function failureFrom(response: Response, fallback: string): Promise<ClientFailure> {
@@ -243,15 +321,63 @@ const RELEASE_FALLBACK = "That hold could not be let go.";
 
 type IssuedChallenge = { nonce: string; message: string };
 
+/** The three strings the server checks. Assembled here and never anywhere else. */
+type OwnershipProof = { nonce: string; publicKey: string; signature: string };
+
+/**
+ * Ask for a single-use sentence, have the wallet sign it, and hand back what
+ * to present — or the sentence the buyer reads instead.
+ *
+ * The one place in the browser that talks to `/api/orders/:id/challenge`, so
+ * all three signed steps ask in the same shape and get the same handling of a
+ * missing wallet, a refused prompt and a network failure. The message is never
+ * rebuilt here: it is signed exactly as the server wrote it, which is what
+ * lets the server rebuild it from the challenge row and compare.
+ */
+async function prove(
+  orderId: string,
+  action: ChallengeAction,
+  sign: WalletSigner | null,
+  fallback: string,
+): Promise<{ ok: true; proof: OwnershipProof } | ClientFailure> {
+  if (!sign) return { ok: false, status: 0, message: NO_WALLET_MESSAGE[action] };
+
+  let issued: Response;
+  try {
+    issued = await fetch(`/api/orders/${orderId}/challenge`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+  } catch {
+    return { ok: false, status: 0, message: NETWORK_FAILURE_MESSAGE };
+  }
+  if (!issued.ok) return failureFrom(issued, fallback);
+
+  let challenge: IssuedChallenge;
+  try {
+    challenge = (await issued.json()) as IssuedChallenge;
+  } catch {
+    return { ok: false, status: 0, message: fallback };
+  }
+
+  try {
+    const signed = await sign(challenge.message);
+    return { ok: true, proof: { nonce: challenge.nonce, ...signed } };
+  } catch {
+    // A wallet throws when the person says no. That is an answer, not a fault.
+    return { ok: false, status: 0, message: REFUSED_MESSAGE[action] };
+  }
+}
+
 /**
  * Hands a hold back before its clock runs out.
  *
- * Two requests, because releasing is now something you prove rather than
- * something you claim: ask `/release-challenge` for a single-use sentence,
- * have the wallet sign it, and present nonce + address + signature to the
- * DELETE. The address used to travel on its own, which authenticated nobody —
- * a wallet address is public, so anyone who could read the board could
- * release anyone's rectangle.
+ * Two requests, because releasing is something you prove rather than
+ * something you claim: ask for a single-use sentence, have the wallet sign
+ * it, and present nonce + address + signature to the DELETE. The address used
+ * to travel on its own, which authenticated nobody — a wallet address is
+ * public, so anyone who could read the board could release anyone's rectangle.
  *
  * Its own function rather than another `send` call: the endpoint answers 204
  * with no body, and `send` exists to turn a body into a `ClientOrder`. Forcing
@@ -265,43 +391,17 @@ type IssuedChallenge = { nonce: string; message: string };
  */
 export async function releaseHold(
   orderId: string,
-  sign: ReleaseSigner | null,
+  sign: WalletSigner | null,
 ): Promise<ReleaseResult> {
-  if (!sign) return { ok: false, status: 0, message: NO_WALLET_MESSAGE };
-
-  let issued: Response;
-  try {
-    issued = await fetch(`/api/orders/${orderId}/release-challenge`, { method: "POST" });
-  } catch {
-    return { ok: false, status: 0, message: NETWORK_FAILURE_MESSAGE };
-  }
-  if (!issued.ok) return failureFrom(issued, RELEASE_FALLBACK);
-
-  let challenge: IssuedChallenge;
-  try {
-    challenge = (await issued.json()) as IssuedChallenge;
-  } catch {
-    return { ok: false, status: 0, message: RELEASE_FALLBACK };
-  }
-
-  let signed: { publicKey: string; signature: string };
-  try {
-    signed = await sign(challenge.message);
-  } catch {
-    // A wallet throws when the person says no. That is an answer, not a fault.
-    return {
-      ok: false,
-      status: 0,
-      message: "That signature was not given, so the hold was left exactly as it was.",
-    };
-  }
+  const proven = await prove(orderId, "release", sign, RELEASE_FALLBACK);
+  if (!proven.ok) return proven;
 
   let response: Response;
   try {
     response = await fetch(`/api/orders/${orderId}`, {
       method: "DELETE",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ nonce: challenge.nonce, ...signed }),
+      body: JSON.stringify(proven.proof),
     });
   } catch {
     return { ok: false, status: 0, message: NETWORK_FAILURE_MESSAGE };

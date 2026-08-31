@@ -227,8 +227,8 @@ export async function recordLoginAttempt(
 const ADMIN_SWEEP_DAYS = 30;
 
 /**
- * Sweeps both admin tables the way `issueReleaseChallenge` sweeps
- * `release_challenges` (`board/release-challenge.ts`): from the write path
+ * Sweeps both admin tables the way `issueChallenge` sweeps
+ * `release_challenges` (`board/challenge.ts`): from the write path
  * that produces the rows, not from a job of its own. Neither table has any
  * sweep otherwise, so both would grow forever — slowly, which is exactly why
  * nothing would ever notice.

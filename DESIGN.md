@@ -449,27 +449,34 @@ in the same order.
 | Sold, loading or missing | Solid `#443a2c`, edge to edge, 1px ink edge. This is the **fallback**, not the sold treatment: what the rectangle shows in the moment before the wall arrives, and what it keeps if its own bytes never decode. Every sold rectangle gets it under the wall on every frame until the wall has decoded, so a sale reads as taken from the first paint; after that the artwork covers it. An upload with an alpha channel is composited onto the paper cream inside its own rectangle rather than onto this, and never onto the ruling — a sold rectangle is never ruled |
 | Taken down | Exactly like free, and it is **not** free. The content is gone from the wall and from every endpoint; the rectangle is still sold, still its owner's, and the selector still refuses it. Nothing on the board says a takedown happened, because a takedown is about what is displayed and the board is not a moderation log |
 
-## Letting a hold go
+## What has to be signed
 
-Handing a rectangle back is the one thing on this page that has to be **signed
-by the wallet holding it**. The address on its own proved nothing: the board
+Three things on this page are **signed by the wallet that holds the
+rectangle**: handing a hold back, choosing what goes in the block, and
+settling the purchase. The address on its own proved nothing: the board
 publishes every live block's id, and a wallet address is public wherever it
-exists, so anything that trusted the address alone let a stranger let go of
-somebody else's pixels.
+exists, so anything that trusted the address alone let a stranger act on
+somebody else's pixels — let go of them, or write the picture, link and
+caption that the buyer's own payment then makes permanent.
+
+Selecting a rectangle and holding it are **not** signed, and should not be. A
+hold is free, it expires on its own, and asking a person to sign before they
+have seen what they are buying is asking them to approve nothing in
+particular.
 
 **Right now nothing here can sign.** The wallet field takes an address a buyer
 types in; there is no wallet connected, no key in the browser, and so no
-signature to give. The button that hands a hold back is therefore **off, and
-says why** — greyed, with the reason in plain words beside it, rather than
-looking ready and refusing when it is pressed. A control that looks live and
-then fails costs more trust than one that was honest about being unavailable.
+signature to give. Each of the three buttons is therefore **off, and says
+why** — greyed, with the reason in plain words beside it, rather than looking
+ready and refusing when it is pressed. A control that looks live and then
+fails costs more trust than one that was honest about being unavailable.
 
-Nothing is lost while it is off, and the sentence beside the button says so: a
-hold ends by itself after thirty minutes and the pixels go back on the board,
-and a hold the buyer still wants is theirs to pick up again straight off the
-board, ring and countdown intact. This is temporary, and it undoes itself the
-day a wallet is connected — the button reads whether anything can sign rather
-than a flag somebody has to remember to flip.
+Nothing is lost while they are off, and each sentence says so: nothing has
+been charged, a hold ends by itself and the pixels go back on the board, and a
+hold the buyer still wants is theirs to pick up again straight off the board,
+ring and countdown intact. This is temporary, and it undoes itself the day a
+wallet is connected — every one of those buttons reads whether anything can
+sign rather than a flag somebody has to remember to flip.
 
 When a release *is* attempted, what the buyer is told afterwards is whatever
 actually happened, never what was assumed beforehand: the hold is gone and the
