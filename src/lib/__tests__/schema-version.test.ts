@@ -41,7 +41,10 @@ describe("assertSchemaIsCurrent", () => {
     vi.doMock("../schema-version", () => ({ EXPECTED_MIGRATION: "999_not_applied" }));
     vi.resetModules();
     const { assertSchemaIsCurrent: fresh } = await import("../config");
-    await expect(fresh()).rejects.toThrow(/999_not_applied.*db:migrate/s);
+    // Two assertions rather than one dot-all regex: the `s` flag needs a newer
+    // target than this project type-checks against, and the message spans lines.
+    await expect(fresh()).rejects.toThrow(/999_not_applied/);
+    await expect(fresh()).rejects.toThrow(/db:migrate/);
     vi.doUnmock("../schema-version");
     vi.resetModules();
     vi.unstubAllEnvs();
