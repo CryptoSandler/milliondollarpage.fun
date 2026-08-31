@@ -284,8 +284,14 @@ carries four pixels of padding for the ring to live in, handed back to the
 layout with an equal negative margin so nothing moves. Found the only way it
 can be found: three of the four sides of the wallet's Connect button came back
 `#fbf5e8` out of a screenshot while the stylesheet said `2px solid
-var(--primary)` the whole time. **The size-preset row has the same shape and
-the same clipping, and is recorded here rather than changed on the way past.**
+var(--primary)` the whole time. **The size-preset row had the same shape and the
+same clipping; it was recorded here rather than changed on the way past, and has
+since been fixed the same way.** Both rows are now pinned by the same screenshot
+test, which samples the ring on all four sides of a control in each row and in
+each layout — the presets row came back `#be441d` on one side, four points off
+the accent and unmistakably the ring, so the comparison allows a blended edge
+pixel while a clipped side (cream, 150-plus points away per channel) still
+fails.
 
 **The accent deepened by six points of lightness, and that was measured rather
 than chosen.** It used to be `#dd4e22`. On-primary cream (`#fff8ef`) on that

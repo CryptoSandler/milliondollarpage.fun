@@ -74,7 +74,17 @@ export default function SelectionPanel({
 }) {
   return (
     <section className="selection-panel flex min-w-0 flex-1 items-center gap-x-4">
-      <div className="selection-presets scrollbar-none flex min-w-0 max-w-[5rem] shrink items-center gap-1.5 overflow-x-auto sm:max-w-none">
+      {/*
+        The same four pixels as the wallet row, for the same reason and found the
+        same way. `overflow-x: auto` clips at the padding box, so without `p-1`
+        the 2px focus ring at its 2px offset is cut off on every preset button
+        here; `-m-1` returns the space to the layout so nothing moves. The wallet
+        control was measured first and this row was reported as having the same
+        shape rather than fixed at the same time, because it was outside that
+        batch's remit — this is that report being acted on. See WalletConnect.tsx
+        for the sampled evidence.
+      */}
+      <div className="selection-presets scrollbar-none -m-1 flex min-w-0 max-w-[5rem] shrink items-center gap-1.5 overflow-x-auto p-1 sm:max-w-none">
         {/* Freehand is the default and, below `sm`, tapping the active preset
             already returns to it — so this is the one control the phone drops. */}
         <button

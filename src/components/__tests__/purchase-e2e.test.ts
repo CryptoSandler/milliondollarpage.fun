@@ -266,24 +266,41 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
    * 4.64:1 against the `card-warm` these buttons sit on.
    */
   it(
-    "keeps the focus ring on the connect control, in both layouts",
+    "keeps the focus ring on every control inside a scrolling row, in both layouts",
     async () => {
+      // Both rows use `overflow-x: auto` and both therefore clip their focus
+      // ring at the padding box. The wallet row was measured first; the presets
+      // row was REPORTED as having the same shape and is fixed here, so both
+      // are pinned by the same pixels rather than one being trusted to stay
+      // right because its neighbour is.
+      const controls = [
+        ['[aria-label="Connect Mock Wallet"]', "the Connect button"],
+        [".selection-presets button", "the first size preset"],
+      ] as const;
+
       for (const [layout, width, height] of [
         ["side panel", 1280, 900],
         ["bottom bar", 560, 900],
       ] as const) {
+       for (const [selector, what] of controls) {
         await browser.resize(width, height);
         await browser.goto(`${server.origin}/`);
-        await waitFor(`the Connect button in the ${layout}`, () =>
-          browser.evaluate<boolean>(`!!document.querySelector('[aria-label="Connect Mock Wallet"]')`),
+        /*
+         * The VISIBLE one. Both layouts are in the DOM at once and CSS hides
+         * the one that does not apply, so a bare `querySelector` returns the
+         * hidden copy at one of the two widths — which cannot take focus, and
+         * fails in a way that looks like a missing focus ring rather than like
+         * the wrong element.
+         */
+        const visible = `[...document.querySelectorAll(${JSON.stringify(selector)})].find((el) => el.offsetParent !== null)`;
+        await waitFor(`${what} in the ${layout}`, () =>
+          browser.evaluate<boolean>(`!!(${visible})`),
         );
 
-        await browser.evaluate(
-          `document.querySelector('[aria-label="Connect Mock Wallet"]').focus({ focusVisible: true })`,
-        );
+        await browser.evaluate(`(${visible}).focus({ focusVisible: true })`);
         expect(
           await browser.evaluate<boolean>(`document.activeElement.matches(":focus-visible")`),
-          `the Connect button should be showing a focus ring in the ${layout}`,
+          `${what} should be showing a focus ring in the ${layout}`,
         ).toBe(true);
 
         const box = JSON.parse(
@@ -312,15 +329,30 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
           top: hex(midX, box.top - 3),
           bottom: hex(midX, box.bottom + 2),
         };
-        expect(sides, `the ring around the Connect button in the ${layout}`).toEqual({
-          left: "#c2451e",
-          right: "#c2451e",
-          top: "#c2451e",
-          bottom: "#c2451e",
-        });
+        /*
+         * Compared with a tolerance, not for exact equality.
+         *
+         * The failure being guarded is a side painting the BACKGROUND — the
+         * panel's `#fbf5e8` cream, which is what a clipped ring looks like and
+         * is 150-plus points away per channel. What a tolerance allows through
+         * is a pixel the renderer blended at an edge: the presets row came back
+         * `#be441d` on its top side, four points off `#c2451e` and unmistakably
+         * the ring. Demanding the exact hex there would fail on anti-aliasing
+         * and teach the next person to delete the test.
+         */
+        const RING: [number, number, number] = [0xc2, 0x45, 0x1e];
+        for (const [side, sampled] of Object.entries(sides)) {
+          const channels = [1, 3, 5].map((at) => Number.parseInt(sampled.slice(at, at + 2), 16));
+          const drift = Math.max(...channels.map((value, index) => Math.abs(value - RING[index])));
+          expect(
+            drift,
+            `${side} of ${what} in the ${layout} sampled ${sampled}, which is not the focus ring`,
+          ).toBeLessThanOrEqual(12);
+        }
+       }
       }
     },
-    180_000,
+    240_000,
   );
 
   /**
