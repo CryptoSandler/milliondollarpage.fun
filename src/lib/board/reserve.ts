@@ -220,8 +220,18 @@ async function blockingRows(rect: Rect): Promise<BlockingRow[]> {
  *   genuinely unavailable and resuming would be a lie.
  * - *`reserved`*, because a `paid` or `minted` row of your own is a finished
  *   sale, not a hold to pick back up.
- * - *Same buyer*, because the pubkey is the only credential this codebase
- *   has; resuming on a mismatch would hand a stranger somebody else's order.
+ * - *Same buyer*, because a hold belongs to one address; resuming on a
+ *   mismatch would hand a stranger somebody else's order. It is an address
+ *   and not a signature, which is as much as a resume can ask for — the
+ *   caller is asking for a rectangle, not acting on an order, and there is
+ *   nothing here for them to sign yet. What that buys is bounded: writing on
+ *   the order is signed (see `challenge.ts`), so the most a stranger who
+ *   already knows an address and its exact rectangle gets back is this hold's
+ *   own numbers, `paymentBaseUnits` among them. That last one is withheld
+ *   from every unproven caller on `GET /api/orders/:id` (see `toPublicOrder`),
+ *   and closing this door too means returning it only for a freshly inserted
+ *   row — worth doing the day anything is riding on the fraction staying
+ *   unguessable, which today nothing is.
  * - *Exactly the same rectangle*, because a partial overlap — you hold
  *   (100,100,20,20) and ask for (110,110,20,20) — is a different purchase.
  *   Silently resizing or silently substituting the old hold would both be

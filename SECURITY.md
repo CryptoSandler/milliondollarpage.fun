@@ -39,7 +39,18 @@ guard is in the application: `attachContent` refuses once an order is paid, so
 the caption, the link, the image and the fit are writable up to the payment and
 not after. There is no database constraint behind that, unlike ownership, so
 the honest statement is that content immutability is currently a code path
-somebody could remove. When minting lands, the on-chain half becomes the real
+somebody could remove.
+
+*Who* may write in that window is now held up by something, which it was not
+before: `POST /api/orders/:id/content` and `POST /api/orders/:id/confirm` both
+require a signature over a single-use challenge naming the order and the act
+(`migrations/003_release_challenges.sql`,
+`migrations/010_challenge_actions.sql`, `src/lib/board/challenge.ts`), so the
+only wallet that can decide what a payment makes permanent is the one holding
+the rectangle. Until 2026-08-31 both routes took the buyer's address out of the
+request body and compared it against `blocks.buyer_pubkey`, which compared one
+public value with another; the audit at `docs/security-audit-money-permanence.md`
+records that as F1 and what it made possible. When minting lands, the on-chain half becomes the real
 one: every asset carries `ImmutableMetadata`, which permanently locks its name
 and URI, and the metadata JSON on Arweave is content-addressed. See "What the
 key can and cannot do" below.

@@ -158,19 +158,35 @@ export async function getOrder(id: string): Promise<Order | null> {
 }
 
 /** An `Order` with everything a route may safely hand back to any caller. */
-export type PublicOrder = Omit<Order, "buyerPubkey">;
+export type PublicOrder = Omit<Order, "buyerPubkey" | "paymentBaseUnits">;
 
 /**
- * Strips `buyerPubkey` — and anyone else's unpaid words — before an `Order`
- * leaves this module for an HTTP response.
+ * A `PublicOrder` plus the one number only its buyer may have.
  *
- * `buyerPubkey` is the one thing every ownership check in this file compares
- * against — the whole reason `/content` and `/confirm` can trust a caller is
- * that only the real buyer is supposed to know it. `/board` already publishes
- * every live block's id, so an `Order` returned with its `buyerPubkey` intact
- * would let anyone chain "read the board" -> "GET this order" -> "POST
- * content as its buyer" and overwrite a stranger's hold. Every route that
- * returns an `Order` must send this, never the `Order` itself.
+ * Returned exclusively by the two routes that verified a signature over a
+ * single-use challenge before they wrote anything — `/content` and `/confirm`
+ * — so the amount reaches the wallet that proved the key and nothing else.
+ */
+export type ProvenOrder = PublicOrder & { paymentBaseUnits: number };
+
+/**
+ * Strips `buyerPubkey`, the payable amount, and anyone else's unpaid words
+ * before an `Order` leaves this module for an HTTP response.
+ *
+ * `buyerPubkey` was, until the signed routes landed, the whole credential this
+ * codebase had. It is no longer trusted on its own anywhere, and it is still
+ * not published: an address is what an ownership check compares against, and
+ * handing it out invites the next reader to build a check that trusts it.
+ *
+ * `paymentBaseUnits` is the total plus this order's unique payment fraction,
+ * and the fraction is the attribution key — it is what will let the payment
+ * verifier say which order an incoming transfer settled (`reserve.ts`). A
+ * stranger who can read that number off `GET /api/orders/:id` can watch the
+ * treasury for a transfer of exactly that amount and learn the pair (order id,
+ * payer pubkey) from a public chain. That pair used to BE the credential for
+ * `/content`; it no longer is, and this stays withheld anyway, because the
+ * pairing is a fact about a buyer that nothing on this site needs to publish.
+ * The buyer's own client gets it from `toProvenOrder` below.
  *
  * `viewer` is the pubkey the caller proved, or null for a caller who proved
  * nothing — and it is REQUIRED rather than defaulted, so a new route has to
@@ -195,13 +211,34 @@ export function toPublicOrder(order: Order, viewer: string | null): PublicOrder 
     status: order.status,
     pricePerPixelBaseUnits: order.pricePerPixelBaseUnits,
     totalBaseUnits: order.totalBaseUnits,
-    paymentBaseUnits: order.paymentBaseUnits,
     expiresAt: order.expiresAt,
     hasContent: order.hasContent,
     caption: showText ? order.caption : null,
     link: showText ? order.link : null,
     imageFit: order.imageFit,
     isAnimated: order.isAnimated,
+  };
+}
+
+/**
+ * The same order, with the payable amount, for a caller who has just proved
+ * they hold the key it belongs to.
+ *
+ * Its two callers are `/content` and `/confirm`, and both reach it on the far
+ * side of `consumeChallenge` returning this order's own `buyerPubkey` — a
+ * signature over a single-use nonce, not an address somebody typed. Neither
+ * route could assemble this itself without restating what `toPublicOrder`
+ * withholds and why, which is the copy that would be edited in one place and
+ * not the other.
+ *
+ * It takes no `viewer`: there is exactly one caller this is ever correct for,
+ * and passing the order's own buyer says that at the callsite rather than
+ * leaving a second route free to hand a stranger the amount by passing null.
+ */
+export function toProvenOrder(order: Order): ProvenOrder {
+  return {
+    ...toPublicOrder(order, order.buyerPubkey),
+    paymentBaseUnits: order.paymentBaseUnits,
   };
 }
 
