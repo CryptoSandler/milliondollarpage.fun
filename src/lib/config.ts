@@ -178,7 +178,16 @@ export async function assertSchemaIsCurrent(): Promise<void> {
   );
   const applied = rows[0]?.version ?? "(none)";
 
-  if (applied !== EXPECTED_MIGRATION) {
+  // BEHIND is the fault. AHEAD is not, and the first version of this check got
+  // that wrong: it compared for equality, so migrating production before the
+  // new build finished deploying took the site down until it did. That ordering
+  // is not a mistake to avoid — it is the correct one for a migration that adds
+  // things, and it is what every rolling deploy looks like for a minute.
+  //
+  // Migration names are zero-padded and ordered, so a string comparison is the
+  // ordering. `(none)` sorts before every real name, which is the right answer
+  // for a database with no migrations at all.
+  if (applied < EXPECTED_MIGRATION) {
     throw new Error(
       `The database is at migration ${applied} but this build expects ` +
         `${EXPECTED_MIGRATION}. Run "npm run db:migrate" against it before serving: ` +
