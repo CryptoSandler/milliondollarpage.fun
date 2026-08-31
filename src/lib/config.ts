@@ -146,3 +146,43 @@ export function assertUntrustedClientIpNotInProduction(): void {
     );
   }
 }
+
+/**
+ * Refuses to serve a deployed instance whose database is behind this build.
+ *
+ * WHAT IT PREVENTS, from a real incident: the first production deploy of this
+ * project answered 500 on every route because the database was four migrations
+ * behind. The logs said `column "hidden_at" does not exist`, which reads like a
+ * bug in a query rather than a database nobody had migrated. This turns that
+ * into one sentence naming both versions, at boot, once.
+ *
+ * ASYNC, AND THEREFORE NOT ONE OF THE SYNCHRONOUS ASSERTS: it asks the
+ * database. `register()` awaits it before the instance serves anything.
+ *
+ * IT DOES NOT MIGRATE. Applying migrations from a booting web server is how two
+ * instances race each other through the same DDL; migrating stays a deliberate
+ * command somebody runs.
+ *
+ * It only fires when deployed. A developer mid-migration gets the ordinary
+ * error, because on a laptop the fix is `npm run db:up` and the noise is not
+ * worth it.
+ */
+export async function assertSchemaIsCurrent(): Promise<void> {
+  if (!isDeployed()) return;
+
+  const { EXPECTED_MIGRATION } = await import("./schema-version");
+  const { query } = await import("./db");
+
+  const rows = await query<{ version: string }>(
+    "SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1",
+  );
+  const applied = rows[0]?.version ?? "(none)";
+
+  if (applied !== EXPECTED_MIGRATION) {
+    throw new Error(
+      `The database is at migration ${applied} but this build expects ` +
+        `${EXPECTED_MIGRATION}. Run "npm run db:migrate" against it before serving: ` +
+        "every route that touches a column added since then would answer 500.",
+    );
+  }
+}
