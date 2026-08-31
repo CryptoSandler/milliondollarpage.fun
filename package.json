@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build && rm -rf .next/cache && tsx scripts/check-build-secrets.mts",
+    "build": "next build && rm -rf .next/cache .next-e2e/cache .next-e2e/dev/cache && tsx scripts/check-build-secrets.mts",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
