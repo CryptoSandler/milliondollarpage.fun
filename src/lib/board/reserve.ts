@@ -85,7 +85,23 @@ export type Reservation = {
   pixels: number;
   pricePerPixelBaseUnits: number;
   totalBaseUnits: number;
-  paymentBaseUnits: number;
+  /**
+   * The total plus this order's unique attribution fraction — the exact amount
+   * a transfer must carry for the chain to say which order it settled.
+   *
+   * OPTIONAL, AND ABSENT ON A RESUMED HOLD. A fresh hold was created by this
+   * very request, so the caller provably made it and there is nobody else to
+   * withhold it from. A resume proves nothing: a wallet address is public by
+   * construction, so anyone who knows an address and its exact rectangle could
+   * ask for it, and the fraction is what lets an observer match a transfer on
+   * the chain to an order id. `toPublicOrder` already withholds it from every
+   * unproven caller on `GET /api/orders/:id`; this was the remaining door, and
+   * `reserve.ts`'s own comment named it before the audit did.
+   *
+   * A buyer who resumed still gets it when they need it: `/content` answers a
+   * signed request with a `ProvenOrder`, and that is the screen that pays.
+   */
+  paymentBaseUnits?: number;
   expiresAt: string;
 };
 
@@ -227,11 +243,10 @@ async function blockingRows(rect: Rect): Promise<BlockingRow[]> {
  *   nothing here for them to sign yet. What that buys is bounded: writing on
  *   the order is signed (see `challenge.ts`), so the most a stranger who
  *   already knows an address and its exact rectangle gets back is this hold's
- *   own numbers, `paymentBaseUnits` among them. That last one is withheld
- *   from every unproven caller on `GET /api/orders/:id` (see `toPublicOrder`),
- *   and closing this door too means returning it only for a freshly inserted
- *   row — worth doing the day anything is riding on the fraction staying
- *   unguessable, which today nothing is.
+ *   own numbers — and no longer `paymentBaseUnits`, which is the door this
+ *   comment used to leave open and `toReservation` below now closes. The
+ *   fraction travels only on a freshly inserted row, where the caller made it
+ *   in this request, or past a signature on `/content`.
  * - *Exactly the same rectangle*, because a partial overlap — you hold
  *   (100,100,20,20) and ask for (110,110,20,20) — is a different purchase.
  *   Silently resizing or silently substituting the old hold would both be
@@ -267,7 +282,9 @@ function toReservation(row: BlockingRow, rect: Rect, pixels: number): Reservatio
     pixels,
     pricePerPixelBaseUnits: Number(row.price_per_pixel_usdc),
     totalBaseUnits: total,
-    paymentBaseUnits: total + (row.payment_fraction ?? 0),
+    // No `paymentBaseUnits`. See the field's own comment: a resume is asked for
+    // with a public address, so this is the one path that would hand the
+    // attribution fraction to somebody who proved nothing.
     expiresAt: row.expires_at!.toISOString(),
   };
 }
