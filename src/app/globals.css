@@ -515,6 +515,25 @@ h3 {
     padding-left: 0;
   }
 
+  /*
+   * The same rail, on `/stats`, where it is a section of a page rather than
+   * chrome fixed to a window. Everything that makes it a rail — the fixed
+   * position, the bottom edge, the media query that hides it on a phone — is
+   * undone here, and nothing about the rows changes. `/stats` carries it
+   * because the board deliberately does not show it in the bottom-bar layout,
+   * and a phone should still be able to read the register.
+   */
+  .stats-tape .board-tape {
+    position: static;
+    display: flex;
+    align-items: stretch;
+    height: 76px;
+    padding: 4px 12px;
+    background: var(--card-warm);
+    border-top: 0;
+    box-shadow: none;
+  }
+
   /* Same as the top bar on a phone: the gaps close before anything in the row
      is allowed to wrap or scroll out of reach. In the components layer rather
      than beside the token overrides above, so the side-panel layout — which
