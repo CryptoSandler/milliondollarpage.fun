@@ -10,12 +10,14 @@ import type { Point } from "../lib/board/geometry";
 import { holdMinutes } from "../lib/board/hold-clock";
 import { walletSigner } from "../lib/board/purchase-client";
 import type { Selection } from "../lib/board/selection";
+import type { TapeRow } from "../lib/board/tape";
 import { BOARD_INSET, type Chrome } from "../lib/canvas/viewport";
 import BlockCard from "./BlockCard";
 import BoardCanvas, { type ZoomControls, type ZoomState } from "./BoardCanvas";
 import BoardCounters from "./BoardCounters";
 import InteractionLegend from "./InteractionLegend";
 import PurchaseDialog from "./PurchaseDialog";
+import PurchaseTape from "./PurchaseTape";
 import SelectionPanel from "./SelectionPanel";
 import WalletConnect from "./WalletConnect";
 import { useWallet } from "./useWallet";
@@ -32,6 +34,10 @@ type BoardPayload = {
   wall: Wall | null;
   stats: BoardStats;
   pricePerPixelBaseUnits: number;
+  /** The settled-purchase register along the bottom. See `PurchaseTape`. */
+  tape: TapeRow[];
+  /** When the server built this payload, so the tape's ages hydrate cleanly. */
+  asOf: string;
 };
 
 // Matches the --bar-top-h / --bar-bottom-h defaults in globals.css: the very
@@ -113,6 +119,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
   const [ownHoldIds, setOwnHoldIds] = useState<string[]>([]);
   const topBarRef = useRef<HTMLElement>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
+  const tapeRef = useRef<HTMLElement>(null);
   /**
    * The board canvas, held here rather than inside BoardCanvas.
    *
@@ -395,11 +402,20 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
   useEffect(() => {
     const topEl = topBarRef.current;
     const controlsEl = controlsRef.current;
-    if (!topEl || !controlsEl) return;
+    const tapeEl = tapeRef.current;
+    if (!topEl || !controlsEl || !tapeEl) return;
 
     function measure() {
       const top = topEl!.offsetHeight || FALLBACK_CHROME.top;
       const box = controlsEl!.getBoundingClientRect();
+      // The settled-purchase rail. `display: none` below the side-panel
+      // layout, and an element that is not displayed measures zero — so this
+      // one number covers both layouts without a second media query in JS,
+      // exactly as the panel/bar decision above is read back off a box rather
+      // than re-asked. It is measured rather than taken from --tape-h for the
+      // same reason everything else here is: the rail's real height includes
+      // whatever line-height and rem sizing the browser actually applied.
+      const tape = tapeEl!.getBoundingClientRect().height;
       // A controls block narrower than the window is the side panel, anchored
       // to the left edge; one that spans the window is the bottom bar.
       const side = box.width > 0 && box.width < window.innerWidth - 1;
@@ -418,13 +434,13 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           ? {
               top: top + BOARD_INSET,
               right: BOARD_INSET,
-              bottom: BOARD_INSET,
+              bottom: tape + BOARD_INSET,
               left: box.right + BOARD_INSET,
             }
           : {
               top: top + BOARD_INSET,
               right: BOARD_INSET,
-              bottom: (box.height || FALLBACK_BAR_BOTTOM) + BOARD_INSET,
+              bottom: (box.height || FALLBACK_BAR_BOTTOM) + tape + BOARD_INSET,
               left: BOARD_INSET,
             },
       );
@@ -434,6 +450,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
     const observer = new ResizeObserver(measure);
     observer.observe(topEl);
     observer.observe(controlsEl);
+    observer.observe(tapeEl);
     return () => observer.disconnect();
   }, []);
 
@@ -489,6 +506,8 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           Questions
         </Link>
       </header>
+
+      <PurchaseTape ref={tapeRef} rows={board.tape} asOf={board.asOf} />
 
       <div ref={controlsRef} className="board-controls">
         <SelectionPanel

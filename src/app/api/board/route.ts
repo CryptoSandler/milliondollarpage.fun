@@ -1,6 +1,7 @@
 import { listBoardRects, boardStats } from "../../../lib/board/blocks";
 import { ensureWall } from "../../../lib/board/composite";
 import { pricePerPixelBaseUnits } from "../../../lib/board/settings";
+import { recentPurchases } from "../../../lib/board/tape";
 import { NO_STORE, json } from "../../../lib/http";
 
 /**
@@ -17,6 +18,13 @@ import { NO_STORE, json } from "../../../lib/http";
  *   * `wall` — the version and URL of the composite bitmap carrying every
  *     visible purchase's artwork. One request, immutable, cached for a year;
  *     a change to the wall changes the URL rather than needing a purge.
+ *   * `tape` — the twenty most recent settled purchases, and `asOf`, the
+ *     moment this payload was built. It rides along here rather than getting
+ *     an endpoint and a poll of its own: the board already asks this route
+ *     twice a minute, the rows are a rounding error beside the rectangle list,
+ *     and a second poll would be a second thing to keep in step with the
+ *     first. `asOf` is what lets the browser render "4m ago" identically on
+ *     the server and on the first client paint — see `PurchaseTape`.
  *
  * The name stayed because the job did: this is still "what is on the board".
  * Caption and link now arrive from `/api/blocks/{id}` when somebody rests on a
@@ -31,12 +39,23 @@ import { NO_STORE, json } from "../../../lib/http";
  * it points at is cached hard, which is the whole point of versioning it.
  */
 export async function GET(): Promise<Response> {
-  const [rects, wall, stats, price] = await Promise.all([
+  const [rects, wall, stats, price, tape] = await Promise.all([
     listBoardRects(),
     ensureWall(),
     boardStats(),
     pricePerPixelBaseUnits(),
+    recentPurchases(),
   ]);
 
-  return json({ rects, wall, stats, pricePerPixelBaseUnits: price }, { headers: NO_STORE });
+  return json(
+    {
+      rects,
+      wall,
+      stats,
+      pricePerPixelBaseUnits: price,
+      tape,
+      asOf: new Date().toISOString(),
+    },
+    { headers: NO_STORE },
+  );
 }
