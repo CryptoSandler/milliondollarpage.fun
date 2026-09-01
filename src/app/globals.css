@@ -160,19 +160,30 @@
   --bar-top-h: 52px;
   --bar-bottom-h: 88px;
 
-  /* The side panel's width in the landscape layout.
-     The board fits by its limiting dimension, so in a landscape window it is
-     as tall as the space under the top bar and as wide as that height times
-     its own aspect. The wall is 1250 x 800, so that factor is 1.5625, and
-     `100vw - 1.5625 * (100dvh - bar)` is the width left over for the panel.
-     The factor is not decoration: with the square board's `100vw - (100dvh -
-     bar)` the panel claimed width the board still needs, and the board came
-     back fitting by width instead of height — smaller than it had to be. The
-     floor is the narrowest the controls stay usable at; the ceiling stops an
-     ultrawide monitor from handing five buttons half a screen, and the cream
-     either side of the board there is the wall the sheet hangs on rather than
-     a letterbox. */
-  --panel-w: clamp(280px, calc(100vw - 1.5625 * (100dvh - var(--bar-top-h))), 560px);
+  /* The side panel's width in the landscape layout, and it is MEASURED.
+
+     It used to be the leftover — `clamp(280px, 100vw - 1.5625 * (100dvh -
+     bar), 560px)`, the width a board fitted by height does not need. Two
+     things were wrong with that. The floor was a guess: at 280px the panel's
+     content box is 247px and the widest thing in it needs 255px, so the one
+     control that must never give way was already overflowing its own column.
+     And the ceiling was a second guess in the other direction: on a wide
+     monitor the panel took 560px of width the board could have used, and the
+     board — fitted by width there — came back with its own edge outside the
+     window.
+
+     So this is what the widest content actually measures, in the rendered
+     page rather than in anybody's head: the Buy button at its longest
+     ("Buy these pixels — $1,000,000.00") is 255px and cannot shrink, the
+     readout headline at its longest is 258px but truncates by design, the
+     widest preset is 77px and the zoom trio is 106px. 255 + 32 of padding + a
+     1px border is exactly this.
+
+     A constant rather than a clamp, because a clamp between one measured
+     number and the same measured number is that number with extra arithmetic.
+     What the board does not need beside it is cream, and DESIGN.md already
+     says what that cream is: the wall the sheet hangs on, not a letterbox. */
+  --panel-w: 288px;
 }
 
 @media (max-width: 640px) {
@@ -784,7 +795,8 @@ h3 {
  * 5:4 rather than a plain 1:1 because the crossover is not where the window
  * turns landscape, it is where a side panel buys a bigger board than a bottom
  * bar does: at 1280x1024 the panel wins, at 600x590 it does not. 640px is the
- * width below which a 280px panel would leave less board than the bar does.
+ * width below which the panel — 288px of it now, see --panel-w — would leave
+ * less board than the bar does.
  *
  * These rules are in the UTILITIES layer and keyed off two classes on purpose.
  * A component-layer rule loses to every Tailwind utility in the markup, which

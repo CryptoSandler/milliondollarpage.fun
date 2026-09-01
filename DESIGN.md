@@ -32,7 +32,7 @@ typography:
   numeric:    { fontFamily: Karla, fontSize: 14px, fontWeight: 600, fontVariantNumeric: "tabular-nums" }
   numeric-lg: { fontFamily: "Bricolage Grotesque", fontSize: 20px, fontWeight: 700, fontVariantNumeric: "tabular-nums" }
 rounded: { none: 0, xs: 4px, sm: 8px, md: 12px, lg: 20px, pill: 999px }
-spacing: { bar-top: 52px, bar-bottom: 88px, panel-min: 280px, panel-max: 560px, gutter: 16px, card-padding: 16px }
+spacing: { bar-top: 52px, bar-bottom: 88px, panel: 288px, gutter: 16px, card-padding: 16px, board-margin: 20px, board-frame: 2px }
 motion:
   ease: "cubic-bezier(.4,0,.2,1)"
   hover: "160ms"
@@ -143,9 +143,25 @@ rectangle in the sold fallback while every other purchase composes normally.
 - **The wall is the same cream as the sheet.** There is always some background
   beside the board now, and it is `#f3ede0` — the board's own paper — not a
   darker ground. The board should read as a sheet pinned to a wall of the same
-  paper, never as a letterboxed image with bars round it. A hairline in the
-  coarse rule's tone draws the sheet's edge, because that is the only thing
-  left saying where the artwork stops.
+  paper, never as a letterboxed image with bars round it. **A 2px `ink` frame
+  draws the sheet's edge on all four sides**, because that is the only thing
+  left saying where the artwork stops. It was a hairline in the coarse rule's
+  tone, which was the right weight for a boundary nobody had to find and the
+  wrong one for a boundary that has to be seen not to be clipped — and it was
+  being clipped, because nothing reserved room for it. **The frame is part of
+  the board's footprint, not decoration over it**: it is drawn immediately
+  outside the paper, so it never covers a pixel somebody bought, and **the fit
+  scale is computed with it included**. A fit that fits the board and cuts its
+  own border is the same bug in a smaller size.
+- **The board keeps 20px of clear paper between its frame and everything
+  around it, on every side.** It was a bottom gap only, on the argument that
+  every other edge already had a bar or a panel against it. That argument was
+  wrong about two edges and it showed: the board is scaled by its limiting
+  dimension, so whenever width is the limit its left and right edges land
+  exactly on the free region's — the sheet's edge went under the side panel on
+  one side and off the window on the other. The margin is an **inset**, taken
+  out of the board's share before the fit maths sees it, never a CSS margin:
+  a margin would add to the page's size, and the page may not scroll.
 - **This reverses an earlier contract, deliberately.** The board used to fill
   the viewport width and pan its vertical overflow. The owner used that and
   changed their mind. The leftover width is no longer dead margin, because the
@@ -412,14 +428,22 @@ control, the Buy button, the legend — is one block of controls that the layout
 puts in one of two places. It is one set of controls either way; there is never
 a second Buy button or a second Connect control for a screen reader to find.
 
-**In a landscape window it is a side panel**, a column down the left, filling
-the width the board does not need. There is **no bottom bar** in that layout.
-Its width is the genuine leftover — `100vw - 1.5625 × (100dvh - bar-top)`,
-where 1.5625 is 1250/800, the board's own aspect, because a board that fits by
-height is that much wider than it is tall —
-floored at 280px so the controls stay usable and capped at 560px so an
-ultrawide monitor does not hand five buttons half a screen. Past that cap the
-cream either side of the board is wall, not letterbox.
+**In a landscape window it is a side panel**, a column down the left. There is
+**no bottom bar** in that layout. **Its width is 288px, and that number is
+measured rather than reasoned**: the widest thing in the column that cannot
+shrink is the Buy button at its longest, `Buy these pixels — $1,000,000.00`,
+which renders at 255px; 16px of padding either side and the panel's own 1px
+border make exactly that.
+
+It used to be the genuine leftover — `100vw - 1.5625 × (100dvh - bar-top)`,
+floored at 280px and capped at 560px — and both ends of that were guesses that
+measurement contradicted. The floor was too narrow: at 280px the content box is
+247px against the 255px that control needs, so the one thing that never gives
+way was overflowing its own column.
+The cap was too wide: on a large monitor the panel held 560px the board could
+have used, and the board, fitted by width there, came back with its own edge
+outside the window. **What the board does not need beside it is wall, not
+letterbox** — same cream, same rule as the rest of the background.
 
 **In portrait and on phones it is a bottom bar**, one row at one fixed height,
 never wrapping — because the board's fit maths reads its measured box, and a

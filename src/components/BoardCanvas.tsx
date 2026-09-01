@@ -30,6 +30,7 @@ import {
   selectionFromPreset,
 } from "../lib/board/selection";
 import {
+  BOARD_FRAME_PX,
   type Chrome,
   type Viewport,
   backingStoreSize,
@@ -132,6 +133,9 @@ const PAINT = {
   paper: "#f3ede0",
   ruleFine: "rgba(43,36,28,0.10)",
   ruleCoarse: "#c9baa0",
+  // --ink, and the sheet's own edge. See the frame in `draw` for why the
+  // hairline that used to draw it became two pixels of this instead.
+  frame: "#2b241c",
   sold: "#443a2c",
   soldEdge: "#2b241c",
   /*
@@ -682,19 +686,52 @@ export default function BoardCanvas({
     context.fillStyle = PAINT.paper;
     context.fillRect(origin.x, origin.y, spanX, spanY);
 
-    // The sheet's edge. The wall behind the board is the same cream as the
-    // board, which is what DESIGN.md asks for — so this hairline, drawn just
-    // outside the paper in the coarse rule's own tone, is the only thing
-    // saying where the artwork stops. Without it the board has no boundary at
-    // all in the corners no ruling reaches.
-    context.strokeStyle = PAINT.ruleCoarse;
-    context.lineWidth = 1;
+    /*
+     * THE FRAME. The wall behind the board is the same cream as the board,
+     * which is what DESIGN.md asks for — so this border, drawn just outside
+     * the paper, is the only thing saying where the artwork stops. Without it
+     * the board has no boundary at all in the corners no ruling reaches.
+     *
+     * It was a 1px hairline in the coarse rule's tone, and it is 2px of ink
+     * now, on the same argument the fit maths makes above: a boundary that has
+     * to be SEEN not to be clipped has to be visible in the first place. The
+     * room for it is reserved by BOARD_INSET rather than taken out of the
+     * paper, so the frame is never drawn over a pixel somebody bought and
+     * never lands outside the window.
+     *
+     * `strokeRect` centres the stroke on its path, so a path 1px outside the
+     * paper at 2px wide covers exactly the two pixels between the paper and
+     * BOARD_FRAME_PX — the frame is entirely outside the artwork, to the pixel.
+     */
+    const frame = {
+      x: Math.round(origin.x) - BOARD_FRAME_PX,
+      y: Math.round(origin.y) - BOARD_FRAME_PX,
+      width: Math.round(spanX) + BOARD_FRAME_PX * 2,
+      height: Math.round(spanY) + BOARD_FRAME_PX * 2,
+    };
+    context.strokeStyle = PAINT.frame;
+    context.lineWidth = BOARD_FRAME_PX;
     context.strokeRect(
-      Math.round(origin.x) - 0.5,
-      Math.round(origin.y) - 0.5,
-      Math.round(spanX) + 1,
-      Math.round(spanY) + 1,
+      frame.x + BOARD_FRAME_PX / 2,
+      frame.y + BOARD_FRAME_PX / 2,
+      frame.width - BOARD_FRAME_PX,
+      frame.height - BOARD_FRAME_PX,
     );
+
+    /*
+     * Where the board was actually painted, frame included, in CSS pixels.
+     *
+     * WHO READS THIS: `purchase-e2e.test.ts`, and nothing in the product. A
+     * canvas has no DOM box for its contents, so "the whole board including
+     * its frame is inside the viewport" is a claim no selector can check —
+     * this is the renderer reporting the numbers it just drew with, so the
+     * guard measures the paint rather than re-deriving it from the same
+     * arithmetic it is supposed to be checking. Written only when it changes:
+     * the ants redraw this canvas twenty times a second and a DOM write per
+     * frame would be twenty for nothing.
+     */
+    const painted = `${frame.x},${frame.y},${frame.width},${frame.height}`;
+    if (canvas.dataset.boardRect !== painted) canvas.dataset.boardRect = painted;
 
     // The graph paper, and ONLY above the zoom where a wall pixel is about
     // eight screen pixels. At fit it is not a ruling, it is moiré — and it is
@@ -1007,11 +1044,16 @@ export default function BoardCanvas({
      * artwork. The sandwich does.
      */
     if (focusRing) {
+      // Outside the FRAME, not the paper: the sheet's edge is two pixels of
+      // ink now, and a ring drawn where the hairline used to be would sit on
+      // top of it. The margin the fit reserves is more than wide enough for
+      // both, so nothing is clamped here that was not clamped before.
       const free = freeRegion(screen, chrome);
-      const left = Math.max(free.x + 2, origin.x - 3);
-      const top = Math.max(free.y + 2, origin.y - 3);
-      const right = Math.min(free.x + free.width - 2, origin.x + spanX + 3);
-      const bottom = Math.min(free.y + free.height - 2, origin.y + spanY + 3);
+      const clear = 3 + BOARD_FRAME_PX;
+      const left = Math.max(free.x + 2, origin.x - clear);
+      const top = Math.max(free.y + 2, origin.y - clear);
+      const right = Math.min(free.x + free.width - 2, origin.x + spanX + clear);
+      const bottom = Math.min(free.y + free.height - 2, origin.y + spanY + clear);
       if (right > left && bottom > top) {
         const w = right - left;
         const h = bottom - top;
