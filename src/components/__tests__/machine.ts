@@ -16,6 +16,10 @@
  * IT REFUSES RATHER THAN SKIPS. A skipped test is green, and green is what a
  * loaded machine must NOT report — the run should stop and say why, so the
  * person re-runs it instead of shipping on a result nobody produced.
+ *
+ * IT WAITS BEFORE IT REFUSES, AND THE CEILING NEVER MOVES. See
+ * `waitForMachineQuiet`. `~/.claude/GATES.md`: *a resource precondition waits
+ * with a cap, never relaxes.*
  */
 import { execFileSync } from "node:child_process";
 import { cpus, loadavg } from "node:os";
@@ -41,22 +45,123 @@ import { cpus, loadavg } from "node:os";
  */
 const MAX_LOAD_PER_CORE = 2.0;
 
+/** How often the load is re-read while waiting. */
+const POLL_MS = 15_000;
+
 /**
- * Refuses to continue when this machine is too loaded to time anything.
+ * How long this will wait for the machine to go quiet before giving up.
  *
- * `loadavg()[0]` is the one-minute average, which is the window that matters:
- * a five-minute average still reports a machine that went quiet a minute ago,
- * and this is about the minute the test is about to spend.
+ * Ten minutes, and the cap is the whole point of the design rather than a
+ * detail of it. A precondition with no cap is a hang, and a hang is worse than
+ * a refusal because nobody can tell it from a slow test. A precondition that
+ * relaxes its ceiling instead of waiting is a guard that reports green on the
+ * exact condition it exists to catch.
  */
-export function assertMachineIsQuiet(what: string): void {
+const MAX_WAIT_MS = 10 * 60 * 1_000;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Waits for this machine to go quiet, then lets the caller measure — and
+ * refuses, loudly, if it never does.
+ *
+ * ## Why this replaced a straight assertion
+ *
+ * `assertMachineIsQuiet` read the load once and threw. That was right about the
+ * ceiling and wrong about the moment: this machine runs several agent sessions
+ * at once, so a load spike is usually somebody else compiling for ninety
+ * seconds, not a condition that will still be true when the browser starts. A
+ * one-shot check turns a ninety-second spike into a failed run, and a failed
+ * run that is nobody's defect is how a guard earns a reputation for crying
+ * wolf — which is how it gets deleted, and the ceiling with it.
+ *
+ * So it waits. **What it never does is relax.** The ceiling stays
+ * `MAX_LOAD_PER_CORE`, decided on evidence and not on convenience; the only
+ * thing that moved is that a temporary breach now costs time instead of a red
+ * run. `~/.claude/GATES.md` records that as the shared rule for every
+ * repository here: *a resource precondition waits with a cap, never relaxes.*
+ *
+ * ## The first look is immediate
+ *
+ * A machine that is already quiet — the ordinary case — pays nothing. There is
+ * no opening sleep, because a precondition that costs fifteen seconds on every
+ * green run is a precondition people find ways around.
+ *
+ * ## `loadavg()[0]` lags, and polling faster than it does not help
+ *
+ * The one-minute average is a decaying mean, so it keeps reporting a machine
+ * that went quiet long after it did, and polling every fifteen seconds is
+ * therefore finer than the signal it reads. MEASURED, rather than assumed: 30
+ * synthetic spinners on 10 cores, killed at 45 seconds, and this function
+ * resumed at 170 — it waited **125 seconds longer than the load actually
+ * lasted**. That is the honest cost of using the only number the kernel offers
+ * without sampling `/proc` ourselves, and it is why the cap is ten minutes and
+ * not two. It is still the right
+ * window — the five-minute average would have this waiting on load that ended
+ * four minutes ago.
+ *
+ * ## The refusal says what it tried
+ *
+ * Measured load, cores, per-core, the ceiling, **and how long it waited**. The
+ * last one is new and it is the one that tells a reader whether to re-run or to
+ * go and find what is eating the machine.
+ *
+ * The seams — ceiling, poll, cap, and the load reading itself — are parameters
+ * so both branches can be driven deterministically by a test in milliseconds
+ * instead of ten minutes. Every default is the real value.
+ */
+export async function waitForMachineQuiet(
+  what: string,
+  options: {
+    ceiling?: number;
+    pollMs?: number;
+    maxWaitMs?: number;
+    readLoad?: () => number;
+    onWait?: (message: string) => void;
+  } = {},
+): Promise<void> {
+  const ceiling = options.ceiling ?? MAX_LOAD_PER_CORE;
+  const pollMs = options.pollMs ?? POLL_MS;
+  const maxWaitMs = options.maxWaitMs ?? MAX_WAIT_MS;
+  const readLoad = options.readLoad ?? (() => loadavg()[0]);
+  const announce = options.onWait ?? ((message: string) => console.warn(message));
+
   const cores = Math.max(1, cpus().length);
-  const load = loadavg()[0];
-  const perCore = load / cores;
-  if (perCore > MAX_LOAD_PER_CORE) {
-    throw new Error(
-      `${what} needs a quiet machine and this one is at ${load.toFixed(2)} across ${cores} cores ` +
-        `(${perCore.toFixed(2)} per core, ceiling ${MAX_LOAD_PER_CORE}). A duration measured now ` +
-        "would be measuring the load, not the code. Stop whatever else is running and re-run.",
+  const startedAt = Date.now();
+  let load = readLoad();
+  let announced = false;
+
+  while (load / cores > ceiling) {
+    const waited = Date.now() - startedAt;
+
+    if (waited >= maxWaitMs) {
+      throw new Error(
+        `${what} needs a quiet machine and this one is at ${load.toFixed(2)} across ${cores} cores ` +
+          `(${(load / cores).toFixed(2)} per core, ceiling ${ceiling}) after waiting ` +
+          `${Math.round(waited / 1_000)}s. A duration measured now would be measuring the load, ` +
+          "not the code. Find what is running and stop it BY PID, then re-run.",
+      );
+    }
+
+    if (!announced) {
+      // Once, not every poll: a line every fifteen seconds for ten minutes is
+      // forty lines of noise around the one that matters.
+      announce(
+        `${what} is waiting for this machine to go quiet — ${load.toFixed(2)} across ${cores} ` +
+          `cores (${(load / cores).toFixed(2)} per core, ceiling ${ceiling}). ` +
+          `Giving up after ${Math.round(maxWaitMs / 1_000)}s.`,
+      );
+      announced = true;
+    }
+
+    await sleep(Math.min(pollMs, maxWaitMs - waited));
+    load = readLoad();
+  }
+
+  if (announced) {
+    announce(
+      `${what}: the machine went quiet at ${load.toFixed(2)} ` +
+        `(${(load / cores).toFixed(2)} per core) after ${Math.round((Date.now() - startedAt) / 1_000)}s.`,
     );
   }
 }

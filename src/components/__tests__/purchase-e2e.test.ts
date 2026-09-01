@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { queryOne } from "../../lib/db";
 import { testWallet } from "../../lib/wallet/__tests__/keypair";
 import { findChrome, launchChrome, sleep, waitFor, type Browser } from "./cdp";
-import { assertMachineIsQuiet } from "./machine";
+import { waitForMachineQuiet } from "./machine";
 import { acquireHarnessLock, releaseHarnessLock } from "./harness-lock";
 import { startDevServer, type DevServer } from "./dev-server";
 import { mockWallet, type MockWallet } from "./mock-wallet";
@@ -111,7 +111,12 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
     // useful answer is a pid and a working directory. Fail by name, then by
     // number. See `~/.claude/GATES.md`.
     acquireHarnessLock();
-    assertMachineIsQuiet("The end-to-end suite");
+    // THEN wait for the machine, and in that order for a reason. The lock is
+    // what stops another repository's harness competing with this one; waiting
+    // for the load before taking it would mean waiting for a machine that is
+    // about to get louder, and two runs could both decide it was quiet. Take
+    // the resource, then wait for the conditions to measure in it.
+    await waitForMachineQuiet("The end-to-end suite");
     server = await startDevServer();
     browser = await launchChrome();
     wallet = mockWallet();
