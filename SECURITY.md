@@ -338,3 +338,30 @@ collection by the new authority. They are not on the page and never were.
 
 Open a private security advisory on the GitHub repository. Do not open a public
 issue for anything touching keys, payments, or the mint path.
+
+## The schema guard: the database may be ahead, never behind
+
+A deployed instance refuses to serve when the database is BEHIND the build, and
+serves normally when it is ahead. `assertSchemaIsCurrent` in
+`src/lib/config.ts`, called from `src/instrumentation.ts`.
+
+**Behind is the fault:** the code references columns that do not exist, and
+every route touching them answers 500 while the logs blame a query. The first
+production deploy of this project did exactly that, four migrations behind.
+
+**Ahead is ordinary, and this is the part that had to be learned the hard way.**
+The check first compared for EQUALITY, so migrating production before the new
+build finished deploying took the site down for about four minutes — the guard
+caused the outage it existed to prevent. Migrating first is not a mistake: for a
+migration that adds things it is the correct order, and it is what every rolling
+deploy looks like for a minute.
+
+The comparison is therefore an ordering, not an equality. Migration names are
+zero-padded, so a string comparison is that ordering, and `(none)` sorts before
+every real name. Both directions are pinned in
+`src/lib/__tests__/schema-version.test.ts`: "names both versions when the
+database is behind" and "accepts a database AHEAD of the build, because that is
+a rolling deploy".
+
+**The deploy order that follows from it:** migrate, then deploy. Never the
+reverse, and never both at once hoping they land together.
