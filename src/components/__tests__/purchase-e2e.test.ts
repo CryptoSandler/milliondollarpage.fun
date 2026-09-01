@@ -265,7 +265,7 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
    * Both layouts, because they are two different boxes: the side panel is the
    * one with `overflow-x: hidden` down its side, and the bottom bar is the one
    * with no room to spare. `#c2451e` is DESIGN.md's `primary`, measured at
-   * 4.64:1 against the `card-warm` these buttons sit on.
+   * 4.64:1 against the `card-lift` these buttons sit on.
    */
   it(
     "keeps the focus ring on every control inside a scrolling row, in both layouts",

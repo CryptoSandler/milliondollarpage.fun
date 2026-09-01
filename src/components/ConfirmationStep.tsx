@@ -123,7 +123,7 @@ export default function ConfirmationStep({
         </Row>
       </dl>
 
-      <dl className="flex flex-col gap-2 rounded-xl border border-hairline-strong bg-card-warm px-4 py-3 text-[15px]">
+      <dl className="flex flex-col gap-2 rounded-xl border border-hairline-strong bg-card-lift px-4 py-3 text-[15px]">
         <div>
           <dt className="label-caps">Link</dt>
           <dd className="break-all text-ink">{draft.link}</dd>
@@ -139,7 +139,7 @@ export default function ConfirmationStep({
       </dl>
 
       {stillFromAnimation && (
-        <p className="rounded-lg border border-hairline-strong bg-card-warm px-3 py-2 text-[15px] leading-relaxed text-ink-soft">
+        <p className="rounded-lg border border-hairline-strong bg-card-lift px-3 py-2 text-[15px] leading-relaxed text-ink-soft">
           <span className="font-bold text-ink">This GIF moves, and the copy on your block will not.</span>{" "}
           It has to be shrunk to fit inside the rectangle, and shrinking it keeps the first frame and
           nothing after it — so the board will show it as a still. Nothing has been charged: go back
@@ -320,7 +320,7 @@ function useWallRender(
 }
 
 /** The sheet's own cream, `--canvas` in globals.css and `PAPER` in composite.ts. */
-const PAPER = "#f3ede0";
+const PAPER = "#070a0e";
 
 /**
  * The preview's own box: the block's aspect ratio, longest edge seven rem.

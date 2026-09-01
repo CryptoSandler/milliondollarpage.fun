@@ -554,7 +554,7 @@ export default function ContentForm({
       {messages.stalled && messages.form && (
         <p
           role="status"
-          className="rounded-xl border border-hairline-strong bg-card-warm px-4 py-3 text-[15px] leading-relaxed text-ink-soft"
+          className="rounded-xl border border-hairline-strong bg-card-lift px-4 py-3 text-[15px] leading-relaxed text-ink-soft"
         >
           {messages.form}
         </p>

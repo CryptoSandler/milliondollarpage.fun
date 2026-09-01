@@ -59,7 +59,7 @@ const KEEP_VERSIONS = 3;
  * have the artwork cover them exactly where a purchase covers them. A cream
  * background here would hide the ruling under the whole wall.
  */
-const PAPER = { r: 0xf3, g: 0xed, b: 0xe0, alpha: 1 };
+const PAPER = { r: 0x07, g: 0x0a, b: 0x0e, alpha: 1 };
 
 /** What a sold rectangle shows when its stored bytes cannot be decoded. */
 const SOLD_FALLBACK = { r: 0x44, g: 0x3a, b: 0x2c, alpha: 1 };

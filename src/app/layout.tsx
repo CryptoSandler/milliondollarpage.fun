@@ -1,23 +1,27 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Karla } from "next/font/google";
+import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
 /**
  * Two faces, both variable, both self-hosted by next/font at build time so no
  * request leaves for Google at runtime.
  *
- * Bricolage Grotesque sets display: the wordmark, headings, and the big
- * numbers. Karla sets everything else. DESIGN.md picks both; nothing else on
- * the page declares a family.
+ * Space Grotesk sets display and prose. IBM Plex Mono sets every NUMBER, every
+ * label and every piece of metadata — which is a category rather than a
+ * decoration: a measurement is set in the mono and a sentence is not, so a
+ * reader can tell a fact from a claim without reading either. DESIGN.md picks
+ * both; nothing else on the page declares a family, and `design-tokens.test.ts`
+ * is what keeps that true.
  */
-const bricolage = Bricolage_Grotesque({
-  variable: "--font-bricolage",
+const display = Space_Grotesk({
+  variable: "--font-display-family",
   subsets: ["latin"],
   display: "swap",
 });
 
-const karla = Karla({
-  variable: "--font-karla",
+const mono = IBM_Plex_Mono({
+  variable: "--font-mono-family",
+  weight: ["400", "500", "600", "700"],
   subsets: ["latin"],
   display: "swap",
 });
@@ -44,7 +48,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${bricolage.variable} ${karla.variable} h-full antialiased`}
+      className={`${display.variable} ${mono.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-canvas font-ui text-ink">{children}</body>
     </html>

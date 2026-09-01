@@ -15,6 +15,7 @@ import { BOARD_INSET, type Chrome } from "../lib/canvas/viewport";
 import BlockCard from "./BlockCard";
 import BoardCanvas, { type ZoomControls, type ZoomState } from "./BoardCanvas";
 import BoardCounters from "./BoardCounters";
+import EmptyWall from "./EmptyWall";
 import InteractionLegend from "./InteractionLegend";
 import OnlineBanner from "./OnlineBanner";
 import PurchaseDialog from "./PurchaseDialog";
@@ -517,6 +518,19 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           Questions
         </Link>
       </header>
+
+      {/*
+        The wall's own statement, on the day nothing has been bought.
+
+        Rendered from the SOLD COUNT rather than from the rectangle list: a
+        board with three live holds on it and no sales is still a board where
+        nothing has been bought, and it should say so. It sits over the canvas
+        and lets every pointer event through, because the whole board is the
+        control the note is pointing at.
+      */}
+      {board.stats.pixelsSold === 0 && (
+        <EmptyWall chrome={chrome} perPixel={board.pricePerPixelBaseUnits} />
+      )}
 
       <PurchaseTape ref={tapeRef} rows={board.tape} asOf={board.asOf} />
 

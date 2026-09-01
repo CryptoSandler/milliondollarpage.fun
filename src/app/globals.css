@@ -27,21 +27,21 @@
    *
    * Measured against #fff8ef: primary 4.79:1, primary-pressed 6.52:1.
    * Measured as a 2px focus ring (WCAG 1.4.11, 3:1): 4.32:1 on --canvas,
-   * 4.92:1 on --card, 4.64:1 on --card-warm, 3.81:1 on --canvas-deep.
+   * 4.92:1 on --card, 4.64:1 on --card-lift, 3.81:1 on --canvas-deep.
    *
    * --primary-pressed follows it down, both to keep the button's shoulder
    * under the new face and because it is set as TEXT on --primary-soft in the
    * counter pill at 12px/700, where it used to measure 4.26:1 and now
    * measures 5.26:1.
    */
-  --primary: #c2451e;
-  --primary-pressed: #9f3819;
-  --primary-soft: #f7dccb;
-  --on-primary: #fff8ef;
+  --primary: #2ce08a;
+  --primary-pressed: #14b86c;
+  --primary-soft: rgba(44, 224, 138, 0.14);
+  --on-primary: #05190f;
 
-  --ink: #2b241c;
-  --ink-soft: #443a2c;
-  --body: #6b6154;
+  --ink: #eef2f7;
+  --ink-soft: #b3bdcc;
+  --body: #8d97a6;
 
   /*
    * THE QUIETEST RUNG, AND IT DOES NOT SET TEXT ANY MORE.
@@ -49,7 +49,7 @@
    * It used to set nine things: the all-caps labels, the form hints, the
    * interaction legend, the hover card's metadata, the input placeholders, the
    * disabled zoom buttons. At #948a79 it measured 2.92:1 on --canvas, 3.32:1
-   * on --card, 3.13:1 on --card-warm and 2.57:1 on --canvas-deep. Every one of
+   * on --card, 3.13:1 on --card-lift and 2.57:1 on --canvas-deep. Every one of
    * those sites is text at 11-16px, so the rule is WCAG 1.4.3's 4.5:1, and
    * every one of them failed it. A comment right here used to assert the
    * opposite.
@@ -58,7 +58,7 @@
    * landed it on top of --body (5.20:1 there), which is to say it would have
    * deleted the rung rather than fixed it. So the text moved to --body, which
    * already measures 5.20:1 on --canvas, 5.92:1 on --card and 5.58:1 on
-   * --card-warm, and this token kept its job of being quiet.
+   * --card-lift, and this token kept its job of being quiet.
    *
    * What is left are the two places a quiet tone is allowed to be quiet:
    * .btn-quiet:disabled, where disabled text is exempt from 1.4.3
@@ -68,14 +68,14 @@
    * 3.25:1 on --canvas-deep. That is the 3:1 floor this project set itself,
    * now measured rather than asserted.
    */
-  --mute: #827968;
+  --mute: #6b7686;
 
-  --canvas: #f3ede0;
-  --canvas-deep: #e9dfc9;
-  --card: #fffcf5;
-  --card-warm: #fbf5e8;
+  --canvas: #0a0d12;
+  --canvas-deep: #10151c;
+  --card: #0e1218;
+  --card-lift: #161c25;
 
-  --hairline: rgba(43, 36, 28, 0.1);
+  --hairline: rgba(122, 138, 160, 0.10);
 
   /*
    * DECORATION. It draws the sheet's edge, the bar under the wordmark, the
@@ -89,7 +89,7 @@
    * It is also the coarse rule's own tone, which is what a held block is
    * painted in, so its value is load-bearing on the board as well as here.
    */
-  --hairline-strong: #c9baa0;
+  --hairline-strong: #242c38;
 
   /*
    * CONTROLS. The same line where the border is the only thing saying "you can
@@ -110,7 +110,7 @@
    * tone a warm neutral instead of the olive that hue turns into when it is
    * darkened at full saturation; then the lightness taken down until the worst
    * of the four surfaces a control lands on clears 3:1 with room to spare.
-   * Measured: 3.62:1 on --canvas, 4.12:1 on --card, 3.89:1 on --card-warm,
+   * Measured: 3.62:1 on --canvas, 4.12:1 on --card, 3.89:1 on --card-lift,
    * 3.19:1 on --canvas-deep (a disabled .btn-quiet — inactive components are
    * exempt from 1.4.11, and this project does not spend the exemption).
    *
@@ -121,10 +121,10 @@
    * allowed not to means the next pass on disabled labels silently moves every
    * input's edge.
    */
-  --control-line: #8a795c;
+  --control-line: #586a89;
 
-  --danger: #a8371f;
-  --danger-soft: #f1d4c8;
+  --danger: #ff5c47;
+  --danger-soft: rgba(255, 92, 71, 0.14);
 
   /*
    * The line round a danger-soft box. It was a bare #e2b6a4 written into four
@@ -141,8 +141,45 @@
    * round every error in the product, which is a louder page than DESIGN.md
    * asks for and a decision for the owner rather than for a contrast pass.
    */
-  --danger-line: #e2b6a4;
-  --ok: #4c7a4a;
+  --danger-line: #7a2f26;
+  --ok: #2ce08a;
+
+  /*
+   * THE BOARD'S OWN SURFACE, and it is no longer the same colour as the page.
+   *
+   * In the cream register `--paper` and `--canvas` were one value, so nothing
+   * had to name the difference. Here the sheet is a step darker than the ground
+   * it sits on — 1.02:1, which is felt rather than read — and the 2px frame is
+   * what actually says where it ends. Four other files paint this colour
+   * (the server compositor, the board canvas, the confirmation preview and the
+   * upload encoder); `design-tokens.test.ts` is what keeps all five agreeing.
+   */
+  --paper: #070a0e;
+
+  /* The 2px rule immediately outside the paper. A control boundary by WCAG
+     1.4.11 — the board is dragged on — so 3:1 is a floor, not a preference. */
+  --frame: #5c6b84;
+
+  /* A rectangle somebody is holding: not for sale, not sold. 3.45:1 on the
+     paper, which is what makes it tellable at a glance. */
+  --hold: #5a6779;
+
+  /* What a sale shows before its artwork has arrived, and keeps if the bytes
+     never decode. LIGHTER than the paper — 1.63:1 — because on a near-black
+     wall a darker fallback is indistinguishable from a rectangle nobody
+     bought. It stops well short of `--hold`, which is 3.45:1 on the same
+     paper: a hold has to stay plainly lighter than a sale, which is the one
+     tonal relationship the board asks a reader to see. */
+  --sold-fallback: #2e3642;
+
+  /* The 1px edge round a sold rectangle, wherever it is wide enough to draw
+     one. IT CONTRASTS WITH THE PAPER, NOT WITH THE ARTWORK, and that is the
+     whole of its job: it exists to close the hole where somebody uploads a
+     picture the same colour as the board. On cream that edge was ink; here it
+     has to be the other way up, and an edge inherited from the cream register
+     unchanged would be a near-black line on near-black paper — the bug the
+     rule was written to prevent, reintroduced by copying the rule. */
+  --sold-edge: #586a89;
 
   --radius-xs: 4px;
   --radius-sm: 8px;
@@ -226,7 +263,7 @@
   --color-canvas: var(--canvas);
   --color-canvas-deep: var(--canvas-deep);
   --color-card: var(--card);
-  --color-card-warm: var(--card-warm);
+  --color-card-lift: var(--card-lift);
   --color-hairline: var(--hairline);
   --color-hairline-strong: var(--hairline-strong);
   --color-control-line: var(--control-line);
@@ -235,8 +272,9 @@
   --color-danger-line: var(--danger-line);
   --color-ok: var(--ok);
 
-  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
-  --font-ui: var(--font-karla), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-display-family), ui-sans-serif, system-ui, sans-serif;
+  --font-ui: var(--font-display-family), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-family), ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --radius-xs: 4px;
   --radius-sm: 8px;
@@ -284,20 +322,37 @@ h3 {
    a tighter padding) must be able to override it. Unlayered rules would win
    over every utility instead, which is how a `w-20` input ends up 100% wide. */
 @layer components {
-  /* Numbers that tick — counters, prices, countdowns — must not shuffle width. */
+  /*
+   * Numbers that tick — counters, prices, countdowns — must not shuffle width,
+   * AND they are the mono's whole job.
+   *
+   * This class is already on every number this interface prints, so setting the
+   * family here is what applies the register's central typographic decision
+   * everywhere at once: a measurement is mono, a sentence is not. The
+   * alternative was a `font-mono` utility added by hand to forty spans and
+   * forgotten on the forty-first.
+   *
+   * The two points down are optical rather than arbitrary: IBM Plex Mono runs
+   * wide beside Space Grotesk at the same nominal size, and a price that
+   * measures larger than the words around it is a price that shouts.
+   */
   .tabular {
+    font-family: var(--font-mono);
+    font-size: 0.96em;
+    letter-spacing: -0.01em;
     font-variant-numeric: tabular-nums;
   }
 
   /* 11px/600, so it is text under WCAG 1.4.3's 4.5:1 however marker-like it
      reads. --body clears that on all three surfaces it lands on: 5.20:1 on
      --canvas (the top bar), 5.92:1 on --card (the dialog), 5.58:1 on
-     --card-warm (the controls). It is quiet by size, caps and tracking rather
+     --card-lift (the controls). It is quiet by size, caps and tracking rather
      than by being too pale to read. */
   .label-caps {
-    font-size: 11px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
     font-weight: 600;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--body);
   }
@@ -338,7 +393,7 @@ h3 {
    * the control rather than on the control's own fill — which is what makes
    * "3:1 against each background it appears against" a question with four
    * answers rather than one per button. Measured against those four:
-   * 4.32:1 on --canvas, 4.92:1 on --card, 4.64:1 on --card-warm, 3.81:1 on
+   * 4.32:1 on --canvas, 4.92:1 on --card, 4.64:1 on --card-lift, 3.81:1 on
    * --canvas-deep. WCAG 1.4.11 asks 3:1.
    *
    * Two focusable things cannot use it, and both are handled rather than left
@@ -418,7 +473,7 @@ h3 {
     top: 0;
     height: var(--bar-top-h);
     border-bottom-width: 1px;
-    box-shadow: 0 1px 0 rgba(43, 36, 28, 0.04);
+    box-shadow: 0 1px 0 rgba(122, 138, 160, 0.06);
   }
 
   /*
@@ -453,8 +508,8 @@ h3 {
     border-color: var(--hairline-strong);
     border-top-width: 1px;
     padding-bottom: max(0px, env(safe-area-inset-bottom));
-    background: var(--card-warm);
-    box-shadow: 0 -1px 0 rgba(43, 36, 28, 0.04);
+    background: var(--card-lift);
+    box-shadow: 0 -1px 0 rgba(122, 138, 160, 0.06);
     overflow: hidden;
   }
 
@@ -529,7 +584,7 @@ h3 {
     align-items: stretch;
     height: 76px;
     padding: 4px 12px;
-    background: var(--card-warm);
+    background: var(--card-lift);
     border-top: 0;
     box-shadow: none;
   }
@@ -572,7 +627,7 @@ h3 {
     cursor: pointer;
     box-shadow:
       0 2px 0 var(--primary-pressed),
-      0 8px 18px rgba(194, 69, 30, 0.24);
+      0 8px 18px rgba(44, 224, 138, 0.22);
     transition:
       transform var(--dur-hover) var(--ease),
       box-shadow var(--dur-hover) var(--ease);
@@ -591,7 +646,7 @@ h3 {
     transform: translateY(-2px);
     box-shadow:
       0 4px 0 var(--primary-pressed),
-      0 12px 22px rgba(194, 69, 30, 0.3);
+      0 12px 22px rgba(44, 224, 138, 0.28);
   }
 
   .btn-primary:active:not(:disabled) {
@@ -696,7 +751,7 @@ h3 {
    * This rule used to be `outline: none` plus a 3px --primary-soft glow, and
    * `.field-input:focus` outranks the bare `:focus-visible` above, so every
    * text field on the page quietly opted out of the one focus indicator the
-   * product has. What replaced it measured 1.11:1 against --card-warm and
+   * product has. What replaced it measured 1.11:1 against --card-lift and
    * 1.14:1 against --card: a glow that is not there.
    *
    * The border still turns --primary, because that is the field saying it is
@@ -747,7 +802,7 @@ h3 {
     margin: 0;
     border: none;
     color: var(--ink);
-    background: rgba(43, 36, 28, 0.42);
+    background: rgba(3, 5, 8, 0.68);
     animation: scrim-in var(--dur-enter) var(--ease);
   }
 
@@ -776,7 +831,7 @@ h3 {
     background: var(--card);
     border: 1px solid var(--hairline-strong);
     border-radius: var(--radius-lg);
-    box-shadow: 0 20px 50px rgba(43, 36, 28, 0.18);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
     animation: dialog-in var(--dur-enter) var(--ease);
   }
 
@@ -823,7 +878,7 @@ h3 {
     background: var(--card);
     border: 1px solid var(--hairline-strong);
     border-radius: var(--radius-md);
-    box-shadow: 0 6px 18px rgba(43, 36, 28, 0.14);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
     animation: card-in var(--dur-hover) var(--ease);
   }
 
@@ -912,7 +967,7 @@ h3 {
       height: var(--tape-h);
       padding: 4px 16px;
       padding-bottom: max(4px, env(safe-area-inset-bottom));
-      background: var(--card-warm);
+      background: var(--card-lift);
       border-top: 1px solid var(--hairline-strong);
       box-shadow: 0 -1px 0 rgba(43, 36, 28, 0.04);
     }
@@ -930,7 +985,7 @@ h3 {
       padding-bottom: max(16px, env(safe-area-inset-bottom));
       border-top-width: 0;
       border-right-width: 1px;
-      box-shadow: 1px 0 0 rgba(43, 36, 28, 0.04);
+      box-shadow: 1px 0 0 rgba(122, 138, 160, 0.06);
       /* The panel sheds the legend and closes its gaps on a short window
          (below), so in practice this never scrolls. It is here so that a
          window shorter than every fallback clips nothing a buyer needs — the
@@ -1042,5 +1097,165 @@ h3 {
     .board-controls .wallet-field .label-caps {
       display: none;
     }
+  }
+}
+/* ============================================================================
+   Blocks appended to globals.css by the direction-D branch. Each one is either
+   a rule the register changed or a rule it added; nothing here is a rewrite of
+   something that still works.
+   ========================================================================= */
+
+/* --- THE SETTLED RAIL, now that it may move -------------------------------
+ *
+ * DESIGN.md allowed exactly one continuous animation before this register and
+ * allows two after it, and this is the second. The argument is in the document:
+ * the thing that moves fast IS the evidence, because no row can pass without
+ * its signature and nothing on the rail can ever be reversed.
+ */
+.board-tape__live {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.board-tape__pip {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: var(--primary);
+  animation: tape-pulse 1.6s var(--ease) infinite;
+}
+
+@keyframes tape-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/*
+ * The roll. Two copies of the rows sit in the track and it translates by half
+ * its own width, so the loop has no seam — which is why `PurchaseTape` renders
+ * the list twice and marks the second copy `aria-hidden`. A screen reader is
+ * read the rows once; an eye sees them continuously.
+ */
+.board-tape__track {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  width: max-content;
+  animation: tape-roll 46s linear infinite;
+}
+
+@keyframes tape-roll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/*
+ * A rail somebody is reading stops. Hovering it, or putting the keyboard into
+ * it, pauses the roll — a register you cannot read is a register that is only
+ * decoration, and this is one line rather than a scroll-position state machine.
+ */
+.board-tape__scroller:hover .board-tape__track,
+.board-tape__scroller:focus-within .board-tape__track {
+  animation-play-state: paused;
+}
+
+/*
+ * And it never moves for somebody who asked it not to. The stylesheet's global
+ * reduced-motion rule already reaches every animation on the page; this is
+ * here as well because the duplicate copy of the rows is pointless once the
+ * track is still, and a still track showing everything twice reads as a bug.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .board-tape__track {
+    animation: none;
+  }
+
+  .board-tape__track > [aria-hidden="true"] {
+    display: none;
+  }
+
+  .board-tape__pip {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+/* --- THE EMPTY WALL -------------------------------------------------------
+ *
+ * Centred in the same measured box the board is fitted into, so it lands on
+ * the sheet without either of them having to know the other's rectangle.
+ * Pointer events pass straight through: the whole board is the control, and a
+ * note that swallowed a drag would break the one thing it is asking for.
+ */
+.empty-wall {
+  position: fixed;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24px;
+  pointer-events: none;
+}
+
+.empty-wall__note {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  max-width: 26rem;
+}
+
+.empty-wall__count {
+  font-family: var(--font-mono);
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -1px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  line-height: 1;
+}
+
+.empty-wall__line {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+
+.empty-wall__cta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-sm);
+  padding: 7px 13px;
+}
+
+/*
+ * A phone gets the sentence and not the display number. The bottom-bar layout
+ * leaves the board its smallest, and 34px of tabular mono across it is the
+ * chrome being the loudest thing on a screen that has no room for that.
+ */
+@media (max-width: 640px) {
+  .empty-wall__count {
+    font-size: 24px;
+  }
+
+  .empty-wall__line {
+    font-size: 11.5px;
   }
 }

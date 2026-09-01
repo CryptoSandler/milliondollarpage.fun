@@ -107,7 +107,7 @@ export default function TakedownList({
         role="status"
         className={
           done
-            ? "mt-4 rounded-xl border border-hairline-strong bg-card-warm px-4 py-3 text-[15px] leading-relaxed text-ink-soft"
+            ? "mt-4 rounded-xl border border-hairline-strong bg-card-lift px-4 py-3 text-[15px] leading-relaxed text-ink-soft"
             : "sr-only"
         }
       >
@@ -252,7 +252,7 @@ function Row({
       {!purged && purge && (
         <form
           id={formId}
-          className="mt-3 rounded-md border border-hairline-strong bg-card-warm p-4"
+          className="mt-3 rounded-md border border-hairline-strong bg-card-lift p-4"
           onSubmit={(event) => {
             event.preventDefault();
             onPurge(row.id);
@@ -268,7 +268,7 @@ function Row({
             "encloses error prose, not a control". Putting the fields on
             `--danger-soft` instead would have parked every control border at
             3.02:1 against it — over WCAG 1.4.11's 3:1 by two hundredths, which
-            is not a margin. On `--card-warm` the same border measures 3.89:1
+            is not a margin. On `--card-lift` the same border measures 3.89:1
             and the focus ring 4.64:1, both of them numbers DESIGN.md has
             already published.
           */}

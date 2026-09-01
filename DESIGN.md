@@ -1,44 +1,54 @@
 ---
 version: alpha
 name: milliondollarpage.fun
-description: "A warm cream workshop wall for a permanent pixel canvas on Solana. Cream paper (#f3ede0) holds a 1250x800 board where the paper's own colour means the pixels are for sale and colour or a bitmap means they are sold, so availability never depends on what colour a buyer uploaded. The artwork arrives as one composite bitmap of exactly the wall; a faint ruling comes back only when the zoom is close enough for a wall pixel to be worth counting. The whole board is always visible and the page never scrolls; the wall around it is the same cream as the sheet. Olive-brown ink (#2b241c) sets text on the cream instead of punching through it; a single terracotta (#c2451e) carries every primary action and every selection, and appears nowhere else. Bricolage Grotesque sets display, Karla sets everything else. The board and its blocks have zero radius because they are literally pixels; only the chrome rounds. A thin fixed top bar, and the rest of the controls in a side panel or a bottom bar depending on which shape of window they are in. The system reads as a workshop wall: warm, plainly labelled, and entirely subordinate to the artwork pinned to it."
+description: "A cold near-black instrument for a permanent pixel canvas on Solana. Near-black paper (#070a0e) holds a 1250x800 board where the paper's own darkness means the pixels are for sale and colour or a bitmap means they are sold, so availability never depends on what colour a buyer uploaded. The artwork arrives as one composite bitmap of exactly the wall; a faint ruling comes back only when the zoom is close enough for a wall pixel to be worth counting. The whole board is always visible and the page never scrolls; the ground around it is one step lighter than the paper so the sheet reads as an object on a surface rather than a hole in it. Near-white ink (#eef2f7) sets text on the ground; a single signal green (#2ce08a) carries every primary action and every selection, and appears nowhere else. Space Grotesk sets display and prose, IBM Plex Mono sets every number, label and piece of metadata, so a measurement can be told from a sentence without reading either. The board and its blocks have zero radius because they are literally pixels; only the chrome rounds. A thin fixed top bar, a running register of settled purchases along the bottom, and the rest of the controls in a side panel or a second bar depending on which shape of window they are in. The system reads as an instrument: dense, tabular, plainly labelled, and entirely subordinate to the artwork on the wall."
 colors:
-  primary: "#c2451e"
-  primary-pressed: "#9f3819"
-  primary-soft: "#f7dccb"
-  on-primary: "#fff8ef"
-  ink: "#2b241c"
-  ink-soft: "#443a2c"
-  body: "#6b6154"
-  mute: "#827968"
-  canvas: "#f3ede0"
-  canvas-deep: "#e9dfc9"
-  card: "#fffcf5"
-  card-warm: "#fbf5e8"
-  hairline: "rgba(43,36,28,0.10)"
-  hairline-strong: "#c9baa0"
-  control-line: "#8a795c"
-  danger: "#a8371f"
-  danger-soft: "#f1d4c8"
-  danger-line: "#e2b6a4"
-  ok: "#4c7a4a"
+  primary: "#2ce08a"
+  primary-pressed: "#14b86c"
+  primary-soft: "rgba(44,224,138,0.14)"
+  on-primary: "#05190f"
+  ink: "#eef2f7"
+  ink-soft: "#b3bdcc"
+  body: "#8d97a6"
+  mute: "#6b7686"
+  canvas: "#0a0d12"
+  canvas-deep: "#10151c"
+  card: "#0e1218"
+  card-lift: "#161c25"
+  paper: "#070a0e"
+  hairline: "rgba(122,138,160,0.10)"
+  hairline-strong: "#242c38"
+  control-line: "#586a89"
+  frame: "#5c6b84"
+  hold: "#5a6779"
+  sold-fallback: "#2e3642"
+  sold-edge: "#586a89"
+  danger: "#ff5c47"
+  danger-soft: "rgba(255,92,71,0.14)"
+  danger-line: "#7a2f26"
+  ok: "#2ce08a"
 typography:
-  display-lg: { fontFamily: "Bricolage Grotesque", fontSize: 34px, fontWeight: 700, lineHeight: 1.05, letterSpacing: -0.8px }
-  display:    { fontFamily: "Bricolage Grotesque", fontSize: 22px, fontWeight: 600, lineHeight: 1.15, letterSpacing: -0.4px }
-  headline:   { fontFamily: "Bricolage Grotesque", fontSize: 17px, fontWeight: 600, lineHeight: 1.25 }
-  body:       { fontFamily: Karla, fontSize: 14px, fontWeight: 400, lineHeight: 1.5 }
-  body-sm:    { fontFamily: Karla, fontSize: 12.5px, fontWeight: 400, lineHeight: 1.45 }
-  label:      { fontFamily: Karla, fontSize: 11px, fontWeight: 600, letterSpacing: 0.06em, textTransform: uppercase }
-  numeric:    { fontFamily: Karla, fontSize: 14px, fontWeight: 600, fontVariantNumeric: "tabular-nums" }
-  numeric-lg: { fontFamily: "Bricolage Grotesque", fontSize: 20px, fontWeight: 700, fontVariantNumeric: "tabular-nums" }
-rounded: { none: 0, xs: 4px, sm: 8px, md: 12px, lg: 20px, pill: 999px }
-spacing: { bar-top: 52px, bar-bottom: 88px, panel: 288px, gutter: 16px, card-padding: 16px, board-margin: 20px, board-frame: 2px }
+  display-lg: { fontFamily: "Space Grotesk", fontSize: 34px, fontWeight: 700, lineHeight: 1.05, letterSpacing: -0.8px }
+  display:    { fontFamily: "Space Grotesk", fontSize: 22px, fontWeight: 600, lineHeight: 1.15, letterSpacing: -0.4px }
+  headline:   { fontFamily: "Space Grotesk", fontSize: 17px, fontWeight: 600, lineHeight: 1.25 }
+  body:       { fontFamily: "Space Grotesk", fontSize: 14px, fontWeight: 400, lineHeight: 1.5 }
+  body-sm:    { fontFamily: "Space Grotesk", fontSize: 12.5px, fontWeight: 400, lineHeight: 1.45 }
+  label:      { fontFamily: "IBM Plex Mono", fontSize: 10.5px, fontWeight: 600, letterSpacing: 0.12em, textTransform: uppercase }
+  meta:       { fontFamily: "IBM Plex Mono", fontSize: 11px, fontWeight: 400, lineHeight: 1.6 }
+  numeric:    { fontFamily: "IBM Plex Mono", fontSize: 12.5px, fontWeight: 500, fontVariantNumeric: "tabular-nums" }
+  numeric-lg: { fontFamily: "IBM Plex Mono", fontSize: 20px, fontWeight: 700, fontVariantNumeric: "tabular-nums" }
+  numeric-xl: { fontFamily: "IBM Plex Mono", fontSize: 26px, fontWeight: 700, letterSpacing: -0.5px, fontVariantNumeric: "tabular-nums" }
+  statement:  { fontFamily: "IBM Plex Mono", fontSize: 34px, fontWeight: 700, letterSpacing: -1px, fontVariantNumeric: "tabular-nums" }
+rounded: { none: 0, xs: 4px, sm: 6px, md: 8px, lg: 12px, pill: 999px }
+spacing: { bar-top: 52px, bar-bottom: 92px, panel: 288px, tape: 78px, gutter: 16px, card-padding: 13px, board-margin: 20px, board-frame: 2px }
 motion:
   ease: "cubic-bezier(.4,0,.2,1)"
   hover: "160ms"
   press: "90ms"
   enter: "220ms"
   marching-ants: "600ms linear infinite"
+  tape-roll: "46s linear infinite"
+  live-pulse: "1.6s ease infinite"
 ---
 
 # milliondollarpage.fun
@@ -65,7 +75,8 @@ pictures.
 
 **A block's state must never depend on the colour a buyer uploaded.**
 
-**The paper's cream means available. Colour or a bitmap means sold.** That is
+**The paper's own near-black means available. Colour or a bitmap means sold.**
+That is
 the rule now, and it replaces "ruled means available, unruled means taken",
 which could not survive per-pixel purchases: the ruling used to be drawn at
 every zoom, and a rule every ten pixels over a wall scaled to fit is a grid
@@ -74,15 +85,26 @@ nothing to snap to. The ruling is a navigation aid at close zoom now, not the
 state.
 
 So the wall is one composite bitmap of exactly the board, and its unsold pixels
-are **transparent**. The cream underneath shows through them — with its ruling,
+are **transparent**. The paper underneath shows through them — with its ruling,
 where the zoom is close enough to draw one — and a purchase covers both.
 
-**The cream has one honest hole in it, and two things close it.** A buyer may
-upload a picture that is the same cream as the paper. So a sold rectangle also
-carries a 1px ink edge wherever it is big enough to draw one; and an upload
-with an alpha channel is composited onto the cream inside its own rectangle
-rather than left transparent, so a sale is never a hole in the wall. Neither
-of those is a hue, which is the point.
+**The paper has one honest hole in it, and two things close it.** A buyer may
+upload a picture that is the same near-black as the paper. So a sold rectangle
+also carries a 1px `sold-edge` wherever it is big enough to draw one; and an
+upload with an alpha channel is composited onto the paper inside its own
+rectangle rather than left transparent, so a sale is never a hole in the wall.
+Neither of those is a hue, which is the point.
+
+**THAT EDGE HAD TO TURN OVER WITH THE REGISTER, AND COPYING THE RULE WOULD HAVE
+BROKEN IT.** On cream the edge was ink — dark, against a light sheet. Carried
+across unchanged it would be a near-black line on near-black paper, which is
+precisely the hole the rule exists to close, reintroduced by obeying the rule's
+words instead of its argument. The edge contrasts with the PAPER, whichever way
+up the paper is: `#586a89`, **3.62:1** on it.
+
+The hold's edge goes the other way for the same reason: it is broken, and it
+cuts INTO the hold's own fill, so it is the paper showing through — dark here,
+exactly as it was light against the cream.
 
 Anything that signals state through hue alone is wrong, because the buyer chooses
 the hue and we do not.
@@ -116,7 +138,7 @@ Few rectangles are visible at that zoom, the image route already exists and is
 cached for a year by its own URL, and everything not redrawn keeps the
 composite's pixels, which are not wrong: they are the overview. Nearest
 neighbour still governs every scale, and the bars a `contain` fit leaves are
-the sheet's own cream on this path exactly as they are on the server's.
+the sheet's own paper on this path exactly as they are on the server's.
 
 **Holds are not in the wall.** A hold appears and expires within half an hour,
 and baking one in would rebuild the whole bitmap twice for every abandoned
@@ -140,7 +162,7 @@ rectangle in the sold fallback while every other purchase composes normally.
   there is nothing being hidden. The one box on the page allowed its own scroll
   is a side panel too short for its own contents, and only so the Buy button is
   never clipped.
-- **The wall is the same cream as the sheet.** There is always some background
+- **The wall around the sheet is one step lighter than it.** There is always some background
   beside the board now, and it is `#f3ede0` — the board's own paper — not a
   darker ground. The board should read as a sheet pinned to a wall of the same
   paper, never as a letterboxed image with bars round it. **A 2px `ink` frame
@@ -239,7 +261,7 @@ rectangle in the sold fallback while every other purchase composes normally.
   lies about what they are. Only chrome rounds.
 - **Sold blocks** carry a 1px ink border, so the boundary between two adjacent
   blocks is visible even when both uploads are the same colour — including when
-  both are the cream that means available. It is drawn in screen pixels from
+  both are the paper that means available. It is drawn in screen pixels from
   the rectangle list rather than baked into the wall, because a border in the
   bitmap would be a *wall* pixel and would eat one the buyer paid for. Below
   about four screen pixels across it is not drawn at all: a 1px stroke round a
@@ -255,146 +277,249 @@ rectangle in the sold fallback while every other purchase composes normally.
 
 ## Colour
 
-One accent, terracotta, and it means exactly two things: *this is the primary
-action* and *this is your selection*. It appears nowhere else — not in headings,
-not in borders, not as decoration.
+One accent, **signal green**, and it means exactly two things: *this is the
+primary action* and *this is your selection*. It appears nowhere else — not in
+headings, not in borders, not as decoration. That rule is older than this
+register and did not change with it; only the hue did.
 
-Terracotta was chosen over the warmer yellow it descends from for a specific
-reason: yellow disappears into skin tones and sand, which real uploads are full
-of. A red-leaning hue stays rare against arbitrary artwork.
+### The token names did not change, and that is the point
 
-The selection outline is terracotta over an ink core with a cream ring, so it
-survives any artwork underneath without depending on contrast with it. That
-sandwich, not the terracotta, is what makes the outline visible over an upload;
-the accent only says whose outline it is.
+`--primary` is green now and it was terracotta before. `--ink` is near-white now
+and it was olive-brown before. **Not one variable was renamed**, because every
+one of them is named for the job it does rather than for the colour it happens
+to be: primary is the accent that carries an action, ink is the strongest text,
+canvas is the surface the page sits on, hairline is decoration. Those sentences
+are true in both registers, which is what made the swap a change of values
+rather than a change of the stylesheet.
 
-**The focus ring is the third thing terracotta means, and it is the same
-claim.** A focused control is a control the keyboard has selected, so it takes
-the accent: 2px of `primary` at a 2px offset, which puts the ring on the
-surface behind the control rather than on the control's own fill. Measured
-against the four surfaces a focusable thing lands on: **4.32:1** on `canvas`,
-**4.92:1** on `card`, **4.64:1** on `card-warm`, **3.81:1** on `canvas-deep` —
-the last being a ring beside a disabled neighbour, which is a real background
-even though the neighbour is exempt. WCAG 1.4.11 asks 3:1.
+**One name was register-specific and one was renamed:** `--card-warm` became
+`--card-lift`. Nothing here is warm, and a token whose name contradicts its
+value is how a stylesheet stops being readable.
 
-**Two focusable things cannot take that ring, and both are answered rather
-than excused.** A control whose real input is hidden — the image dropzone's
-file input, the fit chooser's radios — would put a ring on a one-pixel box, so
-the ring goes on the visible box that stands for it. And the board is a canvas
-the size of the whole viewport, so an outline at a 2px offset is drawn outside
-the window: its ring is **painted into the board**, hugging the sheet's edge
-and clamped into the free region so a board zoomed past its own edges still
-shows one. That ring is the selection's own sandwich — cream, ink, terracotta —
-because zoomed in it lands on somebody's artwork, and no single colour survives
-that.
+**Three tokens are new**, and all three existed already as hard-coded hexes
+inside `BoardCanvas.tsx`: `--paper` (the board's own surface, which used to be
+the same value as `--canvas` and is not any more), `--frame`, and `--hold`.
+Promoting them is what makes them checkable — see the guard at the end of this
+section.
+
+### Why the register left the cream
+
+The cream said *workshop*, and the audience this wall sells to reads quiet as
+"nothing is happening here" (`docs/references.md`, second reading). The ground
+is cold and blue-leaning now — `canvas` `#0a0d12`, `paper` `#070a0e` — and
+deliberately not a warm near-black, because warm near-black is a sand tone at
+low lightness and the whole argument for leaving the cream was that cream is a
+sand tone. **The rule that outranks every other one survives unchanged:** a
+block's state must never depend on the colour a buyer uploaded, and the paper
+sits 100° or more of hue from skin and sand at every lightness a photograph
+occupies.
+
+**The board's paper is one step darker than the ground it sits on.** `#070a0e`
+against `#0a0d12` measures **1.02:1**, which is to say it is not a boundary and
+was never meant to be one — the 2px `frame` at 3.61:1 is what says where the
+sheet ends. The step is felt rather than read: it stops the sheet reading as a
+hole in the surface at the corners the frame turns, and it is the same trick the
+cream used in the other direction. **Nothing is allowed to depend on it.** A
+state that could only be told from this pair is a state nobody can see.
+
+### Every ratio here was computed, and none was chosen
+
+Computed from the values in this document's own frontmatter with the WCAG 2.1
+relative-luminance formula, and confirmed against pixels sampled out of a
+rendered screenshot at 1440 and 1920. A ratio nobody computed is not a ratio.
+
+| | `canvas` | `canvas-deep` | `card` | `card-lift` | `paper` |
+|---|---|---|---|---|---|
+| `ink` `#eef2f7` | **17.31** | **16.30** | **16.70** | **15.22** | **17.64** |
+| `ink-soft` `#b3bdcc` | **10.26** | **9.66** | **9.90** | **9.02** | **10.45** |
+| `body` `#8d97a6` | **6.59** | **6.20** | **6.36** | **5.79** | **6.72** |
+| `mute` `#6b7686` | **4.23** | **3.98** | **4.08** | **3.72** | **4.31** |
+| `primary` `#2ce08a` | **11.25** | **10.59** | **10.85** | **9.89** | **11.46** |
+| `control-line` `#586a89` | **3.56** | **3.35** | **3.43** | **3.13** | **3.62** |
+| `frame` `#5c6b84` | **3.61** | **3.40** | **3.48** | **3.17** | **3.68** |
+| `hold` `#5a6779` | 3.38 | 3.19 | 3.26 | 2.98 | **3.45** |
+| `danger` `#ff5c47` | **6.37** | **6.00** | **6.15** | **5.60** | **6.49** |
+| `hairline-strong` `#242c38` | 1.38 | 1.30 | 1.33 | 1.22 | 1.41 |
+
+And the pairs that are not a foreground on a surface:
+
+| Pair | Ratio | What it is |
+|---|---|---|
+| `on-primary` on `primary` | **10.53** | every Buy, Continue and Confirm label |
+| `on-primary` on `primary-pressed` | **7.03** | the same label, pressed |
+| `ink` on `hold` | **5.12** | the **On hold** chip |
+| `paper` on `hold` | **3.45** | the hold's broken edge against its own fill |
+
+**The whole text ramp clears 4.5:1 on every surface it lands on**, which the
+cream register could not say: there, `body` was 5.20:1 at best and `mute` had to
+be argued for at 3.25:1. Leaving the cream bought that, and it is the one thing
+the change bought for free.
+
+**Two rows are deliberately below 3:1 and each is answered rather than
+excused.**
+
+`hairline-strong` is decoration — the rule under the top bar, the divider
+between tape rows, the outline round a card — and WCAG 1.4.11 reaches what
+identifies a *control* or carries information in a graphic. A card is found by
+what is printed in it. **This is the same argument the cream register made for
+the same token, and it survives the register change word for word.**
+
+`hold` measures 2.98 on `card-lift`, and it never appears there. A hold is drawn
+on the board and nowhere else, so its only real number is **3.45 on `paper`** —
+which is what makes a held rectangle tellable from a free one at a glance rather
+than by inspection.
+
+### The two tokens this register had to correct, and why
+
+**`control-line` `#586a89`, because direction D's own mockup failed here.** That
+mockup borders every size preset, the wallet control and the keyboard legend
+with `#38424f`, which measures **1.68 to 1.95:1** across the five surfaces.
+Those borders are the only thing saying an interactive area is there; 1.4.11
+puts them at 3:1; they were at 1.68.
+
+**This is the identical failure the cream register found once already** —
+`hairline-strong` was carrying control borders at 1.63:1 until `control-line`
+was introduced — and it came back the moment the palette was rebuilt from a
+mockup. That is the argument for keeping two line colours as two names rather
+than one token used carefully: the mistake is not knowing the rule, it is
+reaching for the nearest grey.
+
+The correction was measured, not picked. `hairline-strong` is HSL 216° at 22%
+saturation; the new token holds the hue at 217° and the saturation at 22% so the
+two read as one family, and takes the lightness up until the worst of the five
+surfaces clears 3:1 with room — 18% → 44%, landing at **3.13:1 on `card-lift`**
+and 3.62 on `paper`.
+
+**`frame` moved for the same reason and by the same method.** D's mockup draws
+the board's 2px frame in `#4d5a6b`, which is **2.44 to 2.82:1**. The frame is
+the boundary of the largest interactive surface on the page — the board is
+dragged on — so 3:1 reaches it exactly as it reaches a text field. Same family,
+four points less saturation because it sits against artwork rather than against
+chrome: `#5c6b84`, **3.17:1** at worst and **3.68:1** against the paper it
+actually encloses.
+
+Neither is a taste change and neither is reversible on taste. If a later pass
+wants a quieter frame, the number to move is the lightness, and it does not go
+below the row in the table.
+
+### The focus ring
+
+**The focus ring is the third thing the accent means, and it is the same claim.**
+A focused control is a control the keyboard has selected. 2px of `primary` at a
+2px offset, which puts the ring on the surface *behind* the control rather than
+on the control's own fill: **11.25** on `canvas`, **10.85** on `card`, **9.89**
+on `card-lift`, **11.46** on `paper`. WCAG 1.4.11 asks 3:1; this register clears
+it more than three times over, where the cream register cleared it by a margin
+of 0.81 at its worst.
+
+Everything the cream register learned about rings still applies and none of it
+is repealed:
 
 **A focus ring never fades in.** Anywhere a colour transition covers
 `outline-color`, the ring spends its first 160ms measuring under 3:1 while the
 stylesheet still reads as `primary`. Transition the border, never the ring.
 
-**And a focus ring is never clipped, which is the same failure from the other
-side.** The ring is drawn 2px outside the control at a 2px offset, so any
-ancestor with `overflow` other than `visible` cuts it off — `overflow-x: auto`
-included, and that clips vertically too. A scrolling row of controls therefore
-carries four pixels of padding for the ring to live in, handed back to the
-layout with an equal negative margin so nothing moves. Found the only way it
-can be found: three of the four sides of the wallet's Connect button came back
-`#fbf5e8` out of a screenshot while the stylesheet said `2px solid
-var(--primary)` the whole time. **The size-preset row had the same shape and the
-same clipping; it was recorded here rather than changed on the way past, and has
-since been fixed the same way.** Both rows are now pinned by the same screenshot
-test, which samples the ring on all four sides of a control in each row and in
-each layout — the presets row came back `#be441d` on one side, four points off
-the accent and unmistakably the ring, so the comparison allows a blended edge
-pixel while a clipped side (cream, 150-plus points away per channel) still
-fails.
+**A focus ring is never clipped.** The ring is drawn 2px outside the control at
+a 2px offset, so any ancestor with `overflow` other than `visible` cuts it off —
+`overflow-x: auto` included, and that clips vertically too. Every scrolling row
+of controls carries four pixels of padding for the ring to live in, handed back
+to the layout with an equal negative margin. **Three rows on this page have that
+shape and all three carry the padding**: the wallet control, the size presets,
+and the settled-purchase rail, which is the newest and therefore the one that
+will be got wrong next.
 
-**The accent deepened by six points of lightness, and that was measured rather
-than chosen.** It used to be `#dd4e22`. On-primary cream (`#fff8ef`) on that
-measures **3.84:1**, and the label on every Buy, Continue, Confirm and "Ask
-again" is 14–15px at 700 — under 18.66px bold, so WCAG 1.4.3 asks 4.5:1. The board's
-selection tag sets the same cream at 11px/700 on the same fill, so one number
-failed in two places. `#c2451e` measures **4.79:1** on the same cream.
+**Two focusable things cannot take the ring, and both are answered rather than
+excused.** A control whose real input is hidden — the dropzone's file input, the
+fit chooser's radios — would put a ring on a one-pixel box, so the ring goes on
+the visible box that stands for it. And the board is a canvas the size of the
+viewport, so a ring at a 2px offset is drawn outside the window: its ring is
+**painted into the board**, hugging the sheet's edge and clamped into the free
+region so a board zoomed past its own edges still shows one.
 
-**The hue did not move, and it must not.** Both tones are HSL 14° at 73%
-saturation; only the lightness went 50% → 44%. The whole reason terracotta beat
-the yellow it descends from is that a red-leaning hue stays rare against
-arbitrary artwork, and buying contrast by sliding towards yellow or towards a
-neutral would have spent exactly the property the colour was picked for. Darken
-within the hue, never drift out of it.
+### The selection, over artwork
 
-`primary-pressed` followed it down to `#9f3819` for the same reason it exists —
-it is the shoulder under the button — and for one it did not: it is set as
-*text* on `primary-soft` in the counter pill at 12px/700, where it measured
-**4.26:1** and now measures **5.26:1**.
+The selection outline is `primary` over a `paper` core with a `frame` ring, so it
+survives any artwork underneath without depending on contrast with it. **That
+sandwich, not the green, is what makes the outline visible over an upload**; the
+accent only says whose outline it is. Unchanged from the cream register except
+for which three colours are in the stack.
 
-**`mute` is a tone, not a text colour.** It used to set the all-caps labels, the
-form hints, the interaction legend, the hover card's metadata and the input
-placeholders. At `#948a79` that measured **2.92:1** on `canvas`, **3.32:1** on
-`card`, **3.13:1** on `card-warm` and **2.57:1** on `canvas-deep`, and every one
-of those sites is 11–16px text, which 1.4.3 puts at 4.5:1. Darkening the token
-far enough to carry 11px text on the cream would have parked it on top of
-`body`, which is to say it would have deleted the rung instead of fixing it. So
-that text is `body` now — **5.20:1** on `canvas`, **5.92:1** on `card`,
-**5.58:1** on `card-warm` — and the ramp keeps four distinct steps.
+### `mute` is a tone, not a text colour
 
-What `mute` still sets is the two things allowed to be quiet: a disabled control's
-label, which 1.4.3 exempts as incidental, and one aria-hidden decorative glyph,
-which 1.4.11 does not reach. Both sit on `canvas-deep`. **Exempt is not a licence
-to be invisible**, so it darkened to `#827968` all the same: **2.57:1 → 3.25:1**,
-which is the 3:1 floor this project claimed in a comment for months without ever
-having measured it.
+`mute` `#6b7686` sets exactly two things: a disabled control's label, which
+1.4.3 exempts as incidental, and one aria-hidden decorative glyph, which 1.4.11
+does not reach. **Exempt is not a licence to be invisible**, so it clears 3:1 on
+every surface it lands on and in fact clears 3.72 at worst. Everything the cream
+register moved off `mute` — the all-caps labels, the form hints, the interaction
+legend, the hover card's metadata, the input placeholders — stays off it, on
+`body`, and the ramp keeps four distinct steps.
 
-**There are two line colours, and the split is the point.** `hairline-strong`
-(`#c9baa0`) is decoration: the sheet's edge, the rule under the top bar, the
-outline round a card, the border round a box of prose. It measures **1.63:1**
-on `canvas` and **1.86:1** on `card` and it stays exactly there, because WCAG
-1.4.11 reaches what identifies a *control* or carries information in a graphic,
-and a card is found by what is printed in it rather than by its outline. A 3:1
-rule round every box would be a louder page than this document asks for.
+### What checks this
 
-`control-line` (`#8a795c`) is the other job: the border that is the only thing
-saying an interactive area is there. Every text field, every quiet button, the
-image dropzone and the fit chooser. Those are boundaries identifying a
-component, 1.4.11 puts them at 3:1, and `hairline-strong` was carrying them at
-1.63:1 — the one failure the last contrast pass reported and left. Measured on
-the four surfaces a control lands on: **3.62:1** on `canvas`, **4.12:1** on
-`card`, **3.89:1** on `card-warm`, **3.19:1** on `canvas-deep`. The scrollbar
-thumb takes it too — it is a control you drag, and it is the one whose only
-indication is a fill rather than a border.
+**`design-tokens.test.ts` reads this document and fails the suite when the code
+disagrees with it.** Not a linter and not a convention: it parses the
+frontmatter above and asserts four things.
 
-**The hue did not move here either.** `control-line` is the same 38° as the
-decorative line so the two read as one family; the saturation drops from 27.5%
-to 20%, which is where the ink ramp already sits and which keeps the tone a
-warm neutral rather than the olive that hue becomes when it is darkened at full
-saturation; the lightness then comes down until the worst of the four surfaces
-clears 3:1 with room to spare.
-
-Every ratio in this document is a WCAG 2.1 relative-luminance ratio, computed
-from the values above and confirmed against pixels sampled out of a rendered
-screenshot. A ratio nobody computed is not a ratio.
+1. **Every colour in the frontmatter is the value `globals.css` actually sets**,
+   by name, in `:root`. A token changed in one place and not the other is a
+   failing test rather than a screenshot somebody notices later.
+2. **`--paper` is the same colour in all five places that hold it** — the
+   stylesheet, the server-side compositor, the board canvas, the confirmation
+   preview, and the browser-side encoder that flattens an alpha channel. Five
+   copies of one colour is how a register change half-lands.
+3. **Every ratio printed in the tables above is the ratio those two values
+   actually have**, recomputed from the frontmatter. This document cannot claim
+   a number it does not have — which is the written rule "a ratio nobody
+   computed is not a ratio", enforced instead of restated.
+4. **The two typefaces named here are the two `layout.tsx` loads**, and no other
+   family is loaded from anywhere.
 
 ## Type
 
-**Bricolage Grotesque** for display, **Karla** for everything else. Both from
-Google Fonts. Numbers are tabular everywhere they can change — counters, prices,
-countdowns — so digits do not jump as they tick.
+**Space Grotesk** for display and prose, **IBM Plex Mono** for every number,
+every label and every piece of metadata. Both from Google Fonts.
 
-Hierarchy comes from size and weight, not from boxes and rules. If something needs
-a border to be found, the layout is wrong first.
+**The mono is not a decoration, and that is the whole difference from the
+register before it.** The cream wall set numbers in tabular Karla, which is a
+proportional face doing a monospace job. Here the mono carries a category:
+**anything that is a measurement is set in it** — a count, a price, a
+coordinate, a countdown, a signature fragment, an age on the tape — and anything
+that is a sentence is set in Space Grotesk. A reader can therefore tell a fact
+from a claim without reading either, which is what a dense surface has to do to
+stay readable at all.
+
+Tabular figures everywhere a number can change, as before, so digits do not jump
+as they tick. In the mono that is free.
+
+Hierarchy comes from size, weight and which face it is in — not from boxes and
+rules. If something needs a border to be found, the layout is wrong first.
+
+**Density is the point, and it has a floor.** The board's chrome runs 10.5px to
+12.5px: the tape rows, the panel's readout, the labels, the status strip. That
+is what the audience this wall sells to reads as "plugged into something" rather
+than as "nothing is happening here", and it is a deliberate reversal of the
+cream register's instinct that quiet is credible.
+
+**But the floor does not move for the two places it was written for, and both
+of them are load-bearing.**
 
 **Anywhere a buyer types, the text is 16px, and that is a layout rule rather
 than a taste one.** iOS Safari zooms the whole page when a field under 16px
-takes focus, and a buyer cannot zoom back out by hand. On a page that must
-never scroll, that would push the board off screen — so 16px on every input is
-what keeps the no-scroll contract standing on a phone.
+takes focus, and a buyer cannot zoom back out by hand. On a page that must never
+scroll, that would push the board off screen — so 16px on every input is what
+keeps the no-scroll contract standing on a phone. Density does not reach inside
+a field.
 
-**Nothing beside those fields is fine print.** In the purchase dialog, help,
-hints, counters and error lines are 14px at the smallest and prose is 15px:
-the ramp's `body-sm` belongs to the dense chrome around the board, not to the
-one screen where somebody is being asked to part with money. The all-caps
-`label` is the exception, because a label is read as a marker rather than as a
-sentence.
+**And nothing in the purchase dialog is fine print.** Help, hints, counters and
+error lines are 14px at the smallest and prose is 15px. The dense chrome belongs
+around the board; it does not belong on the one screen where somebody is being
+asked to part with money, and a register change is not a reason to shrink the
+sentence that explains what paying does. The all-caps `label` is the single
+exception, because a label is read as a marker rather than as a sentence.
+
+So the ramp has two halves and the boundary is a doorway: **outside the
+purchase dialog, dense; inside it, 14px and up.** A component that moves across
+that boundary changes size, and that is not an inconsistency.
 
 ## A bar, and either a panel or a second bar
 
@@ -443,7 +568,7 @@ way was overflowing its own column.
 The cap was too wide: on a large monitor the panel held 560px the board could
 have used, and the board, fitted by width there, came back with its own edge
 outside the window. **What the board does not need beside it is wall, not
-letterbox** — same cream, same rule as the rest of the background.
+letterbox** — same ground, same rule as the rest of the background.
 
 **In portrait and on phones it is a bottom bar**, one row at one fixed height,
 never wrapping — because the board's fit maths reads its measured box, and a
@@ -476,6 +601,53 @@ gaps. **Never** the pixel count, the
 total, or the Buy button — those are what the controls are for. The bottom bar
 runs out of width; the side panel runs out of height, and sheds the same things
 in the same order.
+
+## No new column takes width from the wall
+
+**The board is the product and width is what it is short of.** Every layout
+question on this page eventually becomes the same one — where does this new
+thing go — and the answer has to be settled once rather than argued each time,
+because each argument on its own always sounds affordable.
+
+**A new column comes out of the board's width. A new row comes out of its
+height. On a 1250×800 board fitted into a landscape window, width is the
+limiting dimension far more often, and a column costs the board more than a row
+of the same size does.** So:
+
+**Nothing new goes beside the board.** Not a second panel, not a rail of ticks,
+not a scoreboard, not a filmstrip. There is one column — the controls panel, at
+288px, and that number is measured rather than reasoned: the widest thing in it
+that cannot shrink is the Buy button at its longest, `Buy these pixels —
+$1,000,000.00`, which renders at 255px, plus 16px of padding either side and the
+panel's own 1px border.
+
+**What goes along the bottom instead**, at a fixed height, spanning the whole
+window under the panel rather than beside it: the settled-purchase register, at
+78px, and the status strip under it at 26px.
+
+### What this norm has already deleted
+
+**Direction D's own measuring rails.** The mockup this register comes from puts
+a 46px column of ruler ticks on each side of the board — `0`, `1250 × 800`,
+`800`, `fit`. They are handsome and they cost the wall **92px of width**, which
+at 1440 is 6.4% of the window and more of the board than that, for four labels.
+Three of the four are already said in the top bar and the fourth is the state of
+the zoom control that is sitting next to it.
+
+They are gone. The norm is written here rather than applied quietly, because a
+rule whose first act is to delete something from the design it was written for
+is a rule somebody can trust the second time.
+
+**This is a decision the owner can reverse** — it changes how the register looks
+and it was taken by measurement rather than by taste. If the rails come back,
+the norm is what has to be edited first.
+
+### The one exception, and its size
+
+The board's own **20px inset on all four sides**, and the **2px frame** drawn
+immediately outside the paper within it. That is not a column; it is the clear
+space that makes the sheet an object rather than a background, and it is
+subtracted on every side in both layouts.
 
 ## What only `/stats` says, and what the bar still may not
 
@@ -532,14 +704,39 @@ of positions that cannot be lost, rather than one that can.
 
 | State | How it reads |
 | --- | --- |
-| Free | The paper's own cream. Ruled, but only above the zoom where a wall pixel is about eight screen pixels; at fit it is plain cream |
-| Hovered | A soft cream lift and the caption card, no colour change |
-| Selecting | Terracotta outline with marching ants, so a drag never looks like a placed block |
-| Refused | The offending block outlined in danger, the selection outlined in danger, Buy disabled |
-| Held | **Its own value, not a variation on the sale's, and drawn by the canvas rather than baked into the wall.** Opaque like a sale, because those pixels are genuinely not for sale right now — but in the coarse rule's own tone (`#c9baa0`), plainly lighter than a sale's artwork-or-near-black and plainly heavier than the paper, so the two are told apart at a glance and not by inspection. Over it, an **ink** hatch at 45° — the one angle neither tier of the graph paper uses — and a broken ink edge where a sale carries an unbroken one. Pencilled in on card, not inked. Wherever the block is big enough to read one it carries its own chip, **On hold**, in the place a sold block puts its caption. A hold **you** started adds the terracotta ring, because it is still your selection and the only held rectangle you can act on. The countdown stays live in the control it gates. A hold never shows an upload: those pixels are unpaid and may never be bought, the wall composes `paid` and `minted` alone and the image route serves the same two, so there is nothing public to draw and the whole rectangle is free for a treatment of its own |
-| Sold | **The buyer's bitmap, nearest-neighbour at every zoom** — out of the wall at the overview, and out of its own stored bytes once the zoom is close enough for the ruling — with a 1px ink edge wherever there is room for one. The artwork is the treatment — this is the whole product, and the block is the frame. The bitmap is composed into the wall at the size the rectangle was bought at: enlarged into it with nearest neighbour so pixel art stays hard-edged, reduced into it with a real filter so a photograph stays the photograph the buyer approved in the preview |
-| Sold, loading or missing | Solid `#443a2c`, edge to edge, 1px ink edge. This is the **fallback**, not the sold treatment: what the rectangle shows in the moment before the wall arrives, and what it keeps if its own bytes never decode. Every sold rectangle gets it under the wall on every frame until the wall has decoded, so a sale reads as taken from the first paint; after that the artwork covers it. An upload with an alpha channel is composited onto the paper cream inside its own rectangle rather than onto this, and never onto the ruling — a sold rectangle is never ruled |
+| Free | The paper's own near-black. Ruled, but only above the zoom where a wall pixel is about eight screen pixels; at fit it is plain paper |
+| Hovered | A one-step lift towards `ground-lift` and the caption card, no colour change |
+| Selecting | `signal` outline with marching ants over a dark core and a `paper` ring, so a drag never looks like a placed block and never depends on the artwork under it |
+| Refused | The offending block outlined in `danger`, the selection outlined in `danger`, Buy disabled |
+| Held | **Its own value, not a variation on the sale's, and drawn by the canvas rather than baked into the wall.** Opaque like a sale, because those pixels are genuinely not for sale right now — `hold` `#5a6779`, **3.45:1 against the paper**, plainly lighter than the paper and plainly cooler and flatter than artwork, so the two are told apart at a glance and not by inspection. Over it, a `paper` hatch at 45° — the one angle neither tier of the ruling uses — and a broken `paper` edge where a sale carries an unbroken one. Wherever the block is big enough to read one it carries its own chip, **On hold**, in `text` on `hold` at **5.12:1**, in the place a sold block puts its caption. A hold **you** started adds the `signal` ring, because it is still your selection and the only held rectangle you can act on. The countdown stays live in the control it gates. A hold never shows an upload |
+| Sold | **The buyer's bitmap, nearest-neighbour at every zoom** — out of the wall at the overview, and out of its own stored bytes once the zoom is close enough for the ruling — with a 1px `paper` edge wherever there is room for one. The artwork is the treatment. The bitmap is composed into the wall at the size the rectangle was bought at: enlarged with nearest neighbour so pixel art stays hard-edged, reduced with a real filter so a photograph stays the photograph the buyer approved |
+| Sold, loading or missing | Solid `#1b2230`, edge to edge, 1px `paper` edge. This is the **fallback**, not the sold treatment: what the rectangle shows before the wall arrives, and what it keeps if its own bytes never decode. It is deliberately *lighter* than the paper rather than darker, because on a near-black wall a darker fallback is indistinguishable from a hole. Every sold rectangle gets it under the wall on every frame until the wall has decoded, so a sale reads as taken from the first paint. An upload with an alpha channel is composited onto the paper inside its own rectangle rather than onto this, and never onto the ruling — a sold rectangle is never ruled |
 | Taken down | Exactly like free, and it is **not** free. The content is gone from the wall and from every endpoint; the rectangle is still sold, still its owner's, and the selector still refuses it. Nothing on the board says a takedown happened, because a takedown is about what is displayed and the board is not a moderation log |
+
+**Empty is a state, and it is the one this wall spends its first day in.**
+
+The board draws its statement in the middle of the sheet, in mono, and it is
+three lines and nothing else:
+
+> **1,000,000**
+> pixels. none taken yet. every one of them is for sale on its own, at a
+> dollar, and the price is the same for the last one as for the first.
+> `DRAG ANYWHERE TO START`
+
+The number is `statement` — mono, 34px, 700, tabular — and it is
+`TOTAL_PIXELS`, the board's own two dimensions multiplied. The sentence under it
+is `text-2` at 12.5px in a 420px measure. The third line is not a button: it is
+`signal` text in a `signal` hairline box, because **the whole board is the
+control** and putting a button next to it would offer a second, worse way to do
+the thing the wall is already asking for.
+
+**And the top bar does not repeat it.** The offer line already opens with
+`1,000,000 pixels`, so the remaining count gives way while the two numbers are
+the same one — the rule is in `BoardCounters` and it predates this register.
+
+**The register along the bottom has its own empty state** and it is one line:
+*nothing settled yet · the first row lands here*. The rail keeps its height, so
+the board does not resize the moment the first purchase arrives.
 
 ## What has to be signed
 
@@ -605,17 +802,31 @@ at the moment it succeeded.
 ## Motion
 
 Functional, never announced. 160ms on hover, 90ms on press, 220ms on entrance,
-all on the shared ease. The only continuous motion on the page is the selection's
-marching ants, because a drag in progress is the one thing that genuinely differs
-from a thing at rest.
+all on the shared ease.
 
 The Buy button lifts 2px on hover and presses to 0.97. Nothing else lifts.
 
-**`prefers-reduced-motion` stops all of it, the ants included.** The stylesheet
-reaches every animation and transition on the page, and it cannot reach the
-marching ants: those are an interval redrawing a canvas, so the board asks the
-media query itself. The dashes still draw — the outline still says a selection
-is live — they simply stop moving.
+**Two continuous animations, and this register added the second one
+deliberately.** The first is the selection's marching ants, because a drag in
+progress is the one thing that genuinely differs from a thing at rest. The
+second is **the settled-purchase rail**, which rolls at `46s linear infinite`,
+and the argument for it is the argument for the whole register: *the thing that
+moves fast is the thing that constitutes the evidence.* A row cannot scroll past
+without carrying a signature, so the faster the wall fills, the more proof is on
+screen. It is not a casino's motion — a wheel that can take it back — because
+nothing on the rail can ever be reversed, which is precisely why it may be shown
+moving.
+
+The **LIVE** pip beside the rail pulses at `1.6s`. That is the third animation
+and the last; anything after it needs an argument in this document before it
+needs code.
+
+**`prefers-reduced-motion` stops all of it — the ants, the roll and the pip.**
+The stylesheet reaches every animation and transition on the page, and it cannot
+reach the marching ants: those are an interval redrawing a canvas, so the board
+asks the media query itself. The dashes still draw and the rail still shows its
+rows; they simply stop moving, and the rail becomes what it is on `/stats` — a
+list somebody scrolls.
 
 ## Voice
 
@@ -698,27 +909,36 @@ paid. An auction would also be the first thing on this page whose price is not
 knowable before you press Buy, on a board whose whole readout is "these pixels,
 this many, this much".
 
-**No copy promises revenue.** See the top bar's section above. A total is not
-printed, implied, or counted towards.
+**No copy promises revenue** — with one named exception, taken by the owner on
+2026-09-01 and recorded in `DECISIONS.md`. On the board it is unchanged: a total
+is not printed, implied, or counted towards, and the mechanism is that the
+board is never handed the number. On `/stats`, and only there, what has been
+taken is printed against what the whole wall costs. See "What only `/stats`
+says" above for why those are different contracts rather than the same rule
+applied twice.
 
 ## Settled colour decisions
 
 Decisions already taken, recorded so a later contrast pass does not spend its
 time reopening them.
 
-**`--danger-line` stays as it is** — 1.31:1 against its own fill and 1.79:1
-against the card. It encloses error *prose*, not a control, so WCAG 1.4.11 does
-not reach it: that rule governs boundaries that tell you where an interactive
-area is, and this boundary tells you nothing the words inside it do not already
-say. The error is communicated by the text. A saturated rule around every error
-message would shout a second time and buy no legibility.
+**`--danger-line` stays as it is** — **2.02:1** against the card in this
+register, where it measured 1.79:1 in the cream one. It encloses error *prose*,
+not a control, so WCAG 1.4.11 does not reach it: that rule governs boundaries
+that tell you where an interactive area is, and this boundary tells you nothing
+the words inside it do not already say. The error is communicated by the text,
+which is `--danger` at **6.15:1** on the card it sits on. A saturated rule around
+every error message would shout a second time and buy no legibility.
 
 If a future pass measures it and finds it failing, the finding is correct and
 the rule still does not apply. Leave it.
 
 **`--hairline-strong` stays as it is** for decorative rules, and control
-borders use `--control-line` instead. Do not solve a control's contrast by
-darkening decoration.
+borders use `--control-line` instead. **Do not solve a control's contrast by
+moving decoration** — which in this register means lightening it rather than
+darkening it, and is the same mistake either way up. It has now been made twice:
+once on cream, and once again in the mockup this register came from. The two
+tokens exist so the third time is a failing test instead.
 
 ## Attribution
 
@@ -740,14 +960,17 @@ MIT licensed:
 The MIT licence covers that analysis document. It does not license PostHog's trade
 dress, and none of it is used here: no mascots, no character illustration, none of
 their palette, and not their typefaces. What was taken is the argument that a
-developer product can be warm and cream rather than dark and severe, and that one
-saturated colour should carry every primary action.
+developer product can choose its own register rather than inheriting one, and
+that one saturated colour should carry every primary action. The first half of
+that argument was taken literally once — this document specified a warm cream
+wall for four months — and the register has since gone the other way on
+evidence about who the wall sells to. What survived both is the second half.
 
 The graph-paper-versus-solid rule and the zero-radius rule were taken from a
 Pinterest analysis in the same MIT-licensed collection, and are likewise
 reimplemented rather than copied. The first of the two has since been
 **replaced** — a per-pixel board cannot say "ruled means available", so what
-says it now is the paper's own cream, and the ruling has become a navigation
+says it now is the paper's own near-black, and the ruling has become a navigation
 aid that appears only at close zoom. See "The one rule that outranks the
 others". The zero-radius rule stands unchanged.
 

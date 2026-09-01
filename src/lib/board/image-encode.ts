@@ -116,7 +116,7 @@ export async function prepareImage(file: File, block: Box, fit: Fit): Promise<Pr
       // JPEG has no alpha: without this, a transparent PNG would arrive with
       // black behind it rather than the paper the board is drawn on.
       if (type === "image/jpeg") {
-        context.fillStyle = "#ffffff";
+        context.fillStyle = "#070a0e";
         context.fillRect(0, 0, canvas.width, canvas.height);
       }
       context.imageSmoothingEnabled = true;

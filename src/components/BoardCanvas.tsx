@@ -129,15 +129,15 @@ const PAINT = {
   // it; painting it darker would letterbox the artwork, and DESIGN.md asks for
   // a sheet of paper on a wall of the same paper instead. The board's own
   // coarse rule draws its edge, which is all the separation it needs.
-  ground: "#f3ede0",
-  paper: "#f3ede0",
+  ground: "#0a0d12",
+  paper: "#070a0e",
   ruleFine: "rgba(43,36,28,0.10)",
-  ruleCoarse: "#c9baa0",
+  ruleCoarse: "#242c38",
   // --ink, and the sheet's own edge. See the frame in `draw` for why the
   // hairline that used to draw it became two pixels of this instead.
-  frame: "#2b241c",
-  sold: "#443a2c",
-  soldEdge: "#2b241c",
+  frame: "#5c6b84",
+  sold: "#2e3642",
+  soldEdge: "#586a89",
   /*
    * HELD IS NOT SOLD, and it must not look like it at a glance.
    *
@@ -158,7 +158,7 @@ const PAINT = {
    * so there is nothing public to draw on these pixels and the whole rectangle
    * is free for a treatment of its own.
    */
-  held: "#c9baa0",
+  held: "#5a6779",
   /*
    * The hatch is the load-bearing half of this treatment, not the tint. It is
    * the "ruled back over a covered block" that DESIGN.md's one outranking rule
@@ -173,20 +173,20 @@ const PAINT = {
    * hatch have to carry it and why neither is allowed to go faint.
    */
   heldRule: "rgba(43,36,28,0.62)",
-  heldEdge: "#2b241c",
-  chip: "#2b241c",
-  chipText: "#f3ede0",
+  heldEdge: "#070a0e",
+  chip: "#5a6779",
+  chipText: "#eef2f7",
   lift: "rgba(255,252,245,0.16)",
   // --primary, and it is the fill behind the selection tag as well as the
-  // outline's top stroke. The tag sets PAINT.cream at 11px/700 on it, so this
+  // outline's top stroke. The tag sets PAINT.onSelection at 11px/700 on it, so this
   // is a WCAG 1.4.3 text pair at 4.5:1, not a decoration: on the old #dd4e22
   // it measured 3.84:1 and on this it measures 4.79:1. Same hue, same
   // saturation, six points darker — see globals.css for why the hue could not
   // move.
-  selection: "#c2451e",
+  selection: "#2ce08a",
   selectionFill: "rgba(194,69,30,0.14)",
-  cream: "#fff8ef",
-  danger: "#a8371f",
+  ring: "#eef2f7",
+  danger: "#ff5c47",
   dangerFill: "rgba(168,55,31,0.16)",
 };
 
@@ -959,7 +959,7 @@ export default function BoardCanvas({
       if (rect.id === hoveredId) {
         context.fillStyle = PAINT.lift;
         context.fillRect(x, y, w, h);
-        context.strokeStyle = PAINT.cream;
+        context.strokeStyle = PAINT.ring;
         context.lineWidth = 2;
         context.strokeRect(x + 1, y + 1, Math.max(0, w - 2), Math.max(0, h - 2));
       }
@@ -992,7 +992,7 @@ export default function BoardCanvas({
       // order. Three tones means the outline survives any artwork underneath
       // without depending on contrast with it — including artwork the same
       // cream as the paper.
-      context.strokeStyle = PAINT.cream;
+      context.strokeStyle = PAINT.ring;
       context.lineWidth = 1;
       context.strokeRect(x - 4.5, y - 4.5, w + 9, h + 9);
       context.strokeStyle = PAINT.soldEdge;
@@ -1004,7 +1004,7 @@ export default function BoardCanvas({
 
       if (selection.buyable) {
         context.save();
-        context.strokeStyle = PAINT.cream;
+        context.strokeStyle = PAINT.ring;
         context.lineWidth = 2;
         context.setLineDash([ANTS_DASH, ANTS_DASH]);
         context.lineDashOffset = -ants;
@@ -1057,7 +1057,7 @@ export default function BoardCanvas({
       if (right > left && bottom > top) {
         const w = right - left;
         const h = bottom - top;
-        context.strokeStyle = PAINT.cream;
+        context.strokeStyle = PAINT.ring;
         context.lineWidth = 1;
         context.strokeRect(left - 2.5, top - 2.5, w + 5, h + 5);
         context.strokeStyle = PAINT.soldEdge;
@@ -1643,7 +1643,7 @@ function drawSelectionTag(
   const top = above < barTop + 6 ? y + 6 : above;
   context.fillStyle = colour;
   context.fillRect(x, top, width, height);
-  context.fillStyle = PAINT.cream;
+  context.fillStyle = PAINT.ring;
   context.textBaseline = "middle";
   context.fillText(text, x + 8, top + height / 2 + 0.5);
   context.restore();

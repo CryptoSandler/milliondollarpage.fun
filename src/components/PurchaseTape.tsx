@@ -29,16 +29,24 @@ import { formatUsdc, pixelCount } from "../lib/board/pricing";
  * on the SERVER for the same reason — see `lib/board/tape.ts`, which explains
  * why a whole one would publish the payer.
  *
- * ## Why it does not move
+ * ## Why it moves, now that the document lets it
  *
- * The direction this rail comes from scrolls it, and DESIGN.md as it stands
- * forbids that: "The only continuous motion on the page is the selection's
- * marching ants, because a drag in progress is the one thing that genuinely
- * differs from a thing at rest." A register that rolls past on its own is
- * continuous motion, and it is not this document's to authorise. So the rail
- * is a static row, newest first, that scrolls when somebody scrolls it. The
- * rolling version is one of the things the register change is being gated on;
- * if it is taken, this is where it lands, behind `prefers-reduced-motion`.
+ * It did not, and the reason it did not was that DESIGN.md allowed exactly one
+ * continuous animation on this page and it was the marching ants. The register
+ * change is what authorised the second, and the argument is in the document:
+ * *the thing that moves fast IS the evidence*. A row cannot pass without its
+ * signature, and nothing on this rail can ever be reversed — which is what
+ * separates it from a casino's tape, where the point of the motion is that the
+ * next spin can take it back.
+ *
+ * THE ROWS ARE RENDERED TWICE and the track translates by half its own width,
+ * which is what makes the loop seamless. The second copy is `aria-hidden`: an
+ * eye sees a continuous rail, a screen reader is read the purchases once.
+ *
+ * IT STOPS FOR ANYBODY READING IT. Hover or keyboard focus pauses the roll —
+ * a register you cannot read is decoration — and `prefers-reduced-motion`
+ * stops it outright and drops the duplicate copy with it, because a still
+ * track showing everything twice reads as a bug rather than as a loop.
  *
  * ## Why it is not on a phone
  *
@@ -115,11 +123,23 @@ export default function PurchaseTape({
   }, []);
 
   return (
-    <aside ref={ref} className="board-tape" aria-label="Recently settled purchases">
+    <aside
+      ref={ref}
+      className="board-tape"
+      aria-label="Recently settled purchases"
+    >
       <div className="board-tape__head">
-        <p className="label-caps">Settled</p>
+        <p className="board-tape__live label-caps">
+          {/* The pip is aria-hidden and the word carries the meaning: a
+              pulsing dot is not information a screen reader can use, and
+              "settled" is. */}
+          <span aria-hidden className="board-tape__pip" />
+          Settled
+        </p>
         <p className="text-[11.5px] leading-tight text-body">
-          {rows.length === 0 ? "the first one lands here" : "newest first · on chain"}
+          {rows.length === 0
+            ? "the first one lands here"
+            : "newest first · on chain"}
         </p>
       </div>
 
@@ -138,45 +158,54 @@ export default function PurchaseTape({
       >
         {rows.length === 0 ? (
           <p className="self-center whitespace-nowrap px-1 text-[13px] text-body">
-            Nothing has settled yet. Every purchase that does appears here, with the
-            signature that settled it.
+            Nothing has settled yet. Every purchase that does appears here, with
+            the signature that settled it.
           </p>
         ) : (
-          <ol className="flex h-full items-stretch">
-            {rows.map((row) => (
-              <li key={row.id} className="board-tape__row">
-                <span className="tabular text-[14px] font-semibold text-ink">
-                  {row.w} × {row.h}
-                </span>
-                <span className="tabular text-[13px] font-semibold text-ink-soft">
-                  {formatUsdc(row.totalBaseUnits)}
-                </span>
-                <span className="tabular text-[12px] text-body">
-                  {pixelCount(row.pixels)} at ({row.x}, {row.y})
-                </span>
-                <span className="tabular text-[12px] text-body">
-                  {sinceLabel(now - Date.parse(row.paidAt))}
-                </span>
-                {/*
+          <div className="board-tape__track">
+            {/* Two copies, so the roll has no seam. Only the first is read. */}
+            {[false, true].map((duplicate) => (
+              <ol
+                key={String(duplicate)}
+                aria-hidden={duplicate || undefined}
+                className="flex h-full items-stretch"
+              >
+                {rows.map((row) => (
+                  <li key={row.id} className="board-tape__row">
+                    <span className="tabular text-[14px] font-semibold text-ink">
+                      {row.w} × {row.h}
+                    </span>
+                    <span className="tabular text-[13px] font-semibold text-ink-soft">
+                      {formatUsdc(row.totalBaseUnits)}
+                    </span>
+                    <span className="tabular text-[12px] text-body">
+                      {pixelCount(row.pixels)} at ({row.x}, {row.y})
+                    </span>
+                    <span className="tabular text-[12px] text-body">
+                      {sinceLabel(now - Date.parse(row.paidAt))}
+                    </span>
+                    {/*
                   The proof, and the only part of the row that is not a fact
                   about the rectangle. Eight of eighty-eight characters: enough
                   for the buyer holding the other eighty to recognise their own
                   purchase, and not enough for anybody else to look it up and
                   read the payer's address off it.
                 */}
-                <span
-                  className="tabular text-[12px] text-body"
-                  title={
-                    row.signature === null
-                      ? "This purchase settled before signatures were recorded."
-                      : "The first and last four characters of the signature that settled this purchase."
-                  }
-                >
-                  {row.signature ?? "unsigned"}
-                </span>
-              </li>
+                    <span
+                      className="tabular text-[12px] text-body"
+                      title={
+                        row.signature === null
+                          ? "This purchase settled before signatures were recorded."
+                          : "The first and last four characters of the signature that settled this purchase."
+                      }
+                    >
+                      {row.signature ?? "unsigned"}
+                    </span>
+                  </li>
+                ))}
+              </ol>
             ))}
-          </ol>
+          </div>
         )}
       </div>
     </aside>

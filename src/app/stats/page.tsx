@@ -121,7 +121,7 @@ export default async function StatsPage() {
           </p>
 
           {standings.length === 0 ? (
-            <p className="mt-6 rounded-xl border border-hairline-strong bg-card-warm px-4 py-6 text-center text-[15px] text-body">
+            <p className="mt-6 rounded-xl border border-hairline-strong bg-card-lift px-4 py-6 text-center text-[15px] text-body">
               Nothing has been bought yet. The first rectangle on the wall is the first rectangle on
               this list.
             </p>

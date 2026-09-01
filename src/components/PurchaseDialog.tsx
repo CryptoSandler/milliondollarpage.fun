@@ -597,7 +597,7 @@ export default function PurchaseDialog({
         </div>
 
         {fatalMessage === null && (
-          <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-hairline-strong bg-card-warm px-4 py-3">
+          <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-hairline-strong bg-card-lift px-4 py-3">
             <div>
               <p className="label-caps">You pay</p>
               <p className="tabular font-display text-[20px] font-bold text-ink">{formatUsdc(total)}</p>
@@ -639,7 +639,7 @@ export default function PurchaseDialog({
                 behind whatever they are being read instead of cutting it off. */}
             <p
               role="status"
-              className="rounded-xl border border-hairline-strong bg-card-warm px-4 py-3 text-[15px] leading-relaxed text-ink-soft"
+              className="rounded-xl border border-hairline-strong bg-card-lift px-4 py-3 text-[15px] leading-relaxed text-ink-soft"
             >
               {STALLED_MESSAGE[stalled]}
             </p>
@@ -679,7 +679,7 @@ export default function PurchaseDialog({
               role="alert"
               className={`rounded-xl px-4 py-3 text-[15px] leading-relaxed text-ink-soft ${
                 releasable.length > 0
-                  ? "border border-hairline-strong bg-card-warm"
+                  ? "border border-hairline-strong bg-card-lift"
                   : "border border-danger-line bg-danger-soft"
               }`}
             >
