@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { PreparedImage } from "../lib/board/image-encode";
-import { formatUsdc } from "../lib/board/pricing";
+import { formatUsdc, pixelCount } from "../lib/board/pricing";
 import {
   confirmOrder,
   createHold,
@@ -583,7 +583,7 @@ export default function PurchaseDialog({
               Buy this block
             </h2>
             <p className="tabular mt-0.5 truncate text-[15px] text-body">
-              {rect.w} × {rect.h} at ({rect.x}, {rect.y}) · {pixels.toLocaleString("en-US")} pixels
+              {rect.w} × {rect.h} at ({rect.x}, {rect.y}) · {pixelCount(pixels)}
             </p>
           </div>
           <button
@@ -776,7 +776,7 @@ export default function PurchaseDialog({
           // exactly what a buyer wants confirmed at that moment.
           <div role="status" className="mt-4 flex flex-col gap-4">
             <h3 className="font-display text-[17px] font-semibold text-ink">
-              Done — {pixels.toLocaleString("en-US")} pixels are yours
+              Done — {pixelCount(pixels)} {pixels === 1 ? "is" : "are"} yours
             </h3>
             <p className="text-[15px] leading-relaxed text-body">
               {formatUsdc(order.totalBaseUnits)} paid for {rect.w} × {rect.h} at ({rect.x}, {rect.y}),

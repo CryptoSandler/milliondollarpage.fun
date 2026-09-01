@@ -1,5 +1,6 @@
 /**
- * Money, in integer base units, always.
+ * Money, in integer base units — and the wall's own words about what a
+ * pixel costs and how many of them are in hand.
  *
  * A price of $1 is 1_000_000, not 1. Nothing here converts to a float and
  * back: 0.1 + 0.2 is a famous joke everywhere except in a checkout, and the
@@ -96,4 +97,29 @@ export function offerLine(perPixel: number): string {
  */
 export function unitOfSale(perPixel: number): string {
   return `${formatUsdc(perPixel)} a pixel · any rectangle, from one pixel up`;
+}
+
+/**
+ * A count of pixels, with the noun in the number's own grammatical number.
+ *
+ * WHO CALLS THIS: the selection readout and the size presets in
+ * `SelectionPanel`, the confirmation row and its paying sentence in
+ * `ConfirmationStep`, the dialog's rectangle line and its done line in
+ * `PurchaseDialog`, and the hold ceiling in `/faq`. Every one of them used to
+ * concatenate `toLocaleString()` with a hard-coded " pixels", which is right
+ * 999,999 times out of a million and says **"1 pixels"** for the smallest
+ * purchase this wall sells — the one a first-time buyer is most likely to draw,
+ * on the screen where they are being asked to part with money.
+ *
+ * It lives beside `offerLine` and `unitOfSale` because those are the other two
+ * places the wall's own words are decided rather than typed into a component,
+ * and this is the third.
+ *
+ * ponytail: an English ternary, not `Intl.PluralRules`. The platform's answer
+ * is one call away and is the upgrade path the moment any copy on this page is
+ * translated — every caller already routes through here, so that swap is this
+ * function and nothing else.
+ */
+export function pixelCount(pixels: number): string {
+  return `${pixels.toLocaleString("en-US")} ${pixels === 1 ? "pixel" : "pixels"}`;
 }

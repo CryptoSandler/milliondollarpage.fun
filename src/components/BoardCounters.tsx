@@ -34,14 +34,35 @@ export default function BoardCounters({
 }) {
   const left = TOTAL_PIXELS - stats.pixelsSold;
 
+  /*
+    THE MILLION IS SAID ONCE IN THIS BAR, NOT TWICE.
+
+    `offerLine` opens with `1,000,000 pixels`, and on a board nobody has bought
+    anything on yet the remaining count is the same million — so the row read
+    `1,000,000 pixels · $1 per pixel · yours forever · 1,000,000 pixels left`,
+    which says one number twice and reads as a bar that is not paying
+    attention. It is exactly the state the wall spends its first day in.
+
+    The count gives way, and only where the offer line is actually on screen
+    to replace it: below `sm` the offer is hidden and the count is the only
+    thing there is, so it stays. That is one utility class rather than a second
+    branch of markup, and the moment a single pixel sells the two numbers stop
+    being the same one and the count comes back at every width.
+  */
+  const sameNumberTwice = left === TOTAL_PIXELS;
+
   return (
     <div className="flex min-w-0 items-center gap-x-3 overflow-hidden whitespace-nowrap text-[13px] text-body">
       {/* Below `sm` the wordmark and the count are all a phone has room for,
           and the line is what gives way. It is the offer, not the state of
           the board, and a buyer meets it again beside the Buy button. */}
       <p className="hidden truncate text-ink sm:block">{offerLine(perPixel)}</p>
-      <span className="hidden text-hairline-strong sm:inline">·</span>
-      <p className="tabular truncate">
+      <span
+        className={`hidden text-hairline-strong ${sameNumberTwice ? "" : "sm:inline"}`}
+      >
+        ·
+      </span>
+      <p className={`tabular truncate ${sameNumberTwice ? "sm:hidden" : ""}`}>
         <span className="font-semibold text-ink">{left.toLocaleString("en-US")}</span>
         <span className="text-body"> pixels left</span>
       </p>
