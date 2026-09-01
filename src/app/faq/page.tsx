@@ -22,10 +22,22 @@ import { pixelCount } from "../../lib/board/pricing";
  * code it describes. What is written by hand here is only the wording.
  *
  * WHAT IT DOES NOT DO IS PROMISE. Whether a block can ever change hands is an
- * open decision (`SECURITY.md`), so this page states what is true today and
- * claims nothing about tomorrow in either direction. There is no sentence here
- * saying transfer will never exist, and there must never be one until somebody
- * decides that in as many words.
+ * open decision (`SECURITY.md`, `DECISIONS.md`), so this page states what is
+ * true today and claims nothing about tomorrow in either direction. There is no
+ * sentence here saying transfer will never exist, and there must never be one
+ * until somebody decides that in as many words. The word
+ * "non-transferable" is as forbidden as a promise of transfer, and the arrival
+ * round in `docs/cold-start-round.md` is where that is argued: a sales
+ * conversation is exactly where an open door gets closed by accident.
+ *
+ * AND IT DISCLOSES THE LAUNCH COHORT. The owner's own projects bought
+ * rectangles on day one at list price. That is discoverable whether or not this
+ * page says it — the settled-purchase register prints an amount and a signature
+ * fragment per sale ordered by `paid_at`, the treasury address is public by
+ * construction, and a cluster of purchases in one minute followed by silence is
+ * a permanent shape in that timeline. The round's verdict was that the version
+ * of this which fails badly is the silent one, so it is said here in one
+ * question, without dressing it up as a milestone.
  */
 
 export const metadata: Metadata = {
@@ -75,14 +87,35 @@ export default function FaqPage() {
 
         <Question title="Can I sell it or give it to somebody else?">
           <p>
-            <strong className="font-bold text-ink">Not today.</strong> There is no transfer in this
-            product right now: a rectangle stays registered to the address that bought it. We have not
-            decided whether transfer will ever exist, and we are not going to pretend either way —
-            what we can tell you is exactly what is built, and today that is nothing.
+            <strong className="font-bold text-ink">
+              We have not decided, and we are not going to pretend either way.
+            </strong>{" "}
+            There is no transfer in this product right now: a rectangle stays registered to the
+            address that bought it. Whether transfer will ever exist is an open question here, and
+            an open question is what we will keep calling it — you will not find us promising it,
+            and you will not find us ruling it out.
           </p>
           <p>
-            Buy on the basis of what is here now, not on the basis of what might arrive. If being able
-            to move it later is the reason you are buying, this is not the moment.
+            What we can tell you is exactly what is built, and today that is nothing. So buy on the
+            basis of what is here now, not on the basis of what might arrive.{" "}
+            <strong className="font-bold text-ink">
+              If being able to move it later is the reason you are buying, this is not the moment.
+            </strong>
+          </p>
+        </Question>
+
+        <Question title="Did the owner buy pixels?">
+          <p>
+            <strong className="font-bold text-ink">Yes.</strong> Projects run by the person who
+            built this wall bought rectangles on it, on the first day, at a dollar a pixel — the
+            same price on the same terms as everybody else, paid from a real wallet through this
+            same checkout.
+          </p>
+          <p>
+            They are not marked on the board, because a sold rectangle is a sold rectangle and the
+            wall does not rank who bought what. We are telling you here instead, which is the part
+            that matters: a wall that starts with its own owner on it should say so rather than let
+            you find out.
           </p>
         </Question>
 
