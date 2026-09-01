@@ -28,7 +28,18 @@ async function pixelArt(w = 24, h = 18): Promise<Buffer> {
 
 /** Gaussian noise is the incompressible limit a photograph approaches. */
 async function photograph(w = 480, h = 360): Promise<Buffer> {
-  return sharp({ create: { width: w, height: h, channels: 3, noise: { type: "gaussian", mean: 128, sigma: 60 } } })
+  // `background` is required alongside `noise` by sharp's types even though
+  // the noise covers it. Omitting it type-checks nowhere and runs fine, which
+  // is why the suite was green while the build was not.
+  return sharp({
+    create: {
+      width: w,
+      height: h,
+      channels: 3,
+      background: { r: 0, g: 0, b: 0 },
+      noise: { type: "gaussian", mean: 128, sigma: 60 },
+    },
+  })
     .png()
     .toBuffer();
 }
