@@ -696,6 +696,22 @@ h3 {
     max-width: calc(100vw - 24px);
   }
 
+  /*
+   * ROOM FOR THE FOCUS RING, which is DESIGN.md's rule arriving in a new place.
+   *
+   * The ring is 2px drawn at a 2px offset, so it reaches four pixels past the
+   * button on every side. Packed at a 4px gap the ring on one control landed on
+   * its neighbour's border, and the pixel sampler read #807b73 — a border, not
+   * a ring — which is the same failure the wallet row and the preset row each
+   * had once, in a third place.
+   *
+   * Ten pixels: four for the ring, and six that still read as one group.
+   */
+  .board-rail .board-rail__presets,
+  .board-rail .board-rail__zoom {
+    gap: 10px;
+  }
+
   /* Small enough to be a rail, big enough to hit. */
   .board-rail .btn-quiet {
     height: 24px;

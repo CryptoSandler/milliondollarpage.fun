@@ -365,9 +365,21 @@ describe("the board plus its chrome never needs more room than the viewport has"
     }
   });
 
-  it("keeps that strip between 16 and 24 pixels, which is the gutter the rest of the page uses", () => {
-    expect(BOARD_INSET - BOARD_FRAME_PX).toBeGreaterThanOrEqual(16);
-    expect(BOARD_INSET - BOARD_FRAME_PX).toBeLessThanOrEqual(24);
+  it("keeps that strip at the 8 pixels the chrome budget leaves for it", () => {
+    /*
+      IT WAS 16–24 AND IS NOW 8, and the change is the layout norm rather than a
+      slipped assertion. Twenty was chosen when the chrome around the board was
+      a 52px bar and a 288px column, where eight would have looked mean and the
+      page's 16px gutter was the natural reference.
+
+      The layout runs on a vertical chrome budget of 60px now — a 34px header
+      and a 26px rail — and against that a 20px inset top and bottom is 40px,
+      two thirds of the entire budget spent on clear paper. Eight still reads as
+      hung rather than cropped. The frame is added on top, so the number is
+      clear paper rather than paper the border is drawn over.
+    */
+    expect(BOARD_INSET - BOARD_FRAME_PX).toBe(8);
+    expect(BOARD_INSET).toBeGreaterThan(BOARD_FRAME_PX);
   });
 
   it("names the one exception: a viewport with no room for a board at all", () => {

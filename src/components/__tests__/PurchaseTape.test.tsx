@@ -102,7 +102,10 @@ describe("the settled-purchase rail", () => {
     const html = renderToStaticMarkup(<PurchaseTape rows={[]} asOf={AS_OF} />);
 
     expect(html).toContain("Nothing has settled yet");
-    expect(html).toContain("the first one lands here");
+    // The rail's second line moved into its tooltip when the rail went to one
+    // 26px strip — two lines of type there clipped the lower one at the bottom
+    // of the window. Same words, somewhere with room for them.
+    expect(html).toContain("The first one lands here");
   });
 
   it("is reachable and named, because it is a region that scrolls", () => {

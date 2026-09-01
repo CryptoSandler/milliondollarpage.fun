@@ -454,13 +454,33 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
         // INK, not the accent. The accent means money moving now and a focus
         // ring is a selection state — see DESIGN.md's colour section.
         const RING = token("ink");
+        /*
+          CLOSER TO THE RING THAN TO THE SURFACE, rather than within N of the
+          ring. The rail is centred with `translateX(-50%)`, so its controls sit
+          on fractional coordinates and the ring is anti-aliased across two
+          device pixels — a sample there came back #807b73, which is ink blended
+          with the card and 87 points from either. A fixed tolerance either
+          fails on that blend or is loosened until a CLIPPED side would pass
+          too, and a clipped side is the whole point: it reads as the surface,
+          which is 150-plus points from the ring.
+
+          Comparing the two distances is immune to the blend and still fails
+          hard on a clip, because a clipped pixel IS the surface — distance zero
+          to the thing it must not be.
+        */
+        const SURFACE = token("card");
+        const away = (from: [number, number, number], channels: number[]) =>
+          Math.max(...channels.map((value, index) => Math.abs(value - from[index])));
+
         for (const [side, sampled] of Object.entries(sides)) {
           const channels = [1, 3, 5].map((at) => Number.parseInt(sampled.slice(at, at + 2), 16));
-          const drift = Math.max(...channels.map((value, index) => Math.abs(value - RING[index])));
+          const toRing = away(RING, channels);
+          const toSurface = away(SURFACE, channels);
           expect(
-            drift,
-            `${side} of ${what} in the ${layout} sampled ${sampled}, which is not the focus ring`,
-          ).toBeLessThanOrEqual(12);
+            toRing,
+            `${side} of ${what} in the ${layout} sampled ${sampled}: ${toRing} from the ring, ` +
+              `${toSurface} from the surface — the ring is clipped there`,
+          ).toBeLessThan(toSurface);
         }
        }
       }

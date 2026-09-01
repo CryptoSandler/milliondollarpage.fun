@@ -127,6 +127,17 @@ export default function PurchaseTape({
       ref={ref}
       className="board-tape"
       aria-label="Recently settled purchases"
+      /*
+        The rail's second line — "newest first · on chain" — was two lines of
+        type in a 26px strip and the lower one was clipped at the bottom of the
+        window. It is the rail's own tooltip now: the same words, somewhere with
+        room for them.
+      */
+      title={
+        rows.length === 0
+          ? "Settled purchases. The first one lands here."
+          : "Settled purchases, newest first, on chain."
+      }
     >
       <div className="board-tape__head">
         <p className="board-tape__live">
