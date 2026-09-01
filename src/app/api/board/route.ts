@@ -1,4 +1,9 @@
-import { listBoardRects, boardStats } from "../../../lib/board/blocks";
+import {
+  boardStandings,
+  boardStats,
+  listBoardRects,
+  STANDINGS_ON_WALL,
+} from "../../../lib/board/blocks";
 import { ensureWall } from "../../../lib/board/composite";
 import { pricePerPixelBaseUnits } from "../../../lib/board/settings";
 import { recentPurchases } from "../../../lib/board/tape";
@@ -26,6 +31,11 @@ import { NO_STORE, json } from "../../../lib/http";
  *     and a second poll would be a second thing to keep in step with the
  *     first. `asOf` is what lets the browser render "4m ago" identically on
  *     the server and on the first client paint — see `PurchaseTape`.
+ *   * `standings` — the five biggest rectangles, for the foot of the right
+ *     rail. Five rows of four numbers, riding along for the same reason the
+ *     tape does. It carries no total and it is not a step towards one: what
+ *     the wall has TAKEN stays out of this payload, so the board cannot print
+ *     it even by accident. See `soldValueBaseUnits`, and `board.test.ts`.
  *
  * The name stayed because the job did: this is still "what is on the board".
  * Caption and link now arrive from `/api/blocks/{id}` when somebody rests on a
@@ -40,13 +50,14 @@ import { NO_STORE, json } from "../../../lib/http";
  * it points at is cached hard, which is the whole point of versioning it.
  */
 export async function GET(): Promise<Response> {
-  const [rects, wall, stats, price, tape, online] = await Promise.all([
+  const [rects, wall, stats, price, tape, online, standings] = await Promise.all([
     listBoardRects(),
     ensureWall(),
     boardStats(),
     pricePerPixelBaseUnits(),
     recentPurchases(),
     onlineNow(),
+    boardStandings(STANDINGS_ON_WALL),
   ]);
 
   return json(
@@ -57,6 +68,7 @@ export async function GET(): Promise<Response> {
       pricePerPixelBaseUnits: price,
       tape,
       online,
+      standings,
       asOf: new Date().toISOString(),
     },
     { headers: NO_STORE },

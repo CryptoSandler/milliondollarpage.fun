@@ -258,6 +258,15 @@ export type Standing = {
  * area are separated by which one was there first, which is the only fact
  * about them that is not a coin toss.
  */
+/**
+ * How many of them the WALL shows, as against the ten `/stats` lists.
+ *
+ * Five, because the right rail is 180px at its narrowest and the standing is
+ * the third thing in it: a list long enough to be a ranking and short enough
+ * that the settled register above it is still what the rail is mostly about.
+ */
+export const STANDINGS_ON_WALL = 5;
+
 export async function boardStandings(limit = 10): Promise<Standing[]> {
   const rows = await query<{
     id: string;

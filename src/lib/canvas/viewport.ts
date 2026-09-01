@@ -167,6 +167,65 @@ export const BOARD_FRAME_PX = 2;
  */
 export const BOARD_INSET = 8 + BOARD_FRAME_PX;
 
+/**
+ * The top bar's height, nominally, in CSS pixels.
+ *
+ * It mirrors `--bar-top-h` in globals.css. Two things need it before there is
+ * anything to measure: `BoardView`'s first-paint chrome, and the boot script in
+ * `layout.tsx` that decides the layout before the first frame. The real height
+ * is measured off the element the moment there is one — this is only ever the
+ * assumption the very first paint has to make, and it is the same assumption
+ * the stylesheet makes.
+ */
+export const BAR_TOP_PX = 34;
+
+/**
+ * The narrowest a side rail may be, and the widest it may grow.
+ *
+ * WHO USES THESE: `sideRailWidth` below, the boot script in `layout.tsx` that
+ * stamps the layout before the first paint, and `scripts/board-share.mts`.
+ *
+ * 180 IS MEASURED, AND THE MEASUREMENT IS A REFUSAL TO OVERFLOW. The rail was
+ * pinned to 180px in the rendered page — idle and with a purchase panel open —
+ * and every element inside both rails was asked whether its `scrollWidth`
+ * exceeded its `clientWidth`. Nothing does. Three things had to change first
+ * and each is in DESIGN.md: a settled row's age and proof wrap rather than cut
+ * the signature, a standings row stacks its size over its amount, and the Buy
+ * button's price takes a second line rather than the button taking a shorter
+ * label.
+ *
+ * 288 IS THIS DESIGN'S OWN NUMBER: the width at which that button gets its
+ * longest label, `Buy these pixels — $1,000,000.00`, back on one line. Past it
+ * the leftover stays wall rather than becoming a wider rail. See DESIGN.md,
+ * "The threshold, and the arithmetic that sets it".
+ */
+export const SIDE_RAIL_MIN = 180;
+export const SIDE_RAIL_MAX = 288;
+
+/**
+ * How wide the side rails are at this viewport, and 0 when there are none.
+ *
+ * WHO CALLS THIS: the boot script in `layout.tsx` — by hand, in six lines of
+ * inline JavaScript, because the answer is needed before the first paint and a
+ * React effect is a frame too late. `rails-boot.test.ts` runs that script
+ * against this function over a sweep of viewports, so the two cannot drift.
+ *
+ * THE GAP IS THE ONE THE BOARD CANNOT USE. The board is contained, not covered,
+ * so in a window wider than the board's own 1.5625:1 it is fitted by HEIGHT and
+ * the width beside it is width no scale could reach: growing into it would mean
+ * growing past a height that is already spent. The height used here is the one
+ * the rail layout leaves — the header alone, because the settled register goes
+ * into the right rail rather than along the bottom — which is why a rail sized
+ * from this gap leaves the board still height-limited and therefore never
+ * smaller than it was without one. DESIGN.md carries the argument; the negative
+ * assertion is in `purchase-e2e.test.ts`.
+ */
+export function sideRailWidth(screen: Size, board: Size): number {
+  const free = screen.height - BAR_TOP_PX - 2 * BOARD_INSET;
+  const gap = (screen.width - 2 * BOARD_INSET - (board.width / board.height) * free) / 2;
+  return gap >= SIDE_RAIL_MIN ? Math.min(gap, SIDE_RAIL_MAX) : 0;
+}
+
 /** The rectangle of viewport the board may use: everything the chrome leaves. */
 export function freeRegion(screen: Size, chrome: Chrome): { x: number; y: number } & Size {
   return {

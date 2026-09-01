@@ -838,6 +838,16 @@ preference.
 and a **26px** settled rail. **≤ 140px once the purchase panel is open**, which
 is the one piece of chrome that comes and goes.
 
+**With the side rails on the budget is 34px, and it is the header alone.** That
+is the whole of the vertical chrome there: the settled register and the
+purchase panel have both left the bottom of the window for a column that costs
+the board no height at all. The number is measured, not asserted — see the
+table under *Which viewports this reaches* — and `scripts/board-share.mts`
+holds it at 34 the same way it holds 60 and 140 everywhere else. **What the
+guard counts is the vertical band of chrome that stands over the board's own
+width**, so a rail beside the board contributes nothing to it, which is the
+same claim the layout makes said in the guard's own terms.
+
 The board then takes every pixel of height the budget leaves, scaled by
 whichever of its dimensions limits first, centred — so the spare width becomes
 letterbox, and the letterbox is where the floating panel goes.
@@ -866,6 +876,7 @@ what is guarded. **The shares are reported, not asserted:**
 |---|---|---|---|---|
 | 1440×900 | 60px | 140px | 1285×824 | **81.7%** |
 | 1920×1080 | 60px | 140px | 1567×1004 | **75.9%** |
+| 2560×1440 (rails) | 34px | 34px | 2170×1390 | **81.8%** |
 | 1280×800 | 60px | 140px | 1129×724 | **79.8%** |
 | 390×844 | 34px | 126px | 374×241 | **27.4%** |
 
@@ -918,40 +929,152 @@ height. On a 1250×800 board fitted into a landscape window, width is the
 limiting dimension far more often, and a column costs the board more than a row
 of the same size does.** So:
 
-**Nothing new goes beside the board.** Not a second panel, not a rail of ticks,
-not a scoreboard, not a filmstrip. There is one column — the controls panel, at
-288px, and that number is measured rather than reasoned: the widest thing in it
-that cannot shrink is the Buy button at its longest, `Buy these pixels —
-$1,000,000.00`, which renders at 255px, plus 16px of padding either side and the
-panel's own 1px border.
+**Nothing new takes width FROM the wall.** Not a second panel, not a rail of
+ticks, not a scoreboard, not a filmstrip. The one column that exists — the
+controls panel — is 288px, and that number is measured rather than reasoned:
+the widest thing in it that cannot shrink is the Buy button at its longest,
+`Buy these pixels — $1,000,000.00`, which renders at 255px, plus 16px of
+padding either side and the panel's own 1px border.
 
-**What goes along the bottom instead**, at a fixed height, spanning the whole
-window under the panel rather than beside it: the settled-purchase register, at
-78px, and the status strip under it at 26px.
+### The amendment: the letterbox is not the wall
 
-### What this norm has already deleted
+**The norm used to read "nothing new goes BESIDE the board", and that sentence
+was wider than the argument under it.** The argument is about width the board
+would otherwise have used. It has none to spare in a window shaped like the
+board — but the board is **1.5625:1** and a desktop window is 1.78:1 or wider,
+so once the board has taken every pixel of height the budget leaves, there is
+width beside it that **the board cannot use at any scale**. Contain, not cover:
+growing into that width would mean growing past the height that is already
+gone.
+
+That leftover is not the wall's. It is the ground the sheet hangs on, and the
+chrome is allowed to stand in it. **The rule is the guarantee, not the
+geometry: the board is never smaller because a rail is there.**
+
+**So the chrome moves into two side rails exactly when the leftover is wide
+enough to hold it, and nowhere else.** Below that it is the layout this
+document already described — a bar on top, a register along the bottom, a
+floating panel — unchanged, down to the pixel.
+
+### The threshold, and the arithmetic that sets it
+
+The gap on each side, once the board has taken the height a header-only chrome
+leaves it:
+
+    gap = (viewport width − 2×10 inset − 1.5625 × (viewport height − 34 header − 2×10 inset)) / 2
+
+The inset is 10 rather than 8 because `BOARD_INSET` is the clear paper plus the
+2px frame drawn inside it, and the fit maths has always counted both.
+
+**Rails are on when `gap ≥ 180px`, and the rail is `min(gap, 288px)` wide.**
+
+**180 is measured, and the measurement is a refusal to overflow.** The rail was
+pinned to 180px in the rendered page, idle and with a purchase panel open, and
+every element inside both rails was asked whether its `scrollWidth` exceeded its
+`clientWidth`. Nothing does. Three things had to change before that was true,
+and each is a decision rather than a squeeze:
+
+- **a settled row's age and its proof wrap onto a second line** where they do
+  not fit, because the eight characters of signature were being cut and a
+  truncated proof is not a proof;
+- **a standings row puts its size and its amount on two lines**, the rank
+  spanning both, because `147 × 147` beside `$24,990` is 136px of a 140px grid;
+- **the Buy button's price takes a second line** rather than the button taking a
+  shorter label. The shed order never reaches that button: what it says is not
+  allowed to change, only how many lines it says it on. **And the readout stops
+  truncating** — it is `truncate` in a horizontal bar, where a readout that grew
+  would push Buy off the end, and in a column there is nothing to its right to
+  push. The first build of it read `100 pixels  $…`, which is the total price
+  giving way, and the total price is one of the three things that never does.
+
+**288 is the ceiling** and it is this document's own number: the width at which
+the Buy button gets its longest label, `Buy these pixels — $1,000,000.00`, back
+on one line. Past it the extra stays wall.
+
+**The board never pays for the rail, and this is why rather than a hope.** The
+rail is sized to the gap a **height-limited** board leaves, so the board is
+still height-limited with the rails there, and the height it is fitted to is
+larger than before — the settled register left the bottom of the window, so the
+vertical chrome is the 34px header alone. A board fitted to more height is
+wider, not narrower. Where the gap is wider than 288 the rail stops growing and
+the board is still height-limited. There is no branch in which it shrinks, and
+`purchase-e2e.test.ts` asserts it in the negative at a viewport where the rails
+are on.
+
+### Which viewports this reaches, measured
+
+Every board figure below was read off `data-board-rect` — the rectangle the
+renderer actually painted, frame included — by `scripts/board-share.mts`, at
+the viewport named, before and after.
+
+| Viewport | Gap each side | Rails | Board before | Board after | Share |
+|---|---|---|---|---|---|
+| 1440×900 | 49.1px | off | 1285×824 | 1285×824 | 81.7% |
+| 1920×1080 | 148.4px | off | 1567×1004 | 1567×1004 | 75.9% |
+| 2560×1440 | 187.2px | **on** | 2129×1364 | **2170×1390** | 78.8% → **81.8%** |
+| 1280×800 | none | off | 1129×724 | 1129×724 | 79.8% |
+| 390×844 | none | off | 374×241 | 374×241 | 27.4% |
+
+**The one viewport that changes gains 41px of width and 26px of height** — the
+26 is exactly the settled strip that left the bottom of the window, which is
+the amendment's own claim arriving as a measurement. The other four are
+identical to the pixel, which is the other half of it.
+
+**This is a narrow door and it is meant to be.** A 16:9 window's gap is
+`0.108 × height + 32`, so 1080 gives 148 and 1440 gives 187: on 16:9 the rails
+begin at about **1373 lines of height** — a 2441×1373 window — and they begin
+immediately on anything wider than 16:9, where a 3440×1440 ultrawide has 626px
+a side and takes the 288 ceiling. At 2560×1440 they are on by **7.2 pixels**.
+That is not a rounding error to be tuned away; it is the honest edge of the
+arithmetic, and it errs the safe way — every real browser window on that
+monitor has less height than 1440 and therefore MORE gap than this.
+
+### What each rail carries
+
+**Left, top to bottom:** the size presets and the zoom, which stop floating
+over the artwork and become a column; then the purchase panel, at the bottom,
+when there is a selection. The panel still comes and goes with the selection
+and still costs the board nothing when it is there.
+
+**Right, top to bottom:** **LIVE**, its pip and the count of who else is here;
+then the settled-purchase register, vertical — a thumbnail, the size, the
+amount and how long ago, newest first; then the five biggest rectangles on the
+wall, which is `/stats`'s standing in short form. **It carries no total.** The
+bar's rule reaches every rail on this page: a per-rectangle price is a fact
+about a rectangle, and a sum of them would be a forecast.
+
+**The register does not roll in the rail.** The horizontal rail rolls because
+it is a strip too narrow to hold its own rows; a column is not, and a list that
+moves while somebody reads down it is a list nobody reads.
+
+**The header keeps three things when the rails are on:** the wordmark, the
+count of what is left, and the theme toggle beside the way to the questions.
+
+### What this norm has already deleted, and what the amendment does not restore
 
 **Direction D's own measuring rails.** The mockup this register comes from puts
 a 46px column of ruler ticks on each side of the board — `0`, `1250 × 800`,
-`800`, `fit`. They are handsome and they cost the wall **92px of width**, which
-at 1440 is 6.4% of the window and more of the board than that, for four labels.
-Three of the four are already said in the top bar and the fourth is the state of
-the zoom control that is sitting next to it.
+`800`, `fit`.
 
-They are gone. The norm is written here rather than applied quietly, because a
-rule whose first act is to delete something from the design it was written for
-is a rule somebody can trust the second time.
+**Half of that argument has just been repealed and the other half has not.**
+The half that is gone is the width: 46px would fit in the gap at 1920 and at
+2560 and cost the board nothing, so "they cost the wall 92px" is no longer
+true where the rails live. What stands is the half that was never about
+pixels — **three of those four labels are already said in the top bar and the
+fourth is the state of the zoom control sitting next to it.** A rail that is
+free is still not worth a reader's attention if what it says is already on
+screen. They stay deleted on that sentence alone, which is the honest reason
+they should have been deleted on all along.
 
-**This is a decision the owner can reverse** — it changes how the register looks
-and it was taken by measurement rather than by taste. If the rails come back,
-the norm is what has to be edited first.
+**Both halves of this are the owner's to reverse.** The rails came back because
+they were asked for; the tick columns can come back the same way.
 
 ### The one exception, and its size
 
-The board's own **20px inset on all four sides**, and the **2px frame** drawn
+The board's own **8px inset on all four sides**, and the **2px frame** drawn
 immediately outside the paper within it. That is not a column; it is the clear
 space that makes the sheet an object rather than a background, and it is
-subtracted on every side in both layouts.
+subtracted on every side in every layout.
 
 ## What only `/stats` says, and what the bar still may not
 

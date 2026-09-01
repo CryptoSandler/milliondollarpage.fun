@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { execute } from "../../../lib/db";
 import { GET } from "../board/route";
 import { TAPE_ROWS } from "../../../lib/board/tape";
+import { STANDINGS_ON_WALL } from "../../../lib/board/blocks";
 
 async function insert(x: number, y: number, w: number, h: number, status: string): Promise<void> {
   await execute(
@@ -52,6 +53,44 @@ describe("GET /api/board", () => {
 
     const body = JSON.parse(raw);
     expect(Object.keys(body.rects[0]).sort()).toEqual(["h", "id", "status", "w", "x", "y"]);
+  });
+
+  /**
+   * The right rail's standing rides in this payload, and the reason it is
+   * allowed to is that it is five rectangles rather than a sum of them.
+   *
+   * DESIGN.md's bar rule reaches every rail on the board: "nothing on the page
+   * promises revenue. Not a million dollars raised, not a total, not an implied
+   * one." A per-rectangle price is a fact about a rectangle — the settled
+   * register has printed one per row since it existed. What must never arrive
+   * here is the total, and the mechanism is not a rule about rendering: the
+   * board is never told the number, so the board cannot print it.
+   */
+  it("ships the five biggest rectangles, and no total of what they came to", async () => {
+    await insert(0, 0, 100, 100, "paid");
+    await insert(200, 200, 50, 50, "paid");
+
+    const raw = await (await GET()).text();
+    const body = JSON.parse(raw) as {
+      standings: { w: number; h: number; totalBaseUnits: number }[];
+    };
+
+    expect(body.standings).toHaveLength(2);
+    expect(body.standings[0]).toMatchObject({ w: 100, h: 100 });
+    expect(body.standings[0].totalBaseUnits).toBe(100 * 100 * 1_000_000);
+    // Biggest first, which is what makes it a standing rather than a list.
+    expect(body.standings[1]).toMatchObject({ w: 50, h: 50 });
+
+    expect(Object.keys(body)).not.toContain("soldValueBaseUnits");
+    expect(raw).not.toContain("soldValue");
+  });
+
+  it("never ships more of the standing than the wall has room for", async () => {
+    for (let at = 0; at < STANDINGS_ON_WALL + 3; at += 1) {
+      await insert(at * 20, 0, 10 + at, 10 + at, "paid");
+    }
+    const body = await (await GET()).json();
+    expect(body.standings).toHaveLength(STANDINGS_ON_WALL);
   });
 
   it("points at one versioned wall rather than one bitmap per purchase", async () => {

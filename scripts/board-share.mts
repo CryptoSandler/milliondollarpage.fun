@@ -41,14 +41,31 @@ process.env.DATABASE_URL = DATABASE;
  *
  * 60 with nothing selected: a 34px header, a 26px rail, and the 8px board inset
  * on each side counted separately below. 140 once the purchase panel is open,
- * which is the one piece of chrome that comes and goes.
+ * which is the one piece of chrome that comes and goes. Both of these are the
+ * layout WITHOUT side rails, which is every viewport under the threshold in
+ * `sideRailWidth` — see DESIGN.md's "Which viewports this reaches".
  */
 const BUDGET_IDLE = 60;
 const BUDGET_SELECTED = 140;
+/**
+ * And the budget where the side rails are on, which is the header and nothing
+ * else — measured at exactly 34px, the same number `--bar-top-h` sets and the
+ * same one a phone already reports when the settled strip is not shown.
+ *
+ * It does not move with the selection there. The purchase panel is at the foot
+ * of the left rail rather than floating over the letterbox, so opening it costs
+ * the board no height at all, which the 140px row of this table cannot say.
+ */
+const BUDGET_RAILED = 34;
 
 const VIEWPORTS = [
   { name: "1440×900", width: 1440, height: 900 },
   { name: "1920×1080", width: 1920, height: 1080 },
+  // The widest desktop this design is looked at on, and the first one where
+  // the letterbox beside a height-limited board is wide enough to hold the
+  // chrome. Without it the table reports only viewports where the side rails
+  // are off, which is the half of the layout that did not change.
+  { name: "2560×1440", width: 2560, height: 1440 },
   { name: "1280×800", width: 1280, height: 800 },
   { name: "390×844", width: 390, height: 844 },
 ];
@@ -69,17 +86,61 @@ const MEASURE = `(() => {
     if (!el) continue;
     const box = el.getBoundingClientRect();
     if (box.height === 0) continue;
-    parts.push({ what: selector, top: box.top, bottom: box.bottom, height: box.height });
+    parts.push({
+      what: selector,
+      top: box.top,
+      bottom: box.bottom,
+      height: box.height,
+      left: box.left,
+      right: box.right,
+    });
   }
-  return JSON.stringify({ board, parts, vw: innerWidth, vh: innerHeight });
+  return JSON.stringify({
+    board,
+    parts,
+    vw: innerWidth,
+    vh: innerHeight,
+    rails: document.documentElement.getAttribute("data-rails") === "on",
+  });
 })()`;
+
+type Part = {
+  what: string;
+  top: number;
+  bottom: number;
+  height: number;
+  left: number;
+  right: number;
+};
 
 type Reading = {
   board: string | null;
-  parts: { what: string; top: number; bottom: number; height: number }[];
+  parts: Part[];
   vw: number;
   vh: number;
+  rails: boolean;
 };
+
+/**
+ * WHAT COUNTS IS THE CHROME THAT STANDS OVER THE BOARD'S OWN WIDTH.
+ *
+ * The budget is a claim about vertical room the board does not get, and a rail
+ * BESIDE the board denies it none: the board is fitted into the width between
+ * the rails and takes every pixel of height the header leaves. Summing every
+ * fixed element's height would report a 1300px column as 1300px of vertical
+ * chrome, which is arithmetic answering a question nobody asked.
+ *
+ * So a part is counted only where its horizontal span meets the board's. That
+ * is the same predicate the fit guard in `purchase-e2e.test.ts` uses for
+ * overlap, one axis at a time, and it does a second job for free: a rail that
+ * ever DID reach over the board would start counting, and the budget would fail
+ * rather than the encroachment going unnoticed.
+ */
+function overTheBoard(parts: Part[], board: string | null): Part[] {
+  const [x, , w] = (board ?? "0,0,0,0").split(",").map(Number);
+  if (!(w > 0)) return parts;
+  return parts.filter((part) => part.left < x + w && x < part.right);
+}
 
 /** The vertical band the chrome occupies, with overlaps counted once. */
 function chromeHeight(parts: Reading["parts"]): number {
@@ -114,7 +175,7 @@ async function main(): Promise<void> {
     }
 
     console.log(
-      `\n  ${"viewport".padEnd(12)}${"selection".padEnd(11)}${"chrome".padStart(8)}` +
+      `\n  ${"viewport".padEnd(20)}${"selection".padEnd(11)}${"chrome".padStart(8)}` +
         `${"budget".padStart(8)}${"board".padStart(14)}${"share".padStart(9)}`,
     );
 
@@ -163,8 +224,12 @@ async function main(): Promise<void> {
               "same state. See ~/.claude/GATES.md.",
           );
         }
-        const chrome = chromeHeight(reading.parts);
-        const budget = selected ? BUDGET_SELECTED : BUDGET_IDLE;
+        const chrome = chromeHeight(overTheBoard(reading.parts, reading.board));
+        const budget = reading.rails
+          ? BUDGET_RAILED
+          : selected
+            ? BUDGET_SELECTED
+            : BUDGET_IDLE;
         const [, , bw, bh] = (reading.board ?? "0,0,0,0").split(",").map(Number);
         const share = ((bw * bh) / (reading.vw * reading.vh)) * 100;
         const over = chrome > budget;
@@ -175,7 +240,7 @@ async function main(): Promise<void> {
         }
 
         console.log(
-          `  ${view.name.padEnd(12)}${(selected ? "open" : "none").padEnd(11)}` +
+          `  ${`${view.name}${reading.rails ? " ·rails" : ""}`.padEnd(20)}${(selected ? "open" : "none").padEnd(11)}` +
             `${chrome.toFixed(0).padStart(6)}px${String(budget).padStart(6)}px` +
             `${`${bw.toFixed(0)}×${bh.toFixed(0)}`.padStart(14)}${share.toFixed(1).padStart(8)}%` +
             (over ? "   OVER" : ""),

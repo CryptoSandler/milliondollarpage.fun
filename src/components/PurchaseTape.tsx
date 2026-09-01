@@ -1,7 +1,8 @@
 "use client";
 
-import { type Ref, useEffect, useState } from "react";
+import { type ReactNode, type Ref, useEffect, useState } from "react";
 import type { TapeRow } from "../lib/board/tape";
+import { blockImageUrl } from "../lib/board/block-image";
 import { formatUsdc, pixelCount } from "../lib/board/pricing";
 
 /**
@@ -48,6 +49,16 @@ import { formatUsdc, pixelCount } from "../lib/board/pricing";
  * stops it outright and drops the duplicate copy with it, because a still
  * track showing everything twice reads as a bug rather than as a loop.
  *
+ * ## Where it lives, which is two places now
+ *
+ * Along the bottom of the wall, as a strip that rolls — and, on the viewports
+ * wide enough for the side rails, as a COLUMN down the right, where it does not
+ * roll at all. Same component, same rows, same DOM: `globals.css` turns it on
+ * its side, drops the seamless duplicate, and reveals a thumbnail per row.
+ * DESIGN.md carries why the column is still: a strip rolls because it is too
+ * narrow to hold its own rows, and a list that moves while somebody reads down
+ * it is a list nobody reads.
+ *
  * ## Why it is not on a phone
  *
  * The bottom-bar layout has one row at a fixed height and DESIGN.md's shed
@@ -91,9 +102,18 @@ export default function PurchaseTape({
   rows,
   asOf,
   ref,
+  children,
 }: {
   rows: TapeRow[];
   asOf: string;
+  /**
+   * Whatever else belongs beside the LIVE label. The right rail puts the count
+   * of who else is here there, because "this register is running" and "there
+   * are four of you looking at it" are the same claim said twice — and because
+   * they have to share one row, which means sharing one parent. Nothing is
+   * passed in the horizontal rail or on `/stats`.
+   */
+  children?: ReactNode;
   /**
    * `BoardView` measures this rail to keep the board clear of it, so it has to
    * be able to reach the element. React 19 passes `ref` as an ordinary prop to
@@ -146,6 +166,7 @@ export default function PurchaseTape({
           <span aria-hidden className="board-tape__pip" />
           Live
         </p>
+        {children}
       </div>
 
       {/*
@@ -188,6 +209,26 @@ export default function PurchaseTape({
                       at === 0 && !duplicate ? " board-tape__row--newest" : ""
                     }`}
                   >
+                    {/*
+                      THE THUMBNAIL EXISTS ONLY IN THE VERTICAL RAIL, and it is
+                      a background image on a span rather than an `<img>` for
+                      exactly that reason: a display:none `<img>` is still
+                      fetched, and a display:none background is not. So the
+                      horizontal rail — every viewport without side rails, and
+                      `/stats` — makes no extra request at all, and the vertical
+                      one makes at most one per row. Each is cached for a year
+                      by its own URL.
+
+                      Decorative, and aria-hidden: the row already says the
+                      size, the price and the age in words, and the picture is
+                      somebody else's artwork rather than information about the
+                      purchase.
+                    */}
+                    <span
+                      aria-hidden
+                      className="board-tape__thumb"
+                      style={{ backgroundImage: `url(${blockImageUrl(row.id)})` }}
+                    />
                     <span className="board-tape__numbers">
                       <span className="board-tape__size">
                         {row.w} × {row.h}
@@ -197,10 +238,12 @@ export default function PurchaseTape({
                       </span>
                     </span>
                     <span className="board-tape__meta">
-                      <span>
+                      <span className="board-tape__where">
                         {pixelCount(row.pixels)} at ({row.x}, {row.y})
                       </span>
-                      <span>{sinceLabel(now - Date.parse(row.paidAt))}</span>
+                      <span className="board-tape__age">
+                        {sinceLabel(now - Date.parse(row.paidAt))}
+                      </span>
                       {/*
                         The proof, and the only part of the row that is not a
                         fact about the rectangle. Eight of eighty-eight
@@ -210,6 +253,7 @@ export default function PurchaseTape({
                         address off it.
                       */}
                       <span
+                        className="board-tape__proof"
                         title={
                           row.signature === null
                             ? "This purchase settled before signatures were recorded."

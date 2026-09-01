@@ -623,6 +623,100 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
   );
 
   /**
+   * THE NEGATIVE THE SIDE RAILS ARE ALLOWED ON: the board is never narrower
+   * because a rail is there.
+   *
+   * WHY IT IS NEGATIVE. Everything else about the amendment is a thing that
+   * appears — a column, a register standing up, a thumbnail — and every one of
+   * those can be judged by looking. The claim it rests on cannot: it is that
+   * the wall did not pay for any of it. So this asserts the absence, at a
+   * viewport where the rails are on, and it does it by measuring the SAME
+   * window twice rather than two viewports once. `?rails=off` is what makes
+   * that possible; see `rails-boot.ts` for why it exists.
+   *
+   * 2560×1440 is the narrowest 16:9 window the rails reach at all — DESIGN.md
+   * puts the gap there at 186px against a 180px floor — which makes it the
+   * viewport where the guarantee is closest to failing and therefore the one
+   * worth asserting. 3440×1440 is the same claim where the rail is at its
+   * ceiling and the leftover goes back to being wall.
+   */
+  it(
+    "never narrows the board to make room for a side rail",
+    async () => {
+      for (const [width, height] of [
+        [2560, 1440],
+        [3440, 1440],
+      ] as const) {
+        const at = `${width}x${height}`;
+        const settled = async () => {
+          const read = `document.querySelector('canvas')?.dataset.boardRect ?? null`;
+          const painted = await waitFor(`the board's fit at ${at} to settle`, async () => {
+            const before = await browser.evaluate<string | null>(read);
+            await sleep(150);
+            const after = await browser.evaluate<string | null>(read);
+            return before !== null && before === after ? after : null;
+          });
+          return painted.split(",").map(Number);
+        };
+
+        await browser.resize(width, height);
+
+        await browser.goto(`${server.origin}/?rails=off`);
+        expect(
+          await browser.evaluate<string | null>(`document.documentElement.dataset.rails`),
+          `?rails=off should have turned the rails off at ${at}`,
+        ).toBe("off");
+        const [, , withoutW, withoutH] = await settled();
+
+        await browser.goto(`${server.origin}/?rails=on-${at}`);
+        expect(
+          await browser.evaluate<string | null>(`document.documentElement.dataset.rails`),
+          `the rails should be on at ${at} — if they are not, this test is measuring one layout twice`,
+        ).toBe("on");
+        const [x, , withW, withH] = await settled();
+
+        // 1. THE CLAIM. Not "about the same": the rail is sized from a gap the
+        //    board could not have used, so the board is fitted to MORE height
+        //    than before and comes out strictly larger in both dimensions.
+        expect(
+          withW,
+          `the board is ${withW}px wide with the rails at ${at} and ${withoutW}px without them`,
+        ).toBeGreaterThanOrEqual(withoutW);
+        expect(
+          withH,
+          `the board is ${withH}px tall with the rails at ${at} and ${withoutH}px without them`,
+        ).toBeGreaterThanOrEqual(withoutH);
+
+        // 2. AND THE RAIL IS REALLY THERE, beside the board rather than over
+        //    it. A layout that quietly failed to draw the rails would satisfy
+        //    the assertion above by being the layout it was compared with.
+        const rails = JSON.parse(
+          await browser.evaluate<string>(`JSON.stringify({
+            left: document.querySelector('.board-side--left').getBoundingClientRect(),
+            right: document.querySelector('.board-side--right').getBoundingClientRect(),
+          })`),
+        ) as { left: DOMRect; right: DOMRect };
+        expect(rails.left.width, `the left rail at ${at}`).toBeGreaterThan(0);
+        expect(rails.right.width, `the right rail at ${at}`).toBeGreaterThan(0);
+        expect(rails.left.right, `the left rail reaching over the board at ${at}`).toBeLessThanOrEqual(x);
+        expect(rails.right.left, `the right rail reaching over the board at ${at}`).toBeGreaterThanOrEqual(x + withW);
+
+        // 3. And the settled register is IN the right rail rather than still
+        //    along the bottom, which is where the board's extra height comes
+        //    from. Its box has to be inside the rail's.
+        const tape = JSON.parse(
+          await browser.evaluate<string>(
+            `JSON.stringify(document.querySelector('.board-tape').getBoundingClientRect())`,
+          ),
+        ) as DOMRect;
+        expect(tape.left, `the settled register at ${at}`).toBeGreaterThanOrEqual(rails.right.left);
+        expect(tape.bottom, `the settled register at ${at}`).toBeLessThanOrEqual(height);
+      }
+    },
+    240_000,
+  );
+
+  /**
    * A perfectly valid signature from the wrong key, over the real HTTP server.
    *
    * The route-level version of this already exists in `orders-api.test.ts`

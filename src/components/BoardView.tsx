@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchBlockDetails } from "../lib/board/block-details";
 import { blockImageUrl } from "../lib/board/block-image";
-import type { BlockDetails, BoardRect, BoardStats } from "../lib/board/blocks";
+import type { BlockDetails, BoardRect, BoardStats, Standing } from "../lib/board/blocks";
 import type { Wall } from "../lib/board/composite";
 import type { Point } from "../lib/board/geometry";
 import { holdMinutes } from "../lib/board/hold-clock";
@@ -12,12 +12,13 @@ import { offerLine } from "../lib/board/pricing";
 import { walletSigner } from "../lib/board/purchase-client";
 import type { Selection } from "../lib/board/selection";
 import type { TapeRow } from "../lib/board/tape";
-import { BOARD_INSET, type Chrome } from "../lib/canvas/viewport";
+import { BAR_TOP_PX, BOARD_INSET, type Chrome } from "../lib/canvas/viewport";
 import BlockCard from "./BlockCard";
 import BoardCanvas, { type ZoomControls, type ZoomState } from "./BoardCanvas";
 import BoardCounters from "./BoardCounters";
 import EmptyWall from "./EmptyWall";
 import BoardRail from "./BoardRail";
+import BoardStandings from "./BoardStandings";
 import OnlineBanner from "./OnlineBanner";
 import PurchaseDialog from "./PurchaseDialog";
 import PurchaseTape from "./PurchaseTape";
@@ -44,6 +45,11 @@ type BoardPayload = {
   asOf: string;
   /** How many people are on the wall right now. See `OnlineBanner`. */
   online: number;
+  /**
+   * The five biggest rectangles, for the foot of the right rail. Empty until
+   * something is sold, and never a total — see `BoardStandings`.
+   */
+  standings: Standing[];
 };
 
 // Matches the --bar-top-h / --bar-bottom-h defaults in globals.css: the very
@@ -53,7 +59,7 @@ type BoardPayload = {
 // board — and the same room for its frame — that every later one does.
 const FALLBACK_TAPE = 26;
 const FALLBACK_CHROME: Chrome = {
-  top: 34 + BOARD_INSET,
+  top: BAR_TOP_PX + BOARD_INSET,
   right: BOARD_INSET,
   bottom: FALLBACK_TAPE + BOARD_INSET,
   left: BOARD_INSET,
@@ -126,6 +132,17 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
   const topBarRef = useRef<HTMLElement>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
   const tapeRef = useRef<HTMLElement>(null);
+  /**
+   * The two side rails, which exist as boxes only where the layout has room for
+   * them.
+   *
+   * They are `display: contents` in the layout without rails, so they have no
+   * box at all there and `getBoundingClientRect()` comes back a row of zeros —
+   * which is the truthful answer rather than a special case, and it is what
+   * lets the measurement below carry one branch instead of a media query.
+   */
+  const leftRailRef = useRef<HTMLDivElement>(null);
+  const rightRailRef = useRef<HTMLDivElement>(null);
   /**
    * The board canvas, held here rather than inside BoardCanvas.
    *
@@ -408,7 +425,9 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
   useEffect(() => {
     const topEl = topBarRef.current;
     const tapeEl = tapeRef.current;
-    if (!topEl || !tapeEl) return;
+    const leftEl = leftRailRef.current;
+    const rightEl = rightRailRef.current;
+    if (!topEl || !tapeEl || !leftEl || !rightEl) return;
 
     function measure() {
       const top = topEl!.offsetHeight || FALLBACK_CHROME.top;
@@ -428,20 +447,43 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
         FLOATS, so it is not in this sum at all, and the preset rail sits over
         the board's own edge.
 
-        Left and right are the inset alone. There is no column any more, which
-        is the whole of this change: a 288px panel was 20% of a 1440 window
-        taken from the dimension the board is shortest in, and it was taken
-        whether or not anybody was buying anything.
+        Left and right are the inset alone WHERE THERE ARE NO SIDE RAILS, which
+        is every viewport under the threshold in `sideRailWidth`: a 288px panel
+        was 20% of a 1440 window taken from the dimension the board is shortest
+        in, and it was taken whether or not anybody was buying anything. Where
+        there ARE rails they are added below — out of width the board could not
+        have used at any scale, which is the whole of that amendment.
 
         The board is then scaled by whichever of its dimensions limits first and
         centred, so the spare width becomes letterbox — which is exactly where
         the floating panel goes when there is any.
       */
+      /*
+        THE SIDE RAILS, WHERE THERE ARE ANY, AND THEY COST NO HEIGHT.
+
+        A rail has a box only above the width its contents need — see
+        `sideRailWidth`, and the boot script in layout.tsx that decides it
+        before the first paint. Where it has one, three things follow at once
+        and they follow from this measurement rather than from a second
+        opinion about the viewport: the board's left and right insets grow by
+        the rails, the settled register has left the bottom of the window for
+        the right rail, so the bottom is the board's own inset and nothing
+        else, and the vertical chrome is the header alone.
+
+        Read off the boxes, not off `--rail-w`. The custom property is what the
+        stylesheet was TOLD; these are what the browser actually laid out, and
+        the whole reason this effect exists is that those two have been
+        different before.
+      */
+      const left = leftEl!.getBoundingClientRect().width;
+      const right = rightEl!.getBoundingClientRect().width;
+      const railed = right > 0;
+
       setChrome({
         top: top + BOARD_INSET,
-        right: BOARD_INSET,
-        bottom: tape + BOARD_INSET,
-        left: BOARD_INSET,
+        right: right + BOARD_INSET,
+        bottom: (railed ? 0 : tape) + BOARD_INSET,
+        left: left + BOARD_INSET,
       });
     }
 
@@ -449,7 +491,19 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
     const observer = new ResizeObserver(measure);
     observer.observe(topEl);
     observer.observe(tapeEl);
-    return () => observer.disconnect();
+    observer.observe(leftEl);
+    observer.observe(rightEl);
+    /*
+      A `display: contents` element is not observed by a ResizeObserver — it
+      has no box to report — so the moment the rails turn ON is a moment
+      nothing above would fire for. The window's own resize is what turns them
+      on, and it is the one event that is guaranteed to have happened.
+    */
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
   }, []);
 
   const walletNeeded = selection?.buyable === true && walletMissing;
@@ -496,7 +550,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           also the only thing in the bar that is about people rather than
           pixels, which is why it carries a dot and not a number alone.
         */}
-        <OnlineBanner online={board.online} />
+        <OnlineBanner online={board.online} className="online-banner--bar" />
         {/*
           The way to the answers, in the bar rather than buried in the
           checkout. What losing a key costs and what a takedown does are things
@@ -531,55 +585,81 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
         <EmptyWall chrome={chrome} perPixel={board.pricePerPixelBaseUnits} />
       )}
 
-      <PurchaseTape ref={tapeRef} rows={board.tape} asOf={board.asOf} />
-
-      {/* The two controls that MAKE a selection, so they cannot live behind
-          one. On the board's own top edge — see `BoardRail`. */}
-      <BoardRail
-        perPixel={board.pricePerPixelBaseUnits}
-        activePreset={activePreset}
-        zoom={zoom}
-        onPresetChange={changePreset}
-        onClear={clear}
-        onZoomIn={zoomIn}
-        onZoomOut={zoomOut}
-        onZoomFit={zoomFit}
-      />
-
       {/*
-        THE PANEL IS PRESENT ONLY WHILE THERE IS SOMETHING TO BUY.
+        THE RIGHT RAIL, AND WHY IT IS BEFORE THE LEFT ONE IN THE DOM.
 
-        `hidden` rather than unmounting, so the wallet's connection and every
-        piece of state inside it survive a reader clearing a selection and
-        drawing another — and so a screen reader is not read a purchase panel
-        for a purchase nobody has started. It is not measured into the chrome
-        either way: the board does not resize when this appears.
+        Tab order. DESIGN.md: "Tab order is the board, then the controls, and it
+        ends on Buy." The register's scroller is a tab stop and the presets and
+        Buy are tab stops, so the register has to come first in the source
+        wherever it is drawn — which it already did, along the bottom, and which
+        is why nothing about the walk changes when it stands up into a column.
+        The two rails are placed by CSS, not by their order here.
+
+        Both wrappers are `display: contents` in the layout without rails, so
+        every child inside them keeps the fixed position it has always had and
+        this element adds nothing at all to that layout.
       */}
-      <div ref={controlsRef} className="board-controls" hidden={selection === null}>
-        <SelectionPanel
-          selection={selection}
+      <div ref={rightRailRef} className="board-side board-side--right">
+        <PurchaseTape ref={tapeRef} rows={board.tape} asOf={board.asOf}>
+          {/*
+            The second copy of the count, and the one the rail shows. It does
+            not beat: exactly one copy on the page tells the server this browser
+            is here, and it is the one in the bar. See `OnlineBanner`.
+          */}
+          <OnlineBanner online={board.online} beat={false} className="online-banner--rail" />
+        </PurchaseTape>
+        <BoardStandings rows={board.standings} />
+      </div>
+
+      <div ref={leftRailRef} className="board-side board-side--left">
+        {/* The two controls that MAKE a selection, so they cannot live behind
+            one. On the board's own top edge — see `BoardRail`. */}
+        <BoardRail
           perPixel={board.pricePerPixelBaseUnits}
-          canBuy={buyState.canBuy && purchaseSelection === null}
-          hint={buyState.hint}
-          hintTone={buyState.tone}
-          onBuy={handleBuy}
-        >
-          {/* The wallet lives exactly where the address field lived — same
-              slot, same `.wallet-field` hook — so the panel and the bar place
-              it without either layout knowing it changed. See WalletConnect
-              for why the typed field is gone rather than kept alongside. */}
-          <WalletConnect
-            wallets={wallet.wallets}
-            connected={wallet.connected}
-            connecting={wallet.connecting}
-            notice={wallet.notice}
-            ready={wallet.ready}
-            disabled={purchaseSelection !== null}
-            needed={walletNeeded}
-            onConnect={wallet.connect}
-            onDisconnect={wallet.disconnect}
-          />
-        </SelectionPanel>
+          activePreset={activePreset}
+          zoom={zoom}
+          onPresetChange={changePreset}
+          onClear={clear}
+          onZoomIn={zoomIn}
+          onZoomOut={zoomOut}
+          onZoomFit={zoomFit}
+        />
+
+        {/*
+          THE PANEL IS PRESENT ONLY WHILE THERE IS SOMETHING TO BUY.
+
+          `hidden` rather than unmounting, so the wallet's connection and every
+          piece of state inside it survive a reader clearing a selection and
+          drawing another — and so a screen reader is not read a purchase panel
+          for a purchase nobody has started. It is not measured into the chrome
+          either way: the board does not resize when this appears.
+        */}
+        <div ref={controlsRef} className="board-controls" hidden={selection === null}>
+          <SelectionPanel
+            selection={selection}
+            perPixel={board.pricePerPixelBaseUnits}
+            canBuy={buyState.canBuy && purchaseSelection === null}
+            hint={buyState.hint}
+            hintTone={buyState.tone}
+            onBuy={handleBuy}
+          >
+            {/* The wallet lives exactly where the address field lived — same
+                slot, same `.wallet-field` hook — so the panel and the bar place
+                it without either layout knowing it changed. See WalletConnect
+                for why the typed field is gone rather than kept alongside. */}
+            <WalletConnect
+              wallets={wallet.wallets}
+              connected={wallet.connected}
+              connecting={wallet.connecting}
+              notice={wallet.notice}
+              ready={wallet.ready}
+              disabled={purchaseSelection !== null}
+              needed={walletNeeded}
+              onConnect={wallet.connect}
+              onDisconnect={wallet.disconnect}
+            />
+          </SelectionPanel>
+        </div>
       </div>
 
       {hovered && (

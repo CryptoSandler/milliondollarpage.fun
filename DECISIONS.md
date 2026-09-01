@@ -63,6 +63,43 @@ American buyer to open an account and pass KYC to buy three dollars of pixels.
 
 ---
 
+## Settled: the chrome may stand in the letterbox, and never in the wall
+
+**Status: settled 2026-09-01, by the owner, as an amendment to DESIGN.md's
+layout norm. Reversible: the norm is what has to be edited first, and it says
+so.**
+
+The norm read "nothing new goes BESIDE the board". It now reads "nothing new
+takes width FROM the wall", and above a measured threshold the chrome moves into
+two side rails in the width a height-fitted board cannot reach. The full
+argument, the arithmetic and the measured before-and-after are in DESIGN.md
+under *No new column takes width from the wall*.
+
+**What was checked before it was built, and what it changed.** The strongest
+case against is that the amendment's two halves fight each other: the wall
+gaining the height the bottom strip freed makes the wall WIDER — it is fitted by
+height — which eats the gap the rail was to stand in. That is real, and it is
+what fixes the threshold: at 1440×900 the gap is 49px and at 1920×1080 it is
+148px, so neither gets rails at all. The owner's ~200px reference was close and
+the measurement moved it to 180, which is what puts 2560×1440 inside the door by
+7.2px rather than outside it by 13.
+
+**Three doors, all left open:**
+
+- **The ceiling.** A rail stops growing at 288px and the rest stays wall. On a
+  32:9 monitor that is 900px of ground on each side. If the owner wants the rail
+  to keep growing, `SIDE_RAIL_MAX` is the one number to change.
+- **The floor.** 180px is what the current contents need with nothing
+  overflowing. Content that needs more raises it, and raising it past 187 closes
+  2560×1440 — the guard that would catch that is `board-share.mts`, which would
+  simply report the rails as off there.
+- **Direction D's measuring rails.** The width argument that deleted them no
+  longer applies, and the redundancy argument does. DESIGN.md says which
+  sentence they now stand deleted on, so bringing them back is a decision about
+  redundancy rather than about pixels.
+
+---
+
 ## Open: the money path is specified, not built
 
 **Status: nothing built. This is the specification of what gets built.**

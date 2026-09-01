@@ -6,10 +6,26 @@ import { HEARTBEAT_MS } from "../lib/board/presence-window";
 /**
  * "Nine online", and the heartbeat that makes it true.
  *
- * WHO CALLS THIS: `BoardView`, which renders it in the top bar and already
- * holds the count — the number arrives with the board's own payload, so this
- * component neither fetches it nor owns it. What it owns is the other half:
- * telling the server this browser is still here.
+ * WHO CALLS THIS: `BoardView`, twice, and it already holds the count — the
+ * number arrives with the board's own payload, so this component neither
+ * fetches it nor owns it. What it owns is the other half: telling the server
+ * this browser is still here.
+ *
+ * ## Why twice
+ *
+ * It is in the top bar in the layout without side rails and at the head of the
+ * right rail in the layout with them, and those are two different parents, so
+ * CSS cannot move it between them. Both copies are always in the DOM and
+ * exactly one of them is ever `display: none`, which is what keeps a screen
+ * reader from meeting the count twice: an undisplayed element is not exposed at
+ * all. This is the pattern the counters and the Buy button's label already use
+ * for the same reason, and it is safe HERE and not for a control — DESIGN.md
+ * forbids a second Buy or a second Connect, because those can take focus and a
+ * keyboard would walk both. A count cannot.
+ *
+ * `beat` is what stops the doubling that WOULD have mattered: exactly one copy
+ * runs the heartbeat, so two rendered copies still tell the server about one
+ * reader.
  *
  * ## From one, and that was a decision
  *
@@ -29,8 +45,19 @@ import { HEARTBEAT_MS } from "../lib/board/presence-window";
  * path, no referrer, no user agent. See `migrations/013_presence.sql` — the
  * anonymity is a property of the columns, not a promise in a comment.
  */
-export default function OnlineBanner({ online }: { online: number }) {
+export default function OnlineBanner({
+  online,
+  beat = true,
+  className = "",
+}: {
+  online: number;
+  /** Exactly one copy on the page sends it. See "Why twice" above. */
+  beat?: boolean;
+  /** Which of the two placements this copy is, so globals.css can hide it. */
+  className?: string;
+}) {
   useEffect(() => {
+    if (!beat) return;
     /*
       Fire once on mount, then on a timer.
 
@@ -40,20 +67,20 @@ export default function OnlineBanner({ online }: { online: number }) {
       when a tab is restored inside the same minute it was hidden in. Nothing
       on screen depends on it succeeding.
     */
-    const beat = () => {
+    const send = () => {
       void fetch("/api/presence", { method: "POST", keepalive: true }).catch(() => {});
     };
 
-    beat();
-    const timer = setInterval(beat, HEARTBEAT_MS);
+    send();
+    const timer = setInterval(send, HEARTBEAT_MS);
     return () => clearInterval(timer);
-  }, []);
+  }, [beat]);
 
   if (online < 1) return null;
 
   return (
     <p
-      className="tabular hidden shrink-0 items-center gap-1.5 text-[12.5px] text-body lg:flex"
+      className={`online-banner tabular shrink-0 items-center gap-1.5 text-[12.5px] text-body ${className}`}
       title="Visitors who have been on the wall in the last two minutes. Counted anonymously."
     >
       <span aria-hidden className="size-1.5 rounded-full bg-ok" />

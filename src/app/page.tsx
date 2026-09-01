@@ -1,5 +1,5 @@
 import BoardView from "../components/BoardView";
-import { boardStats, listBoardRects } from "../lib/board/blocks";
+import { boardStandings, boardStats, listBoardRects, STANDINGS_ON_WALL } from "../lib/board/blocks";
 import { ensureWall } from "../lib/board/composite";
 import { pricePerPixelBaseUnits } from "../lib/board/settings";
 import { recentPurchases } from "../lib/board/tape";
@@ -13,13 +13,14 @@ export const dynamic = "force-dynamic";
  * bitmap from the HTML rather than after a round trip.
  */
 export default async function Page() {
-  const [rects, wall, stats, perPixel, tape, online] = await Promise.all([
+  const [rects, wall, stats, perPixel, tape, online, standings] = await Promise.all([
     listBoardRects(),
     ensureWall(),
     boardStats(),
     pricePerPixelBaseUnits(),
     recentPurchases(),
     onlineNow(),
+    boardStandings(STANDINGS_ON_WALL),
   ]);
 
   return (
@@ -31,6 +32,7 @@ export default async function Page() {
         pricePerPixelBaseUnits: perPixel,
         tape,
         online,
+        standings,
         asOf: new Date().toISOString(),
       }}
     />

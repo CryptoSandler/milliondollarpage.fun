@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { RAILS_BOOT } from "../lib/canvas/rails-boot";
 import { Bricolage_Grotesque, IBM_Plex_Mono, Karla, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
@@ -93,6 +94,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
+        <script dangerouslySetInnerHTML={{ __html: RAILS_BOOT }} />
       </head>
       <body className="min-h-full bg-canvas font-ui text-ink">{children}</body>
     </html>

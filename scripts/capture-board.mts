@@ -93,17 +93,26 @@ if (!OUT) {
 }
 
 /**
- * The two widths, and why these two.
+ * The three widths, and why these three.
  *
  * 1440 is the commonest laptop the board is looked at on and the width the fit
  * maths was first got wrong at. 1920 is where the panel stops being the
  * constraint and the board is limited by height instead — a different branch of
  * the same arithmetic, and the one where a register change is most likely to
- * leave the board smaller than it needs to be.
+ * leave the board smaller than it needs to be. 2560 is the third layout: the
+ * one with side rails, which neither of the others shows at all.
  */
 const WIDTHS = [
   { name: "1440", width: 1440, height: 900 },
   { name: "1920", width: 1920, height: 1080 },
+  /*
+    AND THE ONE WHERE THE LAYOUT IS A DIFFERENT LAYOUT. 2560×1440 is the
+    narrowest 16:9 window the side rails reach — the chrome moves into the
+    letterbox, the settled register stands up into a column and the strip along
+    the bottom goes away — so leaving it out would ask the owner to judge an
+    amendment at the two widths it does not change.
+  */
+  { name: "2560", width: 2560, height: 1440 },
 ];
 
 /**
