@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
 import { TOTAL_PIXELS } from "../lib/board/geometry";
 import type { BoardStats } from "../lib/board/blocks";
 import { formatPercentSold, offerLine } from "../lib/board/pricing";
@@ -51,6 +54,35 @@ export default function BoardCounters({
   */
   const sameNumberTwice = left === TOTAL_PIXELS;
 
+  /*
+    A COUNT THAT DROPS WHILE SOMEBODY IS LOOKING AT IT SHOULD SAY SO.
+
+    The board refetches twice a minute, so this number changes under a reader
+    who is still deciding — and "somebody just bought pixels while you were
+    thinking about it" is the most persuasive true thing this page can say. It
+    was happening silently.
+
+    One 900ms flash of the accent, which is one of the five places the accent is
+    permitted: this is money moving, in the most literal sense available. The
+    class comes off when the flash ends so the next drop can put it back on —
+    without that, a second change would find it already applied and not restart.
+
+    `prefers-reduced-motion` removes the animation in the stylesheet. The NUMBER
+    still changes, which is the information; only the flash is the flourish.
+  */
+  const [ticked, setTicked] = useState(false);
+  const previous = useRef(left);
+
+  useEffect(() => {
+    const dropped = left < previous.current;
+    previous.current = left;
+    if (!dropped) return;
+
+    setTicked(true);
+    const done = setTimeout(() => setTicked(false), 900);
+    return () => clearTimeout(done);
+  }, [left]);
+
   return (
     <div className="flex min-w-0 items-center gap-x-3 overflow-hidden whitespace-nowrap text-[13px] text-body">
       {/* Below `sm` the wordmark and the count are all a phone has room for,
@@ -62,12 +94,16 @@ export default function BoardCounters({
       >
         ·
       </span>
-      <p className={`tabular truncate ${sameNumberTwice ? "sm:hidden" : ""}`}>
-        <span className="font-semibold text-ink">{left.toLocaleString("en-US")}</span>
-        <span className="text-body"> pixels left</span>
+      <p
+        className={`pixels-left truncate ${sameNumberTwice ? "sm:hidden" : ""} ${
+          ticked ? "pixels-left--ticked" : ""
+        }`}
+      >
+        <span className="pixels-left__n">{left.toLocaleString("en-US")}</span>
+        <span className="pixels-left__u">pixels left</span>
       </p>
       <span
-        className="tabular hidden shrink-0 rounded-full bg-primary-soft px-2 py-0.5 text-[12px] font-bold text-primary-pressed md:inline"
+        className="tabular hidden shrink-0 rounded-full bg-canvas-deep px-2 py-0.5 text-[12px] font-bold text-ink-soft md:inline"
         title="Share of the board sold so far"
       >
         {formatPercentSold(stats.percentSold)} sold

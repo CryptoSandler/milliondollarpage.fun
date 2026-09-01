@@ -485,7 +485,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
         <h1 className="flex shrink-0 items-center gap-2 font-display text-[17px] font-bold tracking-tight">
           <span
             aria-hidden
-            className="size-2.5 rounded-full bg-primary ring-3 ring-primary-soft"
+            className="size-2.5 rounded-full bg-ink"
           />
           milliondollarpage.fun
         </h1>
@@ -601,6 +601,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
                 ? { kind: "held", own: ownHoldIds.includes(hovered.rect.id) }
                 : { kind: "sold" }
             }
+                      perPixel={board.pricePerPixelBaseUnits}
           />
         </div>
       )}

@@ -129,12 +129,11 @@ export default function PurchaseTape({
       aria-label="Recently settled purchases"
     >
       <div className="board-tape__head">
-        <p className="board-tape__live label-caps">
-          {/* The pip is aria-hidden and the word carries the meaning: a
-              pulsing dot is not information a screen reader can use, and
-              "settled" is. */}
+        <p className="board-tape__live">
+          {/* The pip is aria-hidden and the word carries the meaning: a pulsing
+              dot is not information a screen reader can use, and LIVE is. */}
           <span aria-hidden className="board-tape__pip" />
-          Settled
+          Live
         </p>
         <p className="text-[11.5px] leading-tight text-body">
           {rows.length === 0
@@ -170,36 +169,49 @@ export default function PurchaseTape({
                 aria-hidden={duplicate || undefined}
                 className="flex h-full items-stretch"
               >
-                {rows.map((row) => (
-                  <li key={row.id} className="board-tape__row">
-                    <span className="tabular text-[14px] font-semibold text-ink">
-                      {row.w} × {row.h}
+                {rows.map((row, at) => (
+                  /*
+                    THE NEWEST SALE IS MARKED, and only in the first copy. The
+                    second copy exists so the roll has no seam and is
+                    `aria-hidden`; marking a row there would put two "newest"
+                    sales on a rail that has exactly one.
+                  */
+                  <li
+                    key={row.id}
+                    className={`board-tape__row${
+                      at === 0 && !duplicate ? " board-tape__row--newest" : ""
+                    }`}
+                  >
+                    <span className="board-tape__numbers">
+                      <span className="board-tape__size">
+                        {row.w} × {row.h}
+                      </span>
+                      <span className="board-tape__amount">
+                        {formatUsdc(row.totalBaseUnits)}
+                      </span>
                     </span>
-                    <span className="tabular text-[13px] font-semibold text-ink-soft">
-                      {formatUsdc(row.totalBaseUnits)}
-                    </span>
-                    <span className="tabular text-[12px] text-body">
-                      {pixelCount(row.pixels)} at ({row.x}, {row.y})
-                    </span>
-                    <span className="tabular text-[12px] text-body">
-                      {sinceLabel(now - Date.parse(row.paidAt))}
-                    </span>
-                    {/*
-                  The proof, and the only part of the row that is not a fact
-                  about the rectangle. Eight of eighty-eight characters: enough
-                  for the buyer holding the other eighty to recognise their own
-                  purchase, and not enough for anybody else to look it up and
-                  read the payer's address off it.
-                */}
-                    <span
-                      className="tabular text-[12px] text-body"
-                      title={
-                        row.signature === null
-                          ? "This purchase settled before signatures were recorded."
-                          : "The first and last four characters of the signature that settled this purchase."
-                      }
-                    >
-                      {row.signature ?? "unsigned"}
+                    <span className="board-tape__meta">
+                      <span>
+                        {pixelCount(row.pixels)} at ({row.x}, {row.y})
+                      </span>
+                      <span>{sinceLabel(now - Date.parse(row.paidAt))}</span>
+                      {/*
+                        The proof, and the only part of the row that is not a
+                        fact about the rectangle. Eight of eighty-eight
+                        characters: enough for the buyer holding the other
+                        eighty to recognise their own purchase, and not enough
+                        for anybody else to look it up and read the payer's
+                        address off it.
+                      */}
+                      <span
+                        title={
+                          row.signature === null
+                            ? "This purchase settled before signatures were recorded."
+                            : "The first and last four characters of the signature that settled this purchase."
+                        }
+                      >
+                        {row.signature ?? "unsigned"}
+                      </span>
                     </span>
                   </li>
                 ))}

@@ -277,10 +277,46 @@ rectangle in the sold fallback while every other purchase composes normally.
 
 ## Colour
 
-One accent, **signal green**, and it means exactly two things: *this is the
-primary action* and *this is your selection*. It appears nowhere else — not in
-headings, not in borders, not as decoration. That rule is older than this
-register and did not change with it; only the hue did.
+**One accent, signal green, and it means exactly one thing: MONEY MOVING NOW.**
+
+That is a narrowing, taken by the owner on 2026-09-01, and it is the sharpest
+rule in this document because it is the only one with an allow-list.
+
+**Where it may appear, and nowhere else:**
+
+| Where | Why it is money moving |
+| --- | --- |
+| The newest settled sale on the rail | A purchase that just landed |
+| **LIVE**, and the pip beside it | The rail is receiving them now |
+| The pixels-left counter, flashing as it drops | Somebody just bought while you were reading |
+| The price on the hover card | What this rectangle costs, at the moment somebody is weighing it |
+| The Buy button | The act of moving the money |
+
+**Where it no longer appears, and this is the substance of the change:
+anywhere that meant "your selection".** The rectangle you are dragging, the
+control the keyboard is on, the field you are typing in, the text you have
+highlighted, a button you are hovering. None of those is money. All of them are
+**ink and a frame** now.
+
+The cream register let the accent mean two things — *primary action* and *your
+selection* — and called the focus ring "the third thing terracotta means, and it
+is the same claim". It was a defensible reading and it is not this one. A wall
+whose whole argument is that purchases are real and permanent should spend its
+one loud colour on the purchases.
+
+**The selection lost nothing by it.** The outline over artwork was never made
+visible by the accent — it is the sandwich that does that, paper outside and a
+hard stroke inside, and only the stroke's colour changed. The focus ring
+measures **15.22:1** at worst in ink against the four surfaces a focusable thing
+lands on, where the accent measured 9.89:1; WCAG 1.4.11 asks 3:1, so the ring
+got more legible, not less.
+
+**`design-tokens.test.ts` enforces this by allow-list**, which is the only way a
+rule like this survives contact with a hurry: it collects every selector in
+`globals.css` that reaches for `--primary`, `--primary-soft` or
+`--primary-pressed`, and fails when that set is not exactly the permitted one. A
+new accent use is a failing test rather than a thing somebody notices later, and
+adding one means editing this table first.
 
 ### The token names did not change, and that is the point
 

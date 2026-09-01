@@ -177,17 +177,31 @@ const PAINT = {
   chip: "#5a6779",
   chipText: "#eef2f7",
   lift: "rgba(255,252,245,0.16)",
-  // --primary, and it is the fill behind the selection tag as well as the
-  // outline's top stroke. The tag sets PAINT.onSelection at 11px/700 on it, so this
-  // is a WCAG 1.4.3 text pair at 4.5:1, not a decoration: on the old #dd4e22
-  // it measured 3.84:1 and on this it measures 4.79:1. Same hue, same
-  // saturation, six points darker — see globals.css for why the hue could not
-  // move.
-  selection: "#2ce08a",
-  selectionFill: "rgba(194,69,30,0.14)",
-  ring: "#eef2f7",
+  /*
+   * THE SELECTION IS INK AND A PAPER RING, and it used to be the accent.
+   *
+   * The accent has one meaning now — money moving now — and a rectangle
+   * somebody is dragging is not money, it is geometry. So the sandwich keeps
+   * its shape and swaps which layer is loud: `paper` outside, `ink` as the
+   * stroke. That is what survives arbitrary artwork underneath, which was
+   * always the sandwich's job rather than the colour's.
+   *
+   * The tag behind it sets `onSelection` on `selection` at 11px/700, which
+   * makes it a WCAG 1.4.3 text pair rather than a decoration: paper on ink
+   * measures 17.64:1, where the accent pair measured 10.53:1.
+   *
+   * `selectionFill` and `dangerFill` were still the CREAM register's channels —
+   * rgba(194,69,30) is the old terracotta and rgba(168,55,31) the old danger.
+   * They came through the register change untouched because the swap looked for
+   * hex and these are rgba, which is the same blind spot that left the sold
+   * fallback behind.
+   */
+  selection: "#eef2f7",
+  onSelection: "#070a0e",
+  selectionFill: "rgba(238,242,247,0.10)",
+  ring: "#070a0e",
   danger: "#ff5c47",
-  dangerFill: "rgba(168,55,31,0.16)",
+  dangerFill: "rgba(255,92,71,0.14)",
 };
 
 // A caption chip on the board itself needs room to be read; below this it is

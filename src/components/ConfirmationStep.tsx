@@ -103,6 +103,7 @@ export default function ConfirmationStep({
               link={draft.link}
               rect={order.rect}
               state={{ kind: "preview" }}
+                          perPixel={order.pricePerPixelBaseUnits}
             />
           </div>
           <p className="label-caps mt-1.5">When somebody points at it</p>

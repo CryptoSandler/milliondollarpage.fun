@@ -52,7 +52,7 @@ export default function FaqPage() {
       <div className="mx-auto max-w-[44rem] px-5 pb-24 pt-6">
         <nav className="flex items-center justify-between gap-4 border-b border-hairline-strong pb-4">
           <Link href="/" className="flex items-center gap-2 font-display text-[17px] font-bold text-ink">
-            <span aria-hidden className="size-2.5 rounded-full bg-primary ring-3 ring-primary-soft" />
+            <span aria-hidden className="size-2.5 rounded-full bg-ink" />
             milliondollarpage.fun
           </Link>
           <Link href="/" className="btn-quiet px-3 py-1.5 text-[13px]">

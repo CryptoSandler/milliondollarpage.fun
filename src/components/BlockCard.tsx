@@ -1,5 +1,7 @@
 "use client";
 
+import { formatUsdc } from "../lib/board/pricing";
+
 /**
  * The card that appears over a rectangle: its picture, its caption, its link,
  * its size, and one line saying what state it is in.
@@ -41,6 +43,7 @@ export default function BlockCard({
   caption,
   link,
   rect,
+  perPixel,
   state,
 }: {
   /**
@@ -59,6 +62,15 @@ export default function BlockCard({
   caption: string | null;
   link: string | null;
   rect: { x: number; y: number; w: number; h: number };
+  /**
+   * What a pixel costs, so the card can say what this rectangle cost.
+   *
+   * COMPUTED, NOT FETCHED. The price is the rectangle's area times this, and
+   * both halves are already in the board payload — so the card gains a number
+   * without gaining a request, and `/api/blocks/{id}` stays the words-only
+   * endpoint it was designed as.
+   */
+  perPixel: number;
   state: BlockCardState;
 }) {
   return (
@@ -75,6 +87,14 @@ export default function BlockCard({
           <p className="tabular mt-1 text-[11px] text-body">
             {rect.w} × {rect.h} at ({rect.x}, {rect.y}) ·{" "}
             {(rect.w * rect.h).toLocaleString("en-US")} px
+          </p>
+          {/*
+            The price, in the accent. One of the five places it is allowed: a
+            reader resting on a rectangle is weighing whether to move money, and
+            this is the answer to the question they are asking.
+          */}
+          <p className="block-card-price mt-1">
+            {formatUsdc(rect.w * rect.h * perPixel)}
           </p>
         </div>
       </div>

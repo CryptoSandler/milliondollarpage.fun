@@ -287,3 +287,86 @@ describe("the typefaces", () => {
     }
   });
 });
+
+/**
+ * The accent means one thing, and this is the allow-list that keeps it true.
+ *
+ * A rule stated in prose survives until the first hurry. This collects every
+ * selector in `globals.css` whose declarations reach for the accent, in any of
+ * its three tokens, and fails when that set is not exactly what DESIGN.md
+ * permits — so adding a green thing means editing the document first, which is
+ * the point of writing it as a table there.
+ */
+describe("the accent means money moving now, and nothing else", () => {
+  /** Exactly the selectors DESIGN.md's table permits. */
+  const PERMITTED = new Set([
+    ".btn-primary",
+    ".btn-primary:hover:not(:disabled)",
+    ".btn-primary:active:not(:disabled)",
+    ".board-tape__live",
+    ".board-tape__pip",
+    ".board-tape__row--newest",
+    ".block-card-price",
+    "@keyframes pixels-tick",
+    "0%",
+  ]);
+
+  /** Every selector whose own declarations mention the accent. */
+  function accentSelectors(): string[] {
+    const found = new Set<string>();
+    for (const match of CSS.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const body = match[2];
+      if (!/var\(--primary(-soft|-pressed)?\)/.test(body)) continue;
+      // The last line of the prelude is the selector; the lines above it are
+      // whatever comment or nesting preceded it.
+      const selector = match[1].trim().split("\n").pop()!.trim();
+      // `:root` and the Tailwind theme block DEFINE these tokens rather than
+      // using them, and defining a colour is not spending it.
+      if (selector === ":root" || selector.startsWith("@theme")) continue;
+      found.add(selector);
+    }
+    return [...found].sort();
+  }
+
+  it("is spent only where the document permits", () => {
+    const surprising = accentSelectors().filter((selector) => !PERMITTED.has(selector));
+
+    expect(
+      surprising,
+      "these reach for the accent and DESIGN.md's table does not list them",
+    ).toEqual([]);
+  });
+
+  /**
+   * The half the owner named by hand. These are the exact selectors that used
+   * to be green, so a regression puts them back and the allow-list above would
+   * catch it — but naming them says WHICH rule was broken, which is the
+   * difference between a failing test and a useful one.
+   */
+  it.each([
+    [":focus-visible"],
+    [".focus-proxy:has(input:focus-visible)"],
+    [".field-input:focus"],
+    ["::selection"],
+  ])("no selection state carries the accent — %s", (selector) => {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const block = new RegExp(`${escaped}[^{}]*\\{([^{}]*)\\}`).exec(CSS);
+
+    expect(block, `${selector} is no longer in globals.css`).not.toBeNull();
+    expect(block![1]).not.toMatch(/var\(--primary/);
+  });
+
+  it("keeps the board's own selection off the accent too", () => {
+    const canvas = readFileSync("src/components/BoardCanvas.tsx", "utf8");
+    const stroke = /selection: "(#[0-9a-f]{6})"/.exec(canvas);
+    const fill = /selectionFill: "(rgba\([^"]+\))"/.exec(canvas);
+
+    expect(stroke, "BoardCanvas has no selection colour").not.toBeNull();
+    expect(stroke![1]).not.toBe(COLORS.get("primary"));
+    // Ink, which is what the document says the selection is now.
+    expect(stroke![1]).toBe(COLORS.get("ink"));
+    // And the fill is no longer the cream register's terracotta, which it was
+    // until this batch — rgba survived a swap that only looked for hex.
+    expect(fill![1]).not.toContain("194,69,30");
+  });
+});
