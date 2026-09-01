@@ -39,6 +39,50 @@ if (!DATABASE) {
   console.error("TEST_DATABASE_URL is not set. This script truncates; it will not guess.");
   process.exit(1);
 }
+/**
+ * Whether two connection strings address the same database — host, port and
+ * name only, because connecting as a different role still truncates the same
+ * tables. Copied from `vitest.setup.ts` rather than imported: that module pulls
+ * in vitest, which cannot be required from a plain script.
+ *
+ * An unparseable URL counts as a match. Refusing to run is the safe answer when
+ * we cannot tell what we are pointed at.
+ */
+function sameTarget(a: string, b: string | undefined): boolean {
+  if (b === undefined) return false;
+  try {
+    const key = (url: URL) =>
+      `${url.hostname.toLowerCase()}:${url.port || "5432"}${url.pathname.replace(/\/+$/, "")}`;
+    return key(new URL(a)) === key(new URL(b));
+  } catch {
+    return true;
+  }
+}
+
+if (sameTarget(DATABASE, process.env.DATABASE_URL)) {
+  console.error(
+    "TEST_DATABASE_URL and DATABASE_URL point at the same database. This script " +
+      "truncates to seed a board; pointing it at the app database would delete real data.",
+  );
+  process.exit(1);
+}
+
+/**
+ * REDIRECT THE SERVER'S DATABASE, and this line is the whole reason the first
+ * run of this script produced four screenshots of an empty wall while the test
+ * database genuinely held 140 purchases.
+ *
+ * `dev-server.ts` passes `process.env.DATABASE_URL` through to the `next dev`
+ * it starts. Under vitest that is already the test database, because
+ * `vitest.setup.ts` reassigns it. This script does not run under vitest, so
+ * without this line the server it screenshots is pointed at the APP database —
+ * which is empty, which is why the captures looked plausible and were useless.
+ *
+ * It is also the more serious half: a harness driving a browser against
+ * production is one interaction away from writing to it. The guard above is
+ * what makes that a refusal rather than a near miss.
+ */
+process.env.DATABASE_URL = DATABASE;
 
 const OUT = process.argv[2];
 if (!OUT) {
@@ -153,7 +197,14 @@ async function main(): Promise<void> {
 
       for (const size of WIDTHS) {
         await browser.resize(size.width, size.height);
-        await browser.goto(server.origin);
+        // A DIFFERENT URL PER CAPTURE, and it is not decoration. The first
+        // version navigated to the same origin four times, and Chrome served
+        // the later visits from its own cache — so the "full" captures came
+        // back byte-for-byte identical to the "empty" ones while the database
+        // genuinely held 140 purchases. A screenshot that silently shows the
+        // previous state is the worst possible output from this script: it is
+        // evidence, and it was wrong.
+        await browser.goto(`${server.origin}/?capture=${state}-${size.name}`);
 
         // The same settle the fit guard uses: the canvas has no size until
         // layout runs, so the first paint is of a board fitted to a zero box.
