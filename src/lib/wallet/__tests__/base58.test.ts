@@ -56,6 +56,7 @@ describe("base58Encode", () => {
 });
 
 describe("the length bound", () => {
+
   /**
    * The decoder is O(n^2), and `verifySignature` only learns the result is the
    * wrong size AFTER paying for it. Without a bound, one unauthenticated
@@ -66,13 +67,33 @@ describe("the length bound", () => {
    * not fix anything.
    */
   it("refuses an input too long to be a key or a signature, without decoding it", () => {
-    const started = process.hrtime.bigint();
-    expect(base58Decode("z".repeat(100_000))).toBeNull();
-    const ms = Number(process.hrtime.bigint() - started) / 1e6;
+    /*
+     * MEASURED AGAINST A BASELINE ON THIS MACHINE, not against a fixed number
+     * of milliseconds.
+     *
+     * An absolute ceiling measures the machine as much as the code: on a loaded
+     * box a healthy run goes red, and a guard that cries wolf is a guard
+     * somebody deletes. The baseline is the same function on an input it must
+     * accept, timed in the same run under the same load, so the ratio is what
+     * the bound is worth and the load cancels out.
+     *
+     * Unbounded, the 100,000-character input took ~3,450ms here while a
+     * legitimate 44-character key takes microseconds — a ratio in the millions.
+     * Bounded, the long input is rejected on its length and costs the same as
+     * the short one. Fifty is far below the broken ratio and far above any
+     * plausible noise.
+     */
+    const time = (input: string) => {
+      const started = process.hrtime.bigint();
+      base58Decode(input);
+      return Number(process.hrtime.bigint() - started) / 1e6;
+    };
+    const baseline = Math.max(time("1".repeat(44)), 0.001);
 
-    // Unbounded, this input measured ~3,450ms on the machine this was written
-    // on. Anything in that neighbourhood means the guard is gone.
-    expect(ms).toBeLessThan(50);
+    expect(base58Decode("z".repeat(100_000))).toBeNull();
+    const bounded = time("z".repeat(100_000));
+
+    expect(bounded / baseline).toBeLessThan(50);
   });
 
   it("still decodes both real lengths, so the bound did not break the product", () => {
