@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import sharp from "sharp";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { queryOne } from "../../lib/db";
@@ -101,6 +102,28 @@ async function waitForPhrase(what: string, phrase: string, timeoutMs = 30_000): 
     const seen = await browser.evaluate<string>(PAGE_TEXT).catch(() => "(the page could not be read)");
     throw new Error(`${(error as Error).message}\n\nThe page said instead:\n${seen}`);
   }
+}
+
+/**
+ * A colour this document decided, as RGB channels.
+ *
+ * THE BROWSER ASSERTIONS READ DESIGN.MD, they do not carry their own copy of
+ * the palette. Two of them used to: the focus-ring check held `#c2451e` and the
+ * frame check held the ink, and both went red on the register change while the
+ * page was exactly right — a screenshot test asserting a hex is a screenshot
+ * test that has to be edited every time the design does, and the edit is
+ * indistinguishable from silencing it.
+ *
+ * `design-tokens.test.ts` already proves the stylesheet sets what this
+ * frontmatter says. So a value read here and sampled out of a real screenshot
+ * closes the loop: document → stylesheet → rendered pixel.
+ */
+function token(name: string): [number, number, number] {
+  const design = readFileSync("DESIGN.md", "utf8");
+  const found = new RegExp(`^  ${name}: "(#[0-9a-f]{6})"$`, "m").exec(design);
+  if (!found) throw new Error(`DESIGN.md does not decide a colour called ${name}`);
+  const hex = found[1];
+  return [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16)) as [number, number, number];
 }
 
 describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
@@ -359,7 +382,7 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
          * the ring. Demanding the exact hex there would fail on anti-aliasing
          * and teach the next person to delete the test.
          */
-        const RING: [number, number, number] = [0xc2, 0x45, 0x1e];
+        const RING = token("primary");
         for (const [side, sampled] of Object.entries(sides)) {
           const channels = [1, 3, 5].map((at) => Number.parseInt(sampled.slice(at, at + 2), 16));
           const drift = Math.max(...channels.map((value, index) => Math.abs(value - RING[index])));
@@ -399,8 +422,10 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
   it(
     "opens with the whole board and its frame inside the viewport, at every width",
     async () => {
-      // The ink the frame is drawn in, and DESIGN.md's `--ink`.
-      const INK: [number, number, number] = [0x2b, 0x24, 0x1c];
+      // The frame has its own token now. It used to be drawn in `--ink`, which
+      // was right when the paper was cream and the frame was the darkest thing
+      // on it; on near-black paper a boundary identifying the board has to go
+      // the other way, and WCAG 1.4.11 puts it at 3:1. See DESIGN.md.
 
       for (const [width, height] of [
         [1280, 800],
@@ -485,6 +510,7 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
           const offset = (Math.round(py) * info.width + Math.round(px)) * info.channels;
           return [data[offset], data[offset + 1], data[offset + 2]];
         };
+        const FRAME = token("frame");
         // The middle of each side, one pixel inside the frame's outer edge.
         const sides = {
           top: channels(x + w / 2, y + 1),
@@ -493,10 +519,10 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
           right: channels(x + w - 2, y + h / 2),
         };
         for (const [side, sampled] of Object.entries(sides)) {
-          const drift = Math.max(...sampled.map((value, index) => Math.abs(value - INK[index])));
+          const drift = Math.max(...sampled.map((value, index) => Math.abs(value - FRAME[index])));
           expect(
             drift,
-            `the ${side} of the frame at ${at} sampled rgb(${sampled.join(",")}), which is not the ink border`,
+            `the ${side} of the frame at ${at} sampled rgb(${sampled.join(",")}), which is not the board's frame`,
           ).toBeLessThanOrEqual(12);
         }
       }
