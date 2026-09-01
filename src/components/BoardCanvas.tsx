@@ -123,86 +123,113 @@ function steppedZoom(
  * while the wall is in flight, and the only thing it shows if the wall never
  * arrives. It is not the sold treatment; the artwork is.
  */
-const PAINT = {
-  // The wall the sheet hangs on, and it is the SAME cream as the sheet. The
-  // board no longer fills the window, so there is always some of this beside
-  // it; painting it darker would letterbox the artwork, and DESIGN.md asks for
-  // a sheet of paper on a wall of the same paper instead. The board's own
-  // coarse rule draws its edge, which is all the separation it needs.
-  ground: "#0a0d12",
-  paper: "#070a0e",
-  ruleFine: "rgba(43,36,28,0.10)",
-  ruleCoarse: "#242c38",
-  // --ink, and the sheet's own edge. See the frame in `draw` for why the
-  // hairline that used to draw it became two pixels of this instead.
-  frame: "#5c6b84",
-  sold: "#2e3642",
-  soldEdge: "#586a89",
-  /*
-   * HELD IS NOT SOLD, and it must not look like it at a glance.
-   *
-   * It used to: a hold painted the same near-black slab a sale does and put a
-   * cream hatch back over it, which at the scale a 10-pixel block occupies on
-   * a fitted board is a couple of strokes across eight pixels. Two states,
-   * one silhouette.
-   *
-   * So a hold gets its own value instead of a variation on the sale's. The
-   * base is the coarse rule's own tone — already on the board, no new colour
-   * — which is unmistakably lighter than a sale and unmistakably heavier than
-   * the paper, and the ruling that comes back over it is INK rather than
-   * cream, so it reads as pencil on card rather than as a scratch on ink. The
-   * edge is a broken ink one where a sale's is unbroken.
-   *
-   * None of it is a hue: value and pattern only, and a hold has no upload to
-   * clash with anyway — the image route serves paid and minted blocks alone,
-   * so there is nothing public to draw on these pixels and the whole rectangle
-   * is free for a treatment of its own.
-   */
-  held: "#5a6779",
-  /*
-   * The hatch is the load-bearing half of this treatment, not the tint. It is
-   * the "ruled back over a covered block" that DESIGN.md's one outranking rule
-   * uses to tell held from sold, so WCAG 1.4.11 reaches it at 3:1 against the
-   * fill it is drawn on — and at 0.55 alpha it measured 2.89:1 against
-   * #c9baa0. 0.62 measures 3.39:1. Nothing else about the treatment moved.
-   *
-   * For the record, the rest of it, measured: the held fill against the sold
-   * fallback is 5.84:1 and its broken ink edge against the paper is 13.12:1,
-   * so held is told from sold by value and from free by that edge. The fill
-   * alone against the paper is only 1.63:1, which is why the edge and the
-   * hatch have to carry it and why neither is allowed to go faint.
-   */
-  heldRule: "rgba(43,36,28,0.62)",
-  heldEdge: "#070a0e",
-  chip: "#5a6779",
-  chipText: "#eef2f7",
-  lift: "rgba(255,252,245,0.16)",
-  /*
-   * THE SELECTION IS INK AND A PAPER RING, and it used to be the accent.
-   *
-   * The accent has one meaning now — money moving now — and a rectangle
-   * somebody is dragging is not money, it is geometry. So the sandwich keeps
-   * its shape and swaps which layer is loud: `paper` outside, `ink` as the
-   * stroke. That is what survives arbitrary artwork underneath, which was
-   * always the sandwich's job rather than the colour's.
-   *
-   * The tag behind it sets `onSelection` on `selection` at 11px/700, which
-   * makes it a WCAG 1.4.3 text pair rather than a decoration: paper on ink
-   * measures 17.64:1, where the accent pair measured 10.53:1.
-   *
-   * `selectionFill` and `dangerFill` were still the CREAM register's channels —
-   * rgba(194,69,30) is the old terracotta and rgba(168,55,31) the old danger.
-   * They came through the register change untouched because the swap looked for
-   * hex and these are rgba, which is the same blind spot that left the sold
-   * fallback behind.
-   */
-  selection: "#eef2f7",
-  onSelection: "#070a0e",
-  selectionFill: "rgba(238,242,247,0.10)",
-  ring: "#070a0e",
-  danger: "#ff5c47",
-  dangerFill: "rgba(255,92,71,0.14)",
+/**
+ * The board's palette, READ FROM THE STYLESHEET rather than written here.
+ *
+ * A canvas cannot use a CSS custom property, so this file used to hold its own
+ * copy of every colour the board paints — which was survivable with one
+ * register and is not with two: a hard-coded palette would paint the dark
+ * board's near-black paper under a reader who chose light.
+ *
+ * So the values come from `getComputedStyle` on the document element, which is
+ * where `globals.css` has already resolved the theme, the media query and the
+ * reader's own choice into one answer. There is exactly one place a colour is
+ * decided, and `design-tokens.test.ts` checks that place against DESIGN.md.
+ *
+ * IT IS RE-READ WHEN THE THEME CHANGES. `useThemePaint` below watches the
+ * `data-theme` attribute and the `prefers-color-scheme` media query, because a
+ * canvas does not repaint itself when a stylesheet changes underneath it — the
+ * board would keep the old register until something else forced a frame.
+ */
+type Paint = Record<PaintKey, string>;
+
+const PAINT_TOKENS = {
+  ground: "canvas",
+  paper: "paper",
+  ruleFine: "hairline",
+  ruleCoarse: "hairline-strong",
+  frame: "frame",
+  sold: "sold-fallback",
+  soldEdge: "sold-edge",
+  held: "hold",
+  heldEdge: "paper",
+  heldRule: "hold-hatch",
+  chip: "hold",
+  chipText: "ink",
+  lift: "hairline",
+  selection: "ink",
+  onSelection: "paper",
+  selectionFill: "hairline",
+  ring: "paper",
+  danger: "danger",
+  dangerFill: "danger-soft",
+} as const;
+
+type PaintKey = keyof typeof PAINT_TOKENS;
+
+/**
+ * The first paint, before the browser has been asked.
+ *
+ * Server-rendered HTML has no computed style to read, and the very first client
+ * frame runs before this component's effect. These are the LIGHT theme's values
+ * — `:root`'s, which is what an un-stamped document resolves to — so a reader
+ * on the light register never sees a wrong frame at all, and a reader on the
+ * dark one sees at most the frame before the effect runs.
+ */
+const FALLBACK_PAINT: Paint = {
+  ground: "#f3ede0",
+  paper: "#f3ede0",
+  ruleFine: "rgba(43, 36, 28, 0.1)",
+  ruleCoarse: "#c9baa0",
+  frame: "#2b241c",
+  sold: "#443a2c",
+  soldEdge: "#2b241c",
+  held: "#c9baa0",
+  heldEdge: "#f3ede0",
+  heldRule: "rgba(43, 36, 28, 0.62)",
+  chip: "#c9baa0",
+  chipText: "#2b241c",
+  lift: "rgba(43, 36, 28, 0.1)",
+  selection: "#2b241c",
+  onSelection: "#f3ede0",
+  selectionFill: "rgba(43, 36, 28, 0.1)",
+  ring: "#f3ede0",
+  danger: "#a8371f",
+  dangerFill: "#f1d4c8",
 };
+
+/**
+ * The palette the draw loop reads, as one mutable module value.
+ *
+ * MUTABLE ON PURPOSE, and it is the smaller of two costs. The board draws in an
+ * imperative loop that touches these twenty-seven times a frame; calling
+ * `getComputedStyle` there would put a layout read in the hot path of every pan
+ * and zoom. Threading a palette through every helper would be the tidy
+ * alternative and would change every signature in this file for a value that is
+ * the same for all of them.
+ *
+ * So it is read once at mount and again when the theme actually changes, and
+ * the draw loop keeps reading a plain object. `refreshPaint` is the only writer.
+ */
+let PAINT: Paint = FALLBACK_PAINT;
+
+export function refreshPaint(): void {
+  PAINT = readPaint();
+}
+
+function readPaint(): Paint {
+  if (typeof window === "undefined") return FALLBACK_PAINT;
+  const style = getComputedStyle(document.documentElement);
+  const read = (token: string) => style.getPropertyValue(`--${token}`).trim();
+
+  const paint = { ...FALLBACK_PAINT };
+  for (const [key, token] of Object.entries(PAINT_TOKENS) as [PaintKey, string][]) {
+    const value = read(token);
+    if (value) paint[key] = value;
+  }
+  return paint;
+}
+
 
 // A caption chip on the board itself needs room to be read; below this it is
 // noise over the artwork and the hover card carries it instead.
@@ -475,6 +502,41 @@ export default function BoardCanvas({
   useEffect(() => {
     chromeRef.current = chrome;
   }, [chrome]);
+
+  /*
+    THE PALETTE, AND A REDRAW WHEN THE THEME MOVES UNDER IT.
+
+    A canvas is not restyled by a stylesheet. When the reader toggles, or their
+    system flips at sunset, every DOM element repaints itself and the board
+    keeps whatever it painted last — so the wall would sit in the old register
+    until a pan or a resize happened to force a frame.
+
+    Two sources, because there are two ways the answer changes: the attribute
+    the toggle writes, and the media query for a reader who has not chosen. Both
+    end in the same two lines — re-read the tokens, ask for a frame.
+  */
+  const [paintAt, setPaintAt] = useState(0);
+  useEffect(() => {
+    const restyle = () => {
+      refreshPaint();
+      setPaintAt((at) => at + 1);
+    };
+    restyle();
+
+    const attribute = new MutationObserver(restyle);
+    attribute.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+
+    const system = window.matchMedia("(prefers-color-scheme: dark)");
+    system.addEventListener("change", restyle);
+
+    return () => {
+      attribute.disconnect();
+      system.removeEventListener("change", restyle);
+    };
+  }, []);
 
   /**
    * THE WALL, decoded once per version and kept until the version changes.
@@ -1097,6 +1159,10 @@ export default function BoardCanvas({
     keepDetail,
     onNeedDetails,
     focusRing,
+    // The theme. `PAINT` is a module value the draw loop reads directly, so
+    // nothing in this list would otherwise change when it does — this is the
+    // dependency that turns a re-read of the tokens into a repainted board.
+    paintAt,
   ]);
 
   function pointerBoard(event: ReactPointerEvent<HTMLCanvasElement>): Point {

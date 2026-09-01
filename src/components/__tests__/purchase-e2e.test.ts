@@ -118,13 +118,29 @@ async function waitForPhrase(what: string, phrase: string, timeoutMs = 30_000): 
  * frontmatter says. So a value read here and sampled out of a real screenshot
  * closes the loop: document → stylesheet → rendered pixel.
  */
-function token(name: string): [number, number, number] {
+function token(name: string, theme: "light" | "dark" = "light"): [number, number, number] {
   const design = readFileSync("DESIGN.md", "utf8");
-  const found = new RegExp(`^  ${name}: "(#[0-9a-f]{6})"$`, "m").exec(design);
-  if (!found) throw new Error(`DESIGN.md does not decide a colour called ${name}`);
+  // Two palettes now. `colors:` is light and `colors-dark:` is dark, and a
+  // sample taken in one theme compared against the other's value is a failure
+  // that reads like a paint bug and is not one — which is exactly what happened
+  // the first time this ran after the second theme landed.
+  const block = new RegExp(`^${theme === "light" ? "colors" : "colors-dark"}:\\n((?:  .*\\n)+)`, "m").exec(design);
+  if (!block) throw new Error(`DESIGN.md has no ${theme} palette`);
+  const found = new RegExp(`^  ${name}: "(#[0-9a-f]{6})"$`, "m").exec(block[1]);
+  if (!found) throw new Error(`DESIGN.md's ${theme} palette does not decide ${name}`);
   const hex = found[1];
   return [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16)) as [number, number, number];
 }
+
+/**
+ * Pins the register before anything paints.
+ *
+ * These assertions sample real pixels and compare them to a documented value,
+ * so they have to know which of the two palettes is on screen. Left to itself a
+ * headless Chrome follows the machine's own preference — this one prefers dark
+ * — and the comparison silently becomes light-values-against-dark-pixels.
+ */
+const PIN_LIGHT = `document.documentElement.setAttribute("data-theme", "light")`;
 
 describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
   beforeAll(async () => {
@@ -327,6 +343,7 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
        for (const [selector, what] of controls) {
         await browser.resize(width, height);
         await browser.goto(`${server.origin}/`);
+        await browser.evaluate(PIN_LIGHT);
         /*
          * The VISIBLE one. Both layouts are in the DOM at once and CSS hides
          * the one that does not apply, so a bare `querySelector` returns the
@@ -382,7 +399,9 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
          * the ring. Demanding the exact hex there would fail on anti-aliasing
          * and teach the next person to delete the test.
          */
-        const RING = token("primary");
+        // INK, not the accent. The accent means money moving now and a focus
+        // ring is a selection state — see DESIGN.md's colour section.
+        const RING = token("ink");
         for (const [side, sampled] of Object.entries(sides)) {
           const channels = [1, 3, 5].map((at) => Number.parseInt(sampled.slice(at, at + 2), 16));
           const drift = Math.max(...channels.map((value, index) => Math.abs(value - RING[index])));
@@ -445,6 +464,7 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
          * be sure the re-fit has happened — the rectangle changes only on a
          * resize or a zoom, and neither is happening here.
          */
+        await browser.evaluate(PIN_LIGHT);
         const read = `document.querySelector('canvas')?.dataset.boardRect ?? null`;
         const painted = await waitFor(`the board's fit at ${at} to settle`, async () => {
           const before = await browser.evaluate<string | null>(read);

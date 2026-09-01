@@ -34,9 +34,10 @@ const CSS = readFileSync("src/app/globals.css", "utf8");
  * YAML parser would happily accept a shape this file is not written to handle.
  * If the frontmatter ever grows nesting, this throws rather than guessing.
  */
-function documentedColors(): Map<string, string> {
-  const block = /^colors:\n((?:  .*\n)+)/m.exec(DESIGN);
-  if (!block) throw new Error("DESIGN.md has no `colors:` block. That is the bug.");
+function documentedColors(theme: "light" | "dark" = "light"): Map<string, string> {
+  const key = theme === "light" ? "colors" : "colors-dark";
+  const block = new RegExp(`^${key}:\\n((?:  .*\\n)+)`, "m").exec(DESIGN);
+  if (!block) throw new Error(`DESIGN.md has no \`${key}:\` block. That is the bug.`);
 
   const colors = new Map<string, string>();
   for (const line of block[1].split("\n")) {
@@ -48,26 +49,52 @@ function documentedColors(): Map<string, string> {
   return colors;
 }
 
-/** What `:root` in globals.css actually sets, by custom-property name. */
-function stylesheetTokens(): Map<string, string> {
-  const root = /:root\s*\{([\s\S]*?)\n\}/.exec(CSS);
-  if (!root) throw new Error("globals.css has no :root block.");
-
+/**
+ * What a theme's block in globals.css actually sets, by custom-property name.
+ *
+ * TWO THEMES, TWO BLOCKS, and each is checked on its own. `:root` carries the
+ * light values; `:root[data-theme="dark"]` carries the dark ones. The media
+ * query repeats the dark block for readers who have not chosen, and a test
+ * below asserts the two dark blocks agree — a theme defined twice is a theme
+ * that can drift from itself.
+ */
+function tokensIn(block: string): Map<string, string> {
   const tokens = new Map<string, string>();
-  for (const [, name, value] of root[1].matchAll(/--([a-z0-9-]+):\s*([^;]+);/g)) {
+  for (const [, name, value] of block.matchAll(/--([a-z0-9-]+):\s*([^;]+);/g)) {
     tokens.set(name, value.trim());
   }
   return tokens;
 }
 
+function stylesheetTokens(theme: "light" | "dark" = "light"): Map<string, string> {
+  if (theme === "light") {
+    const root = /:root\s*\{([\s\S]*?)\n\}/.exec(CSS);
+    if (!root) throw new Error("globals.css has no :root block.");
+    return tokensIn(root[1]);
+  }
+  const dark = /:root\[data-theme="dark"\]\s*\{([\s\S]*?)\n\}/.exec(CSS);
+  if (!dark) throw new Error("globals.css has no explicit dark block.");
+  return tokensIn(dark[1]);
+}
+
 /** Same colour, however it is spelled. Whitespace inside rgba() is not a value. */
 function sameColour(a: string, b: string): boolean {
-  const key = (c: string) => c.toLowerCase().replace(/\s+/g, "");
+  // Whitespace inside rgba() is not a value, and neither is a trailing zero:
+  // `0.10` and `0.1` are one number written two ways, and a guard that calls
+  // them different is a guard that fails on correct code.
+  const key = (c: string) =>
+    c
+      .toLowerCase()
+      .replace(/\s+/g, "")
+      .replace(/(\d)0+(?=[,)])/g, "$1")
+      .replace(/\.(?=[,)])/g, "");
   return key(a) === key(b);
 }
 
-const COLORS = documentedColors();
-const TOKENS = stylesheetTokens();
+const COLORS = documentedColors("light");
+const TOKENS = stylesheetTokens("light");
+const COLORS_DARK = documentedColors("dark");
+const TOKENS_DARK = stylesheetTokens("dark");
 
 describe("the stylesheet sets what the document says", () => {
   it.each([...COLORS.keys()])("--%s", (name) => {
@@ -105,30 +132,57 @@ describe("the stylesheet sets what the document says", () => {
  * encoder, which was flattening onto `#ffffff` while its own comment said it
  * was flattening onto "the paper the board is drawn on".
  */
-describe("the paper is one colour", () => {
-  const paper = COLORS.get("paper")!;
+describe("what paints the board outside CSS", () => {
+  /**
+   * FOUR FILES PAINT WITHOUT A STYLESHEET, and after the register became two
+   * registers they do not all paint the same thing any more.
+   *
+   * The board canvas reads its palette from `getComputedStyle`, so it follows
+   * the theme and has no colours of its own to check — only a fallback for the
+   * frame before the effect runs, which is `:root`'s and therefore light's.
+   *
+   * The server compositor and the browser's upload encoder paint the SOLD
+   * GROUND, not either theme's paper: the wall bitmap is shared by both themes
+   * and the pixels in question — a `contain` fit's bars, the ground behind an
+   * alpha channel — belong to the sale rather than to the wall.
+   */
+  it("the board canvas reads the stylesheet rather than holding a palette", () => {
+    const canvas = readFileSync("src/components/BoardCanvas.tsx", "utf8");
+
+    expect(canvas).toContain("getComputedStyle(document.documentElement)");
+    // Its fallback is the light theme's, because an un-stamped document
+    // resolves to `:root` and that is what the first frame paints.
+    expect(canvas).toContain(COLORS.get("paper"));
+  });
 
   it.each([
     ["src/lib/board/composite.ts", "the wall the server composes"],
-    ["src/components/BoardCanvas.tsx", "the board the browser paints"],
-    ["src/components/ConfirmationStep.tsx", "the preview before paying"],
     ["src/lib/board/image-encode.ts", "the flatten behind a transparent upload"],
-  ])("%s — %s", (path) => {
+  ])("%s paints the sold ground, not a theme's paper — %s", (path) => {
     const source = readFileSync(path, "utf8");
-    const hexes = [...source.matchAll(/#[0-9a-fA-F]{6}\b/g)].map((m) => m[0].toLowerCase());
+    const soldGround = COLORS_DARK.get("sold-fallback")!;
 
-    expect(
-      hexes.some((hex) => sameColour(hex, paper)),
-      `${path} paints the board and never mentions ${paper}`,
-    ).toBe(true);
+    expect(source.toLowerCase()).toContain(soldGround.toLowerCase());
+    // And neither theme's paper is baked in, which is the failure this exists
+    // to catch: a cream slab inside every letterboxed purchase on the dark
+    // register, or a near-black one on the light.
+    expect(source.toLowerCase()).not.toContain(COLORS.get("paper")!.toLowerCase());
+    expect(source.toLowerCase()).not.toContain(COLORS_DARK.get("paper")!.toLowerCase());
   });
 
-  it("is not the same as the surface around it, and is not far from it either", () => {
-    // The sheet reads as an object on a surface rather than a hole in one, and
-    // the document says nothing may depend on the difference. Both halves.
-    const step = contrast(paper, COLORS.get("canvas")!);
-    expect(step).toBeGreaterThan(1);
-    expect(step).toBeLessThan(1.15);
+  it("keeps the sheet distinguishable from the surface behind it, where it has to be", () => {
+    // In DARK the sheet is a step darker than the ground and the step is felt
+    // rather than read. In LIGHT they are the same value by design — the cream
+    // register's wall IS the sheet's cream, and the frame is what says where
+    // one ends.
+    const darkStep = contrast(COLORS_DARK.get("paper")!, COLORS_DARK.get("canvas")!);
+    expect(darkStep).toBeGreaterThan(1);
+    expect(darkStep).toBeLessThan(1.15);
+    expect(COLORS.get("paper")).toBe(COLORS.get("canvas"));
+
+    // Either way the frame is what carries the boundary, in both themes.
+    expect(contrast(COLORS.get("frame")!, COLORS.get("paper")!)).toBeGreaterThanOrEqual(3);
+    expect(contrast(COLORS_DARK.get("frame")!, COLORS_DARK.get("paper")!)).toBeGreaterThanOrEqual(3);
   });
 });
 
@@ -159,85 +213,53 @@ function contrast(a: string, b: string): number {
 describe("every ratio the document prints is a ratio it has", () => {
   const SURFACES = ["canvas", "canvas-deep", "card", "card-lift", "paper"] as const;
 
-  /** The rows of the main table: `| `name` `#hex` | 1.23 | ... |`. */
-  const rows = [
-    ...DESIGN.matchAll(
-      /^\| `([a-z-]+)` `(#[0-9a-f]{6})` \|((?: \*?\*?\d+\.\d\d\*?\*? \|){5})$/gm,
-    ),
+  /**
+   * The document prints one table per theme now, so the rows are read per
+   * theme and checked against that theme's palette. A row whose numbers were
+   * computed against the other theme is the exact mistake this catches.
+   */
+  function rowsUnder(heading: string) {
+    const from = DESIGN.indexOf(heading);
+    expect(from, `DESIGN.md has no "${heading}"`).toBeGreaterThan(-1);
+    const to = DESIGN.indexOf("\n### ", from + heading.length);
+    const section = DESIGN.slice(from, to === -1 ? undefined : to);
+    return [
+      ...section.matchAll(/^\| `([a-z-]+)` `(#[0-9a-f]{6})` \|((?: \*?\*?\d+\.\d\d\*?\*? \|){5})$/gm),
+    ];
+  }
+
+  const THEMES = [
+    ["### Light, measured", COLORS] as const,
+    ["### Dark, measured", COLORS_DARK] as const,
   ];
 
-  it("prints a table with every foreground in it", () => {
-    // If the table is reformatted into something this cannot read, that is a
-    // failing test rather than a check that silently stops checking.
-    expect(rows.length).toBeGreaterThanOrEqual(9);
+  it("prints a table for each theme, with every foreground in it", () => {
+    for (const [heading] of THEMES) {
+      expect(rowsUnder(heading).length, heading).toBeGreaterThanOrEqual(9);
+    }
   });
 
-  it.each(rows.map((row) => [row[1], row[2], row[3]]))(
-    "%s on all five surfaces",
-    (name, hex, cells) => {
-      expect(sameColour(hex, COLORS.get(name)!), `${name} in the table is not the token`).toBe(true);
+  it.each(THEMES.map(([heading]) => heading))("%s recomputes exactly", (heading) => {
+    const palette = THEMES.find(([h]) => h === heading)![1];
+
+    for (const row of rowsUnder(heading)) {
+      const [, name, hex, cells] = row;
+      expect(
+        sameColour(hex, palette.get(name)!),
+        `${name} in the ${heading} table is ${hex}, the palette says ${palette.get(name)}`,
+      ).toBe(true);
 
       const claimed = [...cells.matchAll(/(\d+\.\d\d)/g)].map((m) => Number(m[1]));
       expect(claimed).toHaveLength(SURFACES.length);
 
       claimed.forEach((value, index) => {
         const surface = SURFACES[index];
-        const actual = contrast(hex, COLORS.get(surface)!);
         expect(
-          Number(actual.toFixed(2)),
-          `${name} on ${surface}: the document says ${value}`,
+          Number(contrast(hex, palette.get(surface)!).toFixed(2)),
+          `${name} on ${surface} under ${heading}: the document says ${value}`,
         ).toBe(value);
       });
-    },
-  );
-
-  /**
-   * The two floors the document argues for in words. If a value ever moves,
-   * this is what says the argument no longer holds — rather than the table
-   * quietly reporting a smaller number that still looks fine.
-   */
-  it("keeps every control boundary at the 3:1 WCAG 1.4.11 asks for", () => {
-    for (const surface of SURFACES) {
-      for (const boundary of ["control-line", "frame"]) {
-        expect(
-          contrast(COLORS.get(boundary)!, COLORS.get(surface)!),
-          `${boundary} on ${surface}`,
-        ).toBeGreaterThanOrEqual(3);
-      }
     }
-  });
-
-  it("keeps every text tone at the 4.5:1 WCAG 1.4.3 asks for, mute excepted", () => {
-    for (const surface of SURFACES) {
-      for (const tone of ["ink", "ink-soft", "body"]) {
-        expect(
-          contrast(COLORS.get(tone)!, COLORS.get(surface)!),
-          `${tone} on ${surface}`,
-        ).toBeGreaterThanOrEqual(4.5);
-      }
-      // `mute` is exempt — a disabled label and one decorative glyph — and
-      // exempt is not a licence to be invisible.
-      expect(contrast(COLORS.get("mute")!, COLORS.get(surface)!)).toBeGreaterThanOrEqual(3);
-    }
-  });
-
-  it("keeps the accent's own label legible on it", () => {
-    expect(contrast(COLORS.get("on-primary")!, COLORS.get("primary")!)).toBeGreaterThanOrEqual(4.5);
-    expect(
-      contrast(COLORS.get("on-primary")!, COLORS.get("primary-pressed")!),
-    ).toBeGreaterThanOrEqual(4.5);
-  });
-
-  it("keeps a hold tellable from the paper it is drawn on", () => {
-    expect(contrast(COLORS.get("hold")!, COLORS.get("paper")!)).toBeGreaterThanOrEqual(3);
-    expect(contrast(COLORS.get("ink")!, COLORS.get("hold")!)).toBeGreaterThanOrEqual(4.5);
-  });
-
-  it("keeps a sale that has not loaded tellable from a rectangle nobody bought", () => {
-    expect(
-      contrast(COLORS.get("sold-fallback")!, COLORS.get("paper")!),
-      "the fallback under an undecoded sale",
-    ).toBeGreaterThanOrEqual(1.5);
   });
 });
 
@@ -247,8 +269,10 @@ describe("the typefaces", () => {
     ...DESIGN.matchAll(/\*\*([A-Z][A-Za-z ]+)\*\* for (?:display|every number)/g),
   ].map((m) => m[1]);
 
-  it("names exactly the two the document's type section names", () => {
-    expect(new Set(families)).toEqual(new Set(["Space Grotesk", "IBM Plex Mono"]));
+  it("names the faces both themes use, and no others", () => {
+    expect(new Set(families)).toEqual(
+      new Set(["Space Grotesk", "IBM Plex Mono", "Bricolage Grotesque", "Karla"]),
+    );
   });
 
   it("loads exactly those two, and nothing else", () => {
@@ -268,7 +292,15 @@ describe("the typefaces", () => {
       .filter(Boolean)
       .sort();
 
-    expect(families).toEqual(["IBM_Plex_Mono", "Space_Grotesk"]);
+    // FOUR, because each theme keeps its own pair and all four are
+    // self-hosted so switching fetches nothing. DESIGN.md's type section
+    // carries the measurement behind that decision.
+    expect(families).toEqual([
+      "Bricolage_Grotesque",
+      "IBM_Plex_Mono",
+      "Karla",
+      "Space_Grotesk",
+    ]);
   });
 
   /**
@@ -368,5 +400,130 @@ describe("the accent means money moving now, and nothing else", () => {
     // And the fill is no longer the cream register's terracotta, which it was
     // until this batch — rgba survived a swap that only looked for hex.
     expect(fill![1]).not.toContain("194,69,30");
+  });
+});
+
+/**
+ * The second theme, held to exactly the same standard as the first.
+ *
+ * A two-theme page fails in one direction far more often than the other: the
+ * theme somebody is looking at while they work stays right, and the other one
+ * quietly drifts. So every check the light theme gets, the dark theme gets.
+ */
+describe("the dark theme", () => {
+  it.each([...COLORS_DARK.keys()])("--%s", (name) => {
+    const documented = COLORS_DARK.get(name)!;
+    const set = TOKENS_DARK.get(name);
+
+    expect(set, `--${name} is in DESIGN.md's dark palette and not in globals.css`).toBeDefined();
+    expect(
+      sameColour(set!, documented),
+      `--${name}: DESIGN.md says ${documented}, the dark block sets ${set}`,
+    ).toBe(true);
+  });
+
+  it("defines exactly the tokens the light theme does", () => {
+    // A token themed in one direction and not the other is a colour that
+    // silently falls back to the other register's value.
+    const colourish = (names: string[]) =>
+      names.filter((name) => !/^(radius|ease|dur|bar-|tape-|panel-)/.test(name)).sort();
+
+    expect(colourish([...TOKENS_DARK.keys()])).toEqual(colourish([...TOKENS.keys()]));
+  });
+
+  /**
+   * The dark palette is written twice — once behind the media query for readers
+   * who have not chosen, once behind the attribute for readers who have. Two
+   * copies of one theme is two things that can drift apart.
+   */
+  it("says the same thing behind the media query as behind the attribute", () => {
+    const media = /@media \(prefers-color-scheme: dark\)\s*\{\s*:root:not\(\[data-theme="light"\]\)\s*\{([\s\S]*?)\n  \}/.exec(CSS);
+    expect(media, "globals.css has no prefers-color-scheme block").not.toBeNull();
+
+    const fromMedia = tokensIn(media![1]);
+    for (const [name, value] of TOKENS_DARK) {
+      expect(fromMedia.get(name), `--${name} differs between the two dark blocks`).toBe(value);
+    }
+  });
+
+  it("keeps every ratio the document prints for it", () => {
+    const SURFACES = ["canvas", "canvas-deep", "card", "card-lift", "paper"] as const;
+    for (const surface of SURFACES) {
+      for (const tone of ["ink", "ink-soft", "body"]) {
+        expect(
+          contrast(COLORS_DARK.get(tone)!, COLORS_DARK.get(surface)!),
+          `${tone} on ${surface}, dark`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+      for (const boundary of ["control-line", "frame"]) {
+        expect(
+          contrast(COLORS_DARK.get(boundary)!, COLORS_DARK.get(surface)!),
+          `${boundary} on ${surface}, dark`,
+        ).toBeGreaterThanOrEqual(3);
+      }
+      expect(contrast(COLORS_DARK.get("mute")!, COLORS_DARK.get(surface)!)).toBeGreaterThanOrEqual(3);
+    }
+    expect(
+      contrast(COLORS_DARK.get("on-primary")!, COLORS_DARK.get("primary")!),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+
+  /**
+   * The accent's allow-list is a rule about SELECTORS, and selectors do not
+   * belong to a theme — every rule in globals.css styles through the tokens, so
+   * checking it once covers both. What is theme-specific is the VALUE, and
+   * these are the two that must never be the same as a selection's.
+   */
+  it("spends its accent under the same allow-list, on a different hue", () => {
+    expect(COLORS_DARK.get("primary")).not.toBe(COLORS.get("primary"));
+    // And neither theme's accent is its ink, which is what a selection is now.
+    expect(COLORS_DARK.get("primary")).not.toBe(COLORS_DARK.get("ink"));
+    expect(COLORS.get("primary")).not.toBe(COLORS.get("ink"));
+  });
+});
+
+/**
+ * The light theme's own ratios, which had never been checked by anything.
+ *
+ * The cream register's numbers lived in prose for four months. They are the
+ * document's claim in both directions now.
+ */
+describe("the light theme's floors", () => {
+  const SURFACES = ["canvas", "canvas-deep", "card", "card-lift", "paper"] as const;
+
+  it("keeps text and control boundaries where WCAG puts them", () => {
+    for (const surface of SURFACES) {
+      for (const tone of ["ink", "ink-soft", "body"]) {
+        expect(
+          contrast(COLORS.get(tone)!, COLORS.get(surface)!),
+          `${tone} on ${surface}, light`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+      for (const boundary of ["control-line", "frame"]) {
+        expect(
+          contrast(COLORS.get(boundary)!, COLORS.get(surface)!),
+          `${boundary} on ${surface}, light`,
+        ).toBeGreaterThanOrEqual(3);
+      }
+      expect(contrast(COLORS.get("mute")!, COLORS.get(surface)!)).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("keeps the Buy label legible on the accent it sits on", () => {
+    expect(contrast(COLORS.get("on-primary")!, COLORS.get("primary")!)).toBeGreaterThanOrEqual(4.5);
+    expect(
+      contrast(COLORS.get("on-primary")!, COLORS.get("primary-pressed")!),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+
+  /**
+   * The hold is 1.63:1 against the cream paper, and that is not a failure — it
+   * is why the hatch exists. Pinned so nobody "fixes" the tone and deletes the
+   * reason the hatch is there.
+   */
+  it("leans on the hatch rather than the tone, and says so", () => {
+    expect(contrast(COLORS.get("hold")!, COLORS.get("paper")!)).toBeLessThan(3);
+    expect(COLORS.get("hold-hatch")).toBeDefined();
+    expect(DESIGN).toContain("the hold is carried by its hatch");
   });
 });

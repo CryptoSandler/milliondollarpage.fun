@@ -20,6 +20,7 @@ import InteractionLegend from "./InteractionLegend";
 import OnlineBanner from "./OnlineBanner";
 import PurchaseDialog from "./PurchaseDialog";
 import PurchaseTape from "./PurchaseTape";
+import ThemeToggle from "./ThemeToggle";
 import SelectionPanel from "./SelectionPanel";
 import WalletConnect from "./WalletConnect";
 import { useWallet } from "./useWallet";
@@ -511,12 +512,14 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           read at length and sent to somebody else. Below `sm` it gives way
           with everything else the bar sheds.
         */}
-        <Link
-          href="/faq"
-          className="btn-quiet ml-3 hidden shrink-0 px-2.5 py-1.5 text-[12.5px] sm:block"
-        >
-          Questions
-        </Link>
+        {/* Beside the questions link, because both are things a reader
+            reaches for rather than things the board is about. */}
+        <span className="ml-3 hidden shrink-0 items-center gap-2 sm:flex">
+          <ThemeToggle />
+          <Link href="/faq" className="btn-quiet shrink-0 px-2.5 py-1.5 text-[12.5px]">
+            Questions
+          </Link>
+        </span>
       </header>
 
       {/*

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
+import { Bricolage_Grotesque, IBM_Plex_Mono, Karla, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
 /**
@@ -13,6 +13,32 @@ import "./globals.css";
  * both; nothing else on the page declares a family, and `design-tokens.test.ts`
  * is what keeps that true.
  */
+/*
+ * FOUR FACES, BECAUSE THERE ARE TWO THEMES AND EACH KEEPS ITS OWN.
+ *
+ * Light is the cream register's Bricolage Grotesque and Karla; dark is
+ * direction D's Space Grotesk and IBM Plex Mono. `globals.css` picks the pair
+ * from the same tokens the colours come from, so a theme is one switch rather
+ * than two.
+ *
+ * All four are self-hosted by next/font at build time, so no request leaves for
+ * Google at runtime and switching theme fetches nothing — the faces are already
+ * there. That is what makes the toggle instant instead of a flash of fallback
+ * text, and it is the reason the cost of carrying two pairs is bytes on the
+ * first load rather than a round trip on the switch.
+ */
+const displayLight = Bricolage_Grotesque({
+  variable: "--font-display-light",
+  subsets: ["latin"],
+  display: "swap",
+});
+
+const bodyLight = Karla({
+  variable: "--font-body-light",
+  subsets: ["latin"],
+  display: "swap",
+});
+
 const display = Space_Grotesk({
   variable: "--font-display-family",
   subsets: ["latin"],
@@ -44,12 +70,30 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+/**
+ * Stamps the reader's stored choice before the first paint.
+ *
+ * IT IS BLOCKING AND IT HAS TO BE. Everything a page does after paint is too
+ * late for this: without it, a reader whose choice disagrees with their system
+ * setting gets one frame of the wrong register on every single navigation, and
+ * a flash of the opposite colourway is the most obviously broken thing a
+ * two-theme page can do.
+ *
+ * It is ten lines and it touches one attribute. `ThemeToggle` reads the
+ * attribute back rather than reading storage again, so there is one parser for
+ * the stored value and it is this one.
+ */
+const THEME_BOOT = `try{var t=localStorage.getItem("mdp-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}`;
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${display.variable} ${mono.variable} h-full antialiased`}
+      className={`${displayLight.variable} ${bodyLight.variable} ${display.variable} ${mono.variable} h-full antialiased`}
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
+      </head>
       <body className="min-h-full bg-canvas font-ui text-ink">{children}</body>
     </html>
   );

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import ThemeToggle from "../../components/ThemeToggle";
 import { boardStats, boardStandings, soldValueBaseUnits } from "../../lib/board/blocks";
 import { TOTAL_PIXELS } from "../../lib/board/geometry";
 import { formatPercentSold, formatUsdc, pixelCount } from "../../lib/board/pricing";
@@ -71,9 +72,12 @@ export default async function StatsPage() {
             <span aria-hidden className="size-2.5 rounded-full bg-ink" />
             milliondollarpage.fun
           </Link>
-          <Link href="/" className="btn-quiet px-3 py-1.5 text-[13px]">
-            Back to the board
-          </Link>
+          <span className="flex items-center gap-2">
+            <ThemeToggle />
+            <Link href="/" className="btn-quiet px-3 py-1.5 text-[13px]">
+              Back to the board
+            </Link>
+          </span>
         </nav>
 
         <h1 className="mt-8 font-display text-[34px] font-bold leading-tight tracking-tight">

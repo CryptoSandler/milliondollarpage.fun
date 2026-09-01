@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import ThemeToggle from "../../components/ThemeToggle";
 import type { ReactNode } from "react";
 import { BOARD_HEIGHT, BOARD_WIDTH, TOTAL_PIXELS } from "../../lib/board/geometry";
 import { BLOCK_PIXEL_SCALE, STORED_MAX_LONG_EDGE } from "../../lib/board/image-plan";
@@ -55,9 +56,12 @@ export default function FaqPage() {
             <span aria-hidden className="size-2.5 rounded-full bg-ink" />
             milliondollarpage.fun
           </Link>
-          <Link href="/" className="btn-quiet px-3 py-1.5 text-[13px]">
-            Back to the board
-          </Link>
+          <span className="flex items-center gap-2">
+            <ThemeToggle />
+            <Link href="/" className="btn-quiet px-3 py-1.5 text-[13px]">
+              Back to the board
+            </Link>
+          </span>
         </nav>
 
         <h1 className="mt-8 font-display text-[34px] font-bold leading-tight tracking-tight">

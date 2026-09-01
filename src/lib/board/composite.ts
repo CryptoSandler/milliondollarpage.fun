@@ -60,14 +60,30 @@ const KEEP_VERSIONS = 3;
  * background here would hide the ruling under the whole wall.
  */
 /**
- * Written as hex and parsed, rather than as three channel literals.
+ * The two colours this file paints, and why neither is the board's paper any
+ * more.
  *
- * `sharp` wants `{ r, g, b }` and DESIGN.md states a hex, and until this batch
- * this file held the second spelling of the same colour — which is exactly how
- * `SOLD_FALLBACK` below came through a whole register change still set to the
- * cream wall's value. `design-tokens.test.ts` reads these files looking for the
- * documented hex; a colour spelled in channels is a colour that guard cannot
- * see, and a guard that cannot see a value is not guarding it.
+ * THE WALL IS ONE BITMAP AND THERE ARE NOW TWO THEMES, so anything baked into
+ * it has to be right in both. Unsold pixels are transparent and always were —
+ * the paper shows through them, whichever paper that is today. What was NOT
+ * transparent was two things inside a sold rectangle: the bars a `contain` fit
+ * leaves, and the ground an upload with an alpha channel is flattened onto.
+ * Both were the cream paper, which would put cream slabs inside every
+ * letterboxed purchase for a reader on the dark register.
+ *
+ * They are `--sold-fallback`'s tone instead, and that is a better answer than a
+ * theme-neutral compromise: **those pixels belong to the sale, not to the
+ * wall.** A bar beside somebody's logo is part of what they bought, and a
+ * transparent one would make part of a sold rectangle look free — which is the
+ * exact hole the 1px sold edge exists to close. So they read as sold in both
+ * themes, and the rule "a sale is never a hole in the wall" holds without the
+ * bitmap having to know which register is being looked at.
+ *
+ * THE DOOR: if a buyer ever needs their transparency to sit on the reader's own
+ * background, the answer is two composites keyed by theme — two versions of one
+ * hash — and the cost is a second rebuild per purchase. `DECISIONS.md` carries
+ * it. Nothing here is a promise about transparency either way, and no copy says
+ * one.
  */
 function rgb(hex: string): { r: number; g: number; b: number; alpha: number } {
   return {
@@ -78,16 +94,16 @@ function rgb(hex: string): { r: number; g: number; b: number; alpha: number } {
   };
 }
 
-const PAPER = rgb("#070a0e");
-
 /**
- * What a sold rectangle shows when its stored bytes cannot be decoded.
+ * What a sold rectangle shows where the buyer's own picture does not reach —
+ * a `contain` fit's bars, and behind an alpha channel.
  *
- * LIGHTER than the paper, which is the opposite of what it was: on cream the
- * fallback was a dark slab, and the same slab on near-black paper is
- * indistinguishable from a rectangle nobody bought.
+ * It is the DARK theme's sold-fallback, and picking one of the two was
+ * unavoidable: a bitmap cannot hold both. This one, because a mid slate reads
+ * as "something is here" against the cream paper AND against the near-black,
+ * where the cream would have vanished into one of them.
  */
-const SOLD_FALLBACK = rgb("#2e3642");
+export const SOLD_GROUND = rgb("#2e3642");
 
 export type Wall = {
   /** The sha256 of the PNG, and the only thing in its URL that changes. */
@@ -179,7 +195,7 @@ async function visiblePurchases(): Promise<PurchaseRow[]> {
 }
 
 /** A rectangle's worth of opaque RGBA, with no image involved. */
-function solid(w: number, h: number, colour: typeof PAPER): Buffer {
+function solid(w: number, h: number, colour: typeof SOLD_GROUND): Buffer {
   const data = Buffer.alloc(w * h * 4);
   for (let at = 0; at < data.length; at += 4) {
     data[at] = colour.r;
@@ -216,7 +232,7 @@ function solid(w: number, h: number, colour: typeof PAPER): Buffer {
  */
 async function layer(row: PurchaseRow): Promise<Buffer> {
   if (!row.pending_image || !row.pending_image_mime) {
-    return solid(row.w, row.h, SOLD_FALLBACK);
+    return solid(row.w, row.h, SOLD_GROUND);
   }
 
   try {
@@ -229,18 +245,18 @@ async function layer(row: PurchaseRow): Promise<Buffer> {
         // the same two CSS `object-fit` gave the buyer in the preview.
         fit: row.image_fit === "cover" ? "cover" : "contain",
         position: "centre",
-        background: PAPER,
+        background: SOLD_GROUND,
         kernel: enlarging ? "nearest" : "lanczos3",
       })
       // Onto the cream rather than onto nothing: an upload with an alpha
       // channel must not let the ruling show through a rectangle somebody
       // bought.
-      .flatten({ background: PAPER })
+      .flatten({ background: SOLD_GROUND })
       .ensureAlpha()
       .raw()
       .toBuffer();
   } catch {
-    return solid(row.w, row.h, SOLD_FALLBACK);
+    return solid(row.w, row.h, SOLD_GROUND);
   }
 }
 

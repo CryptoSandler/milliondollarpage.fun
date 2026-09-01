@@ -1,8 +1,34 @@
 ---
 version: alpha
 name: milliondollarpage.fun
-description: "A cold near-black instrument for a permanent pixel canvas on Solana. Near-black paper (#070a0e) holds a 1250x800 board where the paper's own darkness means the pixels are for sale and colour or a bitmap means they are sold, so availability never depends on what colour a buyer uploaded. The artwork arrives as one composite bitmap of exactly the wall; a faint ruling comes back only when the zoom is close enough for a wall pixel to be worth counting. The whole board is always visible and the page never scrolls; the ground around it is one step lighter than the paper so the sheet reads as an object on a surface rather than a hole in it. Near-white ink (#eef2f7) sets text on the ground; a single signal green (#2ce08a) carries every primary action and every selection, and appears nowhere else. Space Grotesk sets display and prose, IBM Plex Mono sets every number, label and piece of metadata, so a measurement can be told from a sentence without reading either. The board and its blocks have zero radius because they are literally pixels; only the chrome rounds. A thin fixed top bar, a running register of settled purchases along the bottom, and the rest of the controls in a side panel or a second bar depending on which shape of window they are in. The system reads as an instrument: dense, tabular, plainly labelled, and entirely subordinate to the artwork on the wall."
+description: "Two registers of one page — a warm cream workshop wall and a cold near-black instrument, chosen by the reader or by their system. A cold near-black instrument for a permanent pixel canvas on Solana. Near-black paper (#070a0e) holds a 1250x800 board where the paper's own darkness means the pixels are for sale and colour or a bitmap means they are sold, so availability never depends on what colour a buyer uploaded. The artwork arrives as one composite bitmap of exactly the wall; a faint ruling comes back only when the zoom is close enough for a wall pixel to be worth counting. The whole board is always visible and the page never scrolls; the ground around it is one step lighter than the paper so the sheet reads as an object on a surface rather than a hole in it. Near-white ink (#eef2f7) sets text on the ground; a single signal green (#2ce08a) carries every primary action and every selection, and appears nowhere else. Space Grotesk sets display and prose, IBM Plex Mono sets every number, label and piece of metadata, so a measurement can be told from a sentence without reading either. The board and its blocks have zero radius because they are literally pixels; only the chrome rounds. A thin fixed top bar, a running register of settled purchases along the bottom, and the rest of the controls in a side panel or a second bar depending on which shape of window they are in. The system reads as an instrument: dense, tabular, plainly labelled, and entirely subordinate to the artwork on the wall."
 colors:
+  primary: "#c2451e"
+  primary-pressed: "#9f3819"
+  primary-soft: "#f7dccb"
+  on-primary: "#fff8ef"
+  ink: "#2b241c"
+  ink-soft: "#443a2c"
+  body: "#6b6154"
+  mute: "#827968"
+  canvas: "#f3ede0"
+  canvas-deep: "#e9dfc9"
+  card: "#fffcf5"
+  card-lift: "#fbf5e8"
+  hairline: "rgba(43,36,28,0.10)"
+  hairline-strong: "#c9baa0"
+  control-line: "#8a795c"
+  danger: "#a8371f"
+  danger-soft: "#f1d4c8"
+  danger-line: "#e2b6a4"
+  ok: "#4c7a4a"
+  paper: "#f3ede0"
+  frame: "#2b241c"
+  hold: "#c9baa0"
+  hold-hatch: "rgba(43,36,28,0.62)"
+  sold-fallback: "#443a2c"
+  sold-edge: "#2b241c"
+colors-dark:
   primary: "#2ce08a"
   primary-pressed: "#14b86c"
   primary-soft: "rgba(44,224,138,0.14)"
@@ -15,18 +41,26 @@ colors:
   canvas-deep: "#10151c"
   card: "#0e1218"
   card-lift: "#161c25"
-  paper: "#070a0e"
   hairline: "rgba(122,138,160,0.10)"
   hairline-strong: "#242c38"
   control-line: "#586a89"
-  frame: "#5c6b84"
-  hold: "#5a6779"
-  sold-fallback: "#2e3642"
-  sold-edge: "#586a89"
   danger: "#ff5c47"
   danger-soft: "rgba(255,92,71,0.14)"
   danger-line: "#7a2f26"
   ok: "#2ce08a"
+  paper: "#070a0e"
+  frame: "#5c6b84"
+  hold: "#5a6779"
+  hold-hatch: "rgba(7,10,14,0.62)"
+  sold-fallback: "#2e3642"
+  sold-edge: "#586a89"
+typography-light:
+  display-lg: { fontFamily: "Bricolage Grotesque", fontSize: 34px, fontWeight: 700, lineHeight: 1.05, letterSpacing: -0.8px }
+  display:    { fontFamily: "Bricolage Grotesque", fontSize: 22px, fontWeight: 600, lineHeight: 1.15, letterSpacing: -0.4px }
+  headline:   { fontFamily: "Bricolage Grotesque", fontSize: 17px, fontWeight: 600, lineHeight: 1.25 }
+  body:       { fontFamily: "Karla", fontSize: 14px, fontWeight: 400, lineHeight: 1.5 }
+  body-sm:    { fontFamily: "Karla", fontSize: 12.5px, fontWeight: 400, lineHeight: 1.45 }
+  numeric:    { fontFamily: "Karla", fontSize: 14px, fontWeight: 600, fontVariantNumeric: "tabular-nums" }
 typography:
   display-lg: { fontFamily: "Space Grotesk", fontSize: 34px, fontWeight: 700, lineHeight: 1.05, letterSpacing: -0.8px }
   display:    { fontFamily: "Space Grotesk", fontSize: 22px, fontWeight: 600, lineHeight: 1.15, letterSpacing: -0.4px }
@@ -277,12 +311,28 @@ rectangle in the sold fallback while every other purchase composes normally.
 
 ## Colour
 
-**One accent, signal green, and it means exactly one thing: MONEY MOVING NOW.**
+**Two themes, and the same page in both.** Light is the cream workshop wall this
+project shipped with; dark is direction D, "Tape". Neither is a skin over the
+other: each was designed and measured on its own, and both tables below were
+computed from this document's own frontmatter and confirmed against pixels
+sampled out of a rendered screenshot. A ratio nobody computed is not a ratio.
 
-That is a narrowing, taken by the owner on 2026-09-01, and it is the sharpest
-rule in this document because it is the only one with an allow-list.
+**A reader who has not chosen follows `prefers-color-scheme`.** A reader who has
+chosen gets what they chose, remembered, and can go back to following the
+system — three states, not two, because a two-way switch has no way back to
+"whatever the machine says". The choice is stamped on the root element by a
+blocking script before the first paint, so no reader ever sees a frame of the
+wrong register.
 
-**Where it may appear, and nowhere else:**
+**What is themed is only colour and the two typefaces.** The layout, the type
+scale, the motion and every mechanic are one page: the settled rail, the marked
+newest sale, the counter's flash and the hover price belong to both registers.
+A theme is a colourway, not a second design.
+
+### The accent means one thing in both: MONEY MOVING NOW
+
+Terracotta in light, signal green in dark, and the rule is identical. It may
+appear in five places and the guardian fails the build if it appears in a sixth:
 
 | Where | Why it is money moving |
 | --- | --- |
@@ -292,31 +342,89 @@ rule in this document because it is the only one with an allow-list.
 | The price on the hover card | What this rectangle costs, at the moment somebody is weighing it |
 | The Buy button | The act of moving the money |
 
-**Where it no longer appears, and this is the substance of the change:
-anywhere that meant "your selection".** The rectangle you are dragging, the
-control the keyboard is on, the field you are typing in, the text you have
-highlighted, a button you are hovering. None of those is money. All of them are
-**ink and a frame** now.
+**In both themes it has been withdrawn from everything that meant "your
+selection"** — the dragged rectangle, the control the keyboard is on, the field
+being typed in, highlighted text, a hovered quiet button. All of those are
+**ink and a frame** now, in light exactly as in dark. The cream register let the
+accent mean two things and called the focus ring "the third thing terracotta
+means, and it is the same claim"; that reading is retired.
 
-The cream register let the accent mean two things — *primary action* and *your
-selection* — and called the focus ring "the third thing terracotta means, and it
-is the same claim". It was a defensible reading and it is not this one. A wall
-whose whole argument is that purchases are real and permanent should spend its
-one loud colour on the purchases.
+**The selection lost nothing by it, in either theme.** Its outline over artwork
+was never made visible by the accent — the sandwich does that, paper outside
+and a hard stroke inside — and only the stroke's colour changed. The focus ring
+went from **3.81:1** to **11.56:1** at worst in light, and from 9.89:1 to
+**15.22:1** in dark. WCAG 1.4.11 asks 3:1.
 
-**The selection lost nothing by it.** The outline over artwork was never made
-visible by the accent — it is the sandwich that does that, paper outside and a
-hard stroke inside, and only the stroke's colour changed. The focus ring
-measures **15.22:1** at worst in ink against the four surfaces a focusable thing
-lands on, where the accent measured 9.89:1; WCAG 1.4.11 asks 3:1, so the ring
-got more legible, not less.
+### Light, measured
 
-**`design-tokens.test.ts` enforces this by allow-list**, which is the only way a
-rule like this survives contact with a hurry: it collects every selector in
-`globals.css` that reaches for `--primary`, `--primary-soft` or
-`--primary-pressed`, and fails when that set is not exactly the permitted one. A
-new accent use is a failing test rather than a thing somebody notices later, and
-adding one means editing this table first.
+| | `canvas` | `canvas-deep` | `card` | `card-lift` | `paper` |
+|---|---|---|---|---|---|
+| `ink` `#2b241c` | **13.12** | **11.56** | **14.94** | **14.09** | **13.12** |
+| `ink-soft` `#443a2c` | **9.54** | **8.40** | **10.86** | **10.24** | **9.54** |
+| `body` `#6b6154` | **5.20** | **4.58** | **5.92** | **5.58** | **5.20** |
+| `mute` `#827968` | **3.69** | **3.25** | **4.20** | **3.96** | **3.69** |
+| `primary` `#c2451e` | **4.32** | 3.81 | **4.92** | **4.64** | **4.32** |
+| `control-line` `#8a795c` | **3.62** | **3.19** | **4.12** | **3.89** | **3.62** |
+| `frame` `#2b241c` | **13.12** | **11.56** | **14.94** | **14.09** | **13.12** |
+| `hold` `#c9baa0` | 1.63 | 1.44 | 1.86 | 1.75 | 1.63 |
+| `danger` `#a8371f` | **5.57** | **4.91** | **6.34** | **5.98** | **5.57** |
+| `hairline-strong` `#c9baa0` | 1.63 | 1.44 | 1.86 | 1.75 | 1.63 |
+
+| Pair | Ratio |
+|---|---|
+| `on-primary` on `primary` | **4.79** |
+| `on-primary` on `primary-pressed` | **6.52** |
+| `ink` on `hold` | **8.03** |
+| `sold-fallback` on `paper` | **9.54** |
+| `sold-edge` on `paper` | **13.12** |
+
+### Dark, measured
+
+| | `canvas` | `canvas-deep` | `card` | `card-lift` | `paper` |
+|---|---|---|---|---|---|
+| `ink` `#eef2f7` | **17.31** | **16.30** | **16.70** | **15.22** | **17.64** |
+| `ink-soft` `#b3bdcc` | **10.26** | **9.66** | **9.90** | **9.02** | **10.45** |
+| `body` `#8d97a6` | **6.59** | **6.20** | **6.36** | **5.79** | **6.72** |
+| `mute` `#6b7686` | **4.23** | **3.98** | **4.08** | **3.72** | **4.31** |
+| `primary` `#2ce08a` | **11.25** | **10.59** | **10.85** | **9.89** | **11.46** |
+| `control-line` `#586a89` | **3.56** | **3.35** | **3.43** | **3.13** | **3.62** |
+| `frame` `#5c6b84` | **3.61** | **3.40** | **3.48** | **3.17** | **3.68** |
+| `hold` `#5a6779` | 3.38 | 3.19 | 3.26 | 2.98 | **3.45** |
+| `danger` `#ff5c47` | **6.37** | **6.00** | **6.15** | **5.60** | **6.49** |
+| `hairline-strong` `#242c38` | 1.38 | 1.30 | 1.33 | 1.22 | 1.41 |
+
+| Pair | Ratio |
+|---|---|
+| `on-primary` on `primary` | **10.53** |
+| `on-primary` on `primary-pressed` | **7.03** |
+| `ink` on `hold` | **5.12** |
+| `sold-fallback` on `paper` | 1.63 |
+| `sold-edge` on `paper` | **3.62** |
+
+**The rows below 3:1 are the same two in both themes, answered the same way.**
+`hairline-strong` is decoration — the rule under the bar, a divider, a card's
+outline — and 1.4.11 reaches what identifies a *control*. And **the hold is carried by its hatch, not by its tone**: 1.63:1 in light and 3.45:1 in dark
+against the paper, which is why the 45° hatch and the broken edge are the
+load-bearing half of that treatment in both and why `--hold-hatch` is a token
+rather than an opacity somebody picked. `sold-fallback` at 1.63:1 in dark is the
+mirror of the same trade, and it is what the 1px `sold-edge` at 3.62:1 exists to
+close.
+
+### The one thing the wall bitmap cannot theme
+
+**The composite is one image and there are two themes.** Unsold pixels are
+transparent, so the paper shows through whichever paper is current. But two
+things *inside* a sold rectangle were being baked in the cream: the bars a
+`contain` fit leaves, and the ground an upload's alpha channel is flattened
+onto. Both are `sold-fallback`'s tone now, in both themes, because **those
+pixels belong to the sale rather than to the wall** — a bar beside somebody's
+logo is part of what they bought, and making it transparent would put a hole in
+a sold rectangle, which is the exact failure the sold edge exists to prevent.
+
+The door, if a buyer's transparency ever has to sit on the reader's own
+background: two composites keyed by theme, two versions of one hash, and a
+second rebuild per purchase. `DECISIONS.md` carries it. No copy promises
+transparency either way.
 
 ### The token names did not change, and that is the point
 
@@ -509,6 +617,56 @@ frontmatter above and asserts four things.
    computed is not a ratio", enforced instead of restated.
 4. **The two typefaces named here are the two `layout.tsx` loads**, and no other
    family is loaded from anywhere.
+
+### Each theme keeps its own faces, and that was measured rather than assumed
+
+Light sets **Bricolage Grotesque** and **Karla**; dark sets **Space Grotesk**
+and **IBM Plex Mono**. All four are self-hosted at build time, so switching
+theme fetches nothing and the faces are already there.
+
+**The question was whether swapping typefaces makes the toggle read as a
+different site.** `scripts/theme-coherence.mts` answers it with a number: it
+records the box of every text-bearing element in the chrome, stamps the other
+theme, and records them again. Re-flow is the measurable cause of that feeling —
+a toggle that only changes colour leaves every box where it was.
+
+**Measured at 1440×900, animations frozen:**
+
+| Element | Δx | Δy | Δw | Δh |
+|---|---|---|---|---|
+| The wordmark | 0.0 | 0.0 | 0.0 | 0.0 |
+| The offer, the count, the sold share | 0.0 | 0.0 | 0.0 | 0.0 |
+| The selection readout | 0.0 | 0.0 | 0.0 | 0.0 |
+| The Buy button | 0.0 | 0.0 | 0.0 | 0.0 |
+| The interaction legend | 0.0 | 0.0 | 0.0 | 0.0 |
+| The rail's head | 0.0 | 0.0 | **+7.3** | 0.0 |
+| A rail row | **+7.3** | 0.0 | **+60.0** | 0.0 |
+
+**The decision: each theme keeps its own faces.** Every fixed element on the
+page — the bar, the panel, the button, the legend — moves by exactly **0.0px**.
+The only drift is inside the settled rail, where a row is 60px wider in dark,
+and a rail is a horizontally scrolling strip whose content position carries no
+meaning: the two themes fit a different number of rows on screen and nothing a
+reader can point at has moved. That is a repaint, not a rebuild.
+
+**Where the 60px comes from, because it is not really about taste.** The cream
+register never had a monospace, so light's numeric role falls back to Karla,
+which is proportional. Karla carries tabular figures so digits still align and
+the rail's columns still read — but a mono and a proportional face at the same
+size are not the same width, and the rail is the one place this design sets long
+runs of digits. **If the rail ever needs the two themes to be the same width,
+the fix is to give light a monospace for the numeric role, not to give both
+themes one face.**
+
+**Two things the measurement caught that no amount of looking would have.**
+Its first run reported a clean 0.0px everywhere — because it measured "light" by
+not stamping anything, this machine's headless Chrome prefers dark, and both
+passes were therefore the dark theme. It reported a perfect result over a
+comparison it had not made. It prints the computed typefaces first now, which is
+how that was found and is the first line to read in its output. Its second run
+reported 7.0px on the rail with the row's width unchanged — the signature of a
+rolling track caught at two offsets rather than a re-flow. Every animation is
+frozen before it measures.
 
 ## Type
 

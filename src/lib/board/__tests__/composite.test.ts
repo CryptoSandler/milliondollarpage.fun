@@ -7,6 +7,7 @@ import { listBoardRects } from "../blocks";
 import { currentWall, ensureWall, wallPng } from "../composite";
 import { BOARD_HEIGHT, BOARD_WIDTH } from "../geometry";
 import { placeImage } from "../image-fit";
+import { SOLD_GROUND } from "../composite";
 
 /**
  * The wall, checked by looking at it.
@@ -144,7 +145,7 @@ describe("the composite wall", () => {
     expect((await pixelAt(png, 10, 0)).a).toBe(0);
   });
 
-  it("composites an upload with an alpha channel onto the paper's own cream", async () => {
+  it("composites an upload with an alpha channel onto the sold ground", async () => {
     const transparent = await sharp({
       create: { width: 20, height: 20, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
     })
@@ -153,8 +154,9 @@ describe("the composite wall", () => {
     await buy({ x: 400, y: 400, w: 20, h: 20 }, transparent);
 
     const { png } = await servedWall();
-    // #f3ede0 — the sheet, not the ruling and not a hole in the wall.
-    expect(await pixelAt(png, 410, 410)).toEqual({ r: 0xf3, g: 0xed, b: 0xe0, a: 255 });
+    // The sold ground, not a hole in the wall. It is no longer the paper:
+    // the bitmap is shared by two themes and cannot bake either one's.
+    expect(await pixelAt(png, 410, 410)).toEqual({ r: SOLD_GROUND.r, g: SOLD_GROUND.g, b: SOLD_GROUND.b, a: 255 });
   });
 
   it("paints a sale whose bytes cannot be decoded solid, rather than dropping the whole wall", async () => {
@@ -163,16 +165,16 @@ describe("the composite wall", () => {
     await buy({ x: 100, y: 0, w: 20, h: 20 }, await solidPng(40, good));
 
     const { png } = await servedWall();
-    // #443a2c — the fallback DESIGN.md names for a sold rectangle with no
+    // The sold ground — what DESIGN.md names for a sold rectangle with no
     // bitmap to show. The rest of the wall is unaffected.
-    expect(await pixelAt(png, 10, 10)).toEqual({ r: 0x44, g: 0x3a, b: 0x2c, a: 255 });
+    expect(await pixelAt(png, 10, 10)).toEqual({ r: SOLD_GROUND.r, g: SOLD_GROUND.g, b: SOLD_GROUND.b, a: 255 });
     expect(await pixelAt(png, 110, 10)).toMatchObject({ ...good, a: 255 });
   });
 
   it("paints a sale nobody uploaded to solid as well", async () => {
     await buy({ x: 0, y: 0, w: 20, h: 20 }, null);
     const { png } = await servedWall();
-    expect(await pixelAt(png, 10, 10)).toEqual({ r: 0x44, g: 0x3a, b: 0x2c, a: 255 });
+    expect(await pixelAt(png, 10, 10)).toEqual({ r: SOLD_GROUND.r, g: SOLD_GROUND.g, b: SOLD_GROUND.b, a: 255 });
   });
 
   it("leaves a HOLD out of the wall entirely, because a hold is not a purchase", async () => {
@@ -398,11 +400,11 @@ describe("the checkout preview and the wall agree about the rectangle", () => {
     const middle = { x: Math.round(dest.x + dest.width / 2), y: Math.round(dest.y + dest.height / 2) };
     expect(await pixelAt(png, middle.x, middle.y)).toMatchObject({ ...ink, a: 255 });
 
-    // And the bars: the sheet's own cream, one pixel inside the rectangle at
+    // And the bars: the sold ground, one pixel inside the rectangle at
     // the top and at the bottom, where the preview says there is no picture.
-    const paper = { r: 0xf3, g: 0xed, b: 0xe0, a: 255 };
-    expect(await pixelAt(png, middle.x, rect.y + 1)).toEqual(paper);
-    expect(await pixelAt(png, middle.x, rect.y + rect.h - 2)).toEqual(paper);
+    const bars = { r: SOLD_GROUND.r, g: SOLD_GROUND.g, b: SOLD_GROUND.b, a: 255 };
+    expect(await pixelAt(png, middle.x, rect.y + 1)).toEqual(bars);
+    expect(await pixelAt(png, middle.x, rect.y + rect.h - 2)).toEqual(bars);
 
     // The picture's own top edge, two pixels below where the preview puts it,
     // so a rounding difference of one is not what is being asserted.

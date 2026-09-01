@@ -114,9 +114,12 @@ export async function prepareImage(file: File, block: Box, fit: Fit): Promise<Pr
       if (!context) return { ok: false, problem: "image_unencodable" };
 
       // JPEG has no alpha: without this, a transparent PNG would arrive with
-      // black behind it rather than the paper the board is drawn on.
+      // black behind it. It is the SOLD GROUND rather than the paper, and the
+      // same value `composite.ts` flattens onto — these bytes end up inside a
+      // sold rectangle on a wall shared by two themes, so they cannot carry
+      // either theme's paper. See composite.ts for the whole argument.
       if (type === "image/jpeg") {
-        context.fillStyle = "#070a0e";
+        context.fillStyle = "#2e3642";
         context.fillRect(0, 0, canvas.width, canvas.height);
       }
       context.imageSmoothingEnabled = true;

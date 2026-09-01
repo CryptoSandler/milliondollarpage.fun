@@ -17,6 +17,7 @@ import { proofFor } from "./proof";
 import { GET as IMAGE } from "../blocks/[id]/image/route";
 import { POST as POST_CONFIRM } from "../orders/[id]/confirm/route";
 import { POST as POST_CONTENT } from "../orders/[id]/content/route";
+import { SOLD_GROUND } from "../../../lib/board/composite";
 
 /**
  * The dollar purchase, and the photograph nobody has to shrink by hand.
@@ -313,9 +314,12 @@ describe("a contain the rectangle cannot letterbox", () => {
     // the middle of it is picture. Nothing here recomputes where the edge
     // falls; both samples are well inside their own band.
     const bar = await wallPixel(450, 610);
-    // The sheet's own cream, `--canvas` in DESIGN.md and `PAPER` in
-    // composite.ts, which is what a contain fit's bars are made of.
-    expect(bar).toEqual({ r: 0xf3, g: 0xed, b: 0xe0, a: 255 });
+    // The SOLD GROUND, which is what a contain fit's bars are made of — read
+    // from composite.ts rather than restated, because the wall is shared by two
+    // themes now and the one thing this must not do is pin a colour that has
+    // moved. The bars belong to the sale, not to the wall, which is why they
+    // are not either theme's paper.
+    expect(bar).toEqual({ r: SOLD_GROUND.r, g: SOLD_GROUND.g, b: SOLD_GROUND.b, a: 255 });
 
     const picture = await wallPixel(450, 650);
     expect(Math.abs(picture.r - blue.r)).toBeLessThanOrEqual(3);
