@@ -226,6 +226,46 @@ export function sideRailWidth(screen: Size, board: Size): number {
   return gap >= SIDE_RAIL_MIN ? Math.min(gap, SIDE_RAIL_MAX) : 0;
 }
 
+/** The hover card's own width: `w-56` on the element in `BoardView`, 14rem. */
+export const HOVER_CARD_W = 224;
+/** How far the card sits from the pointer, on whichever side it ends up. */
+const HOVER_CARD_GAP = 14;
+
+/**
+ * Where the hover card's left edge goes, given the pointer and the chrome.
+ *
+ * WHO CALLS THIS: `BoardView`, which draws that card, and nothing else. It is
+ * here rather than in that file because it is geometry with no DOM in it — the
+ * viewport width is a parameter, not a global — and because the flip below has
+ * three branches, which is three more than a browser is a good place to debug.
+ *
+ * IT KEEPS THE CARD INSIDE THE BOARD'S OWN FREE REGION, not merely inside the
+ * window. The old rule was `min(x + 14, innerWidth - 240)` — the window's right
+ * edge, which was right when the only thing beside the board was wall and wrong
+ * the moment a side rail stands there: a rectangle hovered at the board's right
+ * edge put the card over the settled register, which is chrome covering chrome
+ * with the artwork's own metadata.
+ *
+ * `chrome.left` and `chrome.right` already carry the rails plus the board's
+ * inset — `BoardView` measures them off the rails' real boxes — so nothing here
+ * needs a second opinion about which layout is in force.
+ *
+ * It PREFERS the right of the pointer, FLIPS to the left where the card would
+ * not fit, and clamps only as a last resort, so the card is never pushed off
+ * the pointer it belongs to unless the free region is narrower than the card
+ * itself. On a phone it is not: 390px leaves 370 against 224.
+ */
+export function hoverCardLeft(pointerX: number, viewportWidth: number, chrome: Chrome): number {
+  const from = chrome.left;
+  const to = viewportWidth - chrome.right;
+
+  const right = pointerX + HOVER_CARD_GAP;
+  const left = pointerX - HOVER_CARD_GAP - HOVER_CARD_W;
+  const placed = right + HOVER_CARD_W <= to ? right : left;
+
+  return Math.max(from, Math.min(placed, to - HOVER_CARD_W));
+}
+
 /** The rectangle of viewport the board may use: everything the chrome leaves. */
 export function freeRegion(screen: Size, chrome: Chrome): { x: number; y: number } & Size {
   return {

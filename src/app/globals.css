@@ -669,8 +669,7 @@ h3 {
    * flex-wrap, because BoardView measures the box to keep the board from
    * running under it and a bar that can grow to two rows is a bar that can
    * cover the board it was measured against. Everything inside fits one row
-   * down to a phone width — see SelectionPanel and InteractionLegend for what
-   * gives way first.
+   * down to a phone width — see SelectionPanel for what gives way first.
    */
   /*
    * THE RAIL, on the board's own top edge.
@@ -1393,10 +1392,6 @@ h3 {
 
     .board-controls .selection-panel {
       gap: 10px;
-    }
-
-    .board-controls .interaction-legend {
-      display: none;
     }
 
     .board-controls .wallet-field .label-caps {

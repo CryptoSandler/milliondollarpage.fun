@@ -12,7 +12,7 @@ import { offerLine } from "../lib/board/pricing";
 import { walletSigner } from "../lib/board/purchase-client";
 import type { Selection } from "../lib/board/selection";
 import type { TapeRow } from "../lib/board/tape";
-import { BAR_TOP_PX, BOARD_INSET, type Chrome } from "../lib/canvas/viewport";
+import { BAR_TOP_PX, BOARD_INSET, type Chrome, hoverCardLeft } from "../lib/canvas/viewport";
 import BlockCard from "./BlockCard";
 import BoardCanvas, { type ZoomControls, type ZoomState } from "./BoardCanvas";
 import BoardCounters from "./BoardCounters";
@@ -666,7 +666,13 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
         <div
           className="floating-card pointer-events-none fixed z-20 w-56 p-3"
           style={{
-            left: Math.min(hovered.at.x + 14, (typeof window === "undefined" ? 1200 : window.innerWidth) - 240),
+            /* Inside the board's own free region, never merely inside the
+               window — see `hoverCardLeft`, and the rails it exists for. */
+            left: hoverCardLeft(
+              hovered.at.x,
+              typeof window === "undefined" ? 1200 : window.innerWidth,
+              chrome,
+            ),
             top: Math.max(chrome.top + 8, hovered.at.y - 96),
           }}
         >

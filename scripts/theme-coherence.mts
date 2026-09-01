@@ -56,7 +56,6 @@ const WATCHED = [
   ".board-controls .btn-primary",
   ".board-tape__head",
   ".board-tape__row",
-  ".interaction-legend",
 ];
 
 const MEASURE = `(() => {

@@ -594,9 +594,9 @@ for which three colours are in the stack.
 1.4.3 exempts as incidental, and one aria-hidden decorative glyph, which 1.4.11
 does not reach. **Exempt is not a licence to be invisible**, so it clears 3:1 on
 every surface it lands on and in fact clears 3.72 at worst. Everything the cream
-register moved off `mute` — the all-caps labels, the form hints, the interaction
-legend, the hover card's metadata, the input placeholders — stays off it, on
-`body`, and the ramp keeps four distinct steps.
+register moved off `mute` — the all-caps labels, the form hints, the hover
+card's metadata, the input placeholders — stays off it, on `body`, and the ramp
+keeps four distinct steps.
 
 ### What checks this
 
@@ -772,59 +772,85 @@ this product that scrolls** — inside a single full-height box, the same
 exemption the side panel already has. The document's own `overflow: hidden`
 does not move, because the board depends on it.
 
-Everything else — the size presets, the selection readout and price, the wallet
-control, the Buy button, the legend — is one block of controls that the layout
-puts in one of two places. It is one set of controls either way; there is never
-a second Buy button or a second Connect control for a screen reader to find.
+Everything else — the size presets, the zoom, the selection readout and price,
+the wallet control and the Buy button — is one block of controls that the layout
+puts in one of three places. **It is one set of controls in all three**; there
+is never a second Buy button or a second Connect control for a screen reader to
+find.
 
-**In a landscape window it is a side panel**, a column down the left. There is
-**no bottom bar** in that layout. **Its width is 288px, and that number is
-measured rather than reasoned**: the widest thing in the column that cannot
-shrink is the Buy button at its longest, `Buy these pixels — $1,000,000.00`,
-which renders at 255px; 16px of padding either side and the panel's own 1px
-border make exactly that.
+**It is two pieces, and they are separated by what they are for.** The presets
+and the zoom are how a rectangle GETS selected, so they can never sit behind a
+selection: they are always on screen. The readout, the wallet and Buy are about
+a rectangle that exists, so they come up with one and retract with it.
 
-It used to be the genuine leftover — `100vw - 1.5625 × (100dvh - bar-top)`,
-floored at 280px and capped at 560px — and both ends of that were guesses that
-measurement contradicted. The floor was too narrow: at 280px the content box is
-247px against the 255px that control needs, so the one thing that never gives
-way was overflowing its own column.
-The cap was too wide: on a large monitor the panel held 560px the board could
-have used, and the board, fitted by width there, came back with its own edge
-outside the window. **What the board does not need beside it is wall, not
-letterbox** — same ground, same rule as the rest of the background.
+### The three placements, and what decides between them
 
-**In portrait and on phones it is a bottom bar**, one row at one fixed height,
-never wrapping — because the board's fit maths reads its measured box, and a
-bar that can grow to two rows is a bar that can cover the board it was measured
-against.
+**Phones and portrait, below 640px: a bottom sheet.** The panel takes the bottom
+edge, full width, one fixed height, never wrapping — the board's fit maths reads
+its measured box, and a bar that can grow to two rows is a bar that can cover
+the board it was measured against. The settled register is not shown at all
+there; `/stats` carries it for anybody on a phone.
 
-**Tab order is the board, then the controls, and it ends on Buy.** One DOM
-tree serves both layouts, so one source order has to answer for both. In the
-bottom bar it matches the visual order exactly: the board, then the row left to
-right. In the side panel the board comes before the panel drawn over its left
-third — the canvas's own box starts at the window's origin, the board is the
-thing the panel is about, and the sequence a keyboard walks is then the
-sequence a purchase takes: pick the rectangle, price it, type the address,
-press Buy. Reordering to satisfy the panel would satisfy it by breaking the
-bar, and would leave Buy in the middle of the walk rather than at the end of
-it.
+**Above 640px and below the rail threshold: the panel floats.** It is not part
+of the chrome the fit maths sees, so the board is the same size with it open and
+closed. It sits over the letterbox the fit leaves under the board, and over the
+board itself only where there is no letterbox to sit on. The presets and the
+zoom are a pill overlaid on the board's own top margin.
 
-The crossover is 5:4 and 640px wide, not simply "landscape": the question is
-not which way the window is turned, it is which arrangement leaves a bigger
-board. At 1280×1024 a panel does; at 600×590 it does not. **Both of those
-numbers were worked out against a square board and a wider one moves the
-crossover** — at 1024×768 the bottom bar now leaves the bigger board. Recorded
-here as an open layout question rather than changed on the way past.
+**Where the side rails are on: the left rail.** The presets and the zoom become
+the head of the column and stop covering artwork at all; the panel is at its
+foot. The threshold is the gap arithmetic below — `gap ≥ 180px`, rail
+`min(gap, 288px)` — and the whole of it is in *No new column takes width from
+the wall*.
 
-What gives way as room runs out, in order, in both layouts: **the interaction
-legend first**, then the zoom trio — a phone has a pinch, and the bottom bar at
-that width has no room for three more buttons — then the exact rectangle
-readout, then the per-preset prices, then the wallet's own label, then the
-gaps. **Never** the pixel count, the
-total, or the Buy button — those are what the controls are for. The bottom bar
-runs out of width; the side panel runs out of height, and sheds the same things
-in the same order.
+**288px is a ceiling now, not a column.** It was the width of a side panel that
+took that much of the board's width whether or not anybody was buying anything;
+that panel is gone. The number survived because what it measures survived: the
+widest thing in the controls that cannot shrink is the Buy button at its
+longest, `Buy these pixels — $1,000,000.00`, which renders at 255px, plus 16px
+of padding either side and a 1px border. It is what a side rail stops growing
+at, and below it the button's price takes a second line.
+
+**The old crossover is retired.** This section used to put the decision at 5:4
+and 640px — "which arrangement leaves a bigger board", a panel or a bar — and to
+record 1024×768 as an open question. Neither survives a panel that floats: a
+layout that costs the board nothing has nothing to lose the comparison with. The
+only width that decides anything now is 640px, and it decides whether the panel
+is a sheet on the bottom edge or a floating bar.
+
+**Tab order is the board, then the controls, and it ends on Buy.** One DOM tree
+serves all three placements, so one source order has to answer for all of them:
+the canvas, the top bar, the settled register, the presets and the zoom, then
+the panel with Buy last in it. That is the sequence a purchase takes — pick the
+rectangle, price it, connect, press Buy — and it is why the right rail comes
+BEFORE the left one in the markup while being drawn on the other side. The rails
+are placed by CSS; nothing about the walk changes when the register stands up
+into a column.
+
+**What gives way as room runs out, in order, in every placement:** the zoom trio
+first — a phone has a pinch, and the bottom sheet at that width has no room for
+three more buttons — then the exact rectangle readout, then the per-preset
+prices, then the wallet's own label, then the gaps. **Never** the pixel count,
+the total, or the Buy button; those are what the controls are for. In a rail the
+button's price wraps rather than the label shortening, which is the same rule
+said in a column.
+
+**The interaction legend is gone, and this is where it used to be first in that
+order.** Three lines explaining the drag, the wheel and the keyboard, hidden
+below `lg`, hidden again in a short landscape window, and — ever since the batch
+that floated the panel — rendered by nothing at all: that change dropped it from
+the tree and left the component, its stylesheet rule and its entry in the
+theme-coherence guard standing. All four are deleted now.
+
+**Half of what it said is still said, and half is not.** The keyboard half is on
+the canvas itself, as its own `aria-describedby` — arrows, shift, alt-arrows,
+enter, escape — read out the moment focus lands on the board, which is a better
+home for it than a paragraph nobody using a pointer reads. **The pointer half is
+now said nowhere in the interface**: drag to outline, click to place a size,
+scroll or pinch to zoom, shift-drag to pan once zoomed in. That is a real loss
+and it is recorded here as an open gap rather than closed on the way past. The
+honest place for it is `/faq`, which does not carry it yet, and a side rail is
+the first layout this design has had with room for it.
 
 ## The wall takes almost the whole screen
 

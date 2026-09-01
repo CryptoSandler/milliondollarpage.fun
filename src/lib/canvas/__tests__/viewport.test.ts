@@ -10,6 +10,8 @@ import {
   canPan,
   clampToBoard,
   clampToFit,
+  HOVER_CARD_W,
+  hoverCardLeft,
   fitScale,
   fittedBoardSize,
   freeRegion,
@@ -673,5 +675,58 @@ describe("zoomAffordance tells the buttons which end of the ladder they are on",
     // A fit scale above maxZoom is the one case where the ladder is a single
     // rung: fit itself. Neither button does anything there.
     expect(zoomAffordance(20, 20, 16)).toEqual({ canZoomIn: false, canZoomOut: false });
+  });
+});
+
+/**
+ * The hover card, which is the one piece of chrome that follows a pointer and
+ * therefore the one that can be put anywhere.
+ *
+ * The rails are what made this worth a test. Before them the only thing beside
+ * the board was wall, so "keep it inside the window" and "keep it off the
+ * chrome" were the same sentence. They are not any more.
+ */
+describe("where the hover card goes", () => {
+  // A 2560×1440 window with the rails on: 187px of rail plus the board's own
+  // 10px inset on each side, which is what BoardView measures there.
+  const RAILED: Chrome = { top: 44, right: 197, bottom: 10, left: 197 };
+  // The same window without them.
+  const PLAIN: Chrome = { top: 44, right: 10, bottom: 10, left: 10 };
+
+  it("sits to the right of the pointer when there is room for it", () => {
+    expect(hoverCardLeft(600, 2560, RAILED)).toBe(614);
+    expect(hoverCardLeft(600, 2560, PLAIN)).toBe(614);
+  });
+
+  it("flips to the left of the pointer rather than reaching over the right rail", () => {
+    // A rectangle hovered at the board's own right edge: 2560 − 197 is where
+    // the free region ends, and the card would need 224 past the pointer.
+    const at = 2560 - 197 - 20;
+    const left = hoverCardLeft(at, 2560, RAILED);
+    expect(left).toBe(at - 14 - HOVER_CARD_W);
+    expect(left + HOVER_CARD_W).toBeLessThanOrEqual(2560 - RAILED.right);
+  });
+
+  it("never lets the card reach over either rail, anywhere along the board", () => {
+    for (const viewport of [2560, 3440]) {
+      const rail = viewport === 2560 ? 197 : 298;
+      const chrome: Chrome = { top: 44, right: rail, bottom: 10, left: rail };
+      for (let x = 0; x <= viewport; x += 7) {
+        const left = hoverCardLeft(x, viewport, chrome);
+        expect(left, `card left at x=${x} in ${viewport}`).toBeGreaterThanOrEqual(chrome.left);
+        expect(
+          left + HOVER_CARD_W,
+          `card right at x=${x} in ${viewport}`,
+        ).toBeLessThanOrEqual(viewport - chrome.right);
+      }
+    }
+  });
+
+  it("clamps rather than vanishing when the free region is narrower than the card", () => {
+    // Not a layout this design produces — the narrowest free region it has is a
+    // 390px phone, which leaves 370 against 224 — but a clamp that inverts is
+    // how a card ends up off screen, so the branch is pinned.
+    const tight: Chrome = { top: 44, right: 120, bottom: 10, left: 120 };
+    expect(hoverCardLeft(200, 400, tight)).toBe(120);
   });
 });

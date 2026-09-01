@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import sharp from "sharp";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { queryOne } from "../../lib/db";
+import { execute, queryOne } from "../../lib/db";
 import { testWallet } from "../../lib/wallet/__tests__/keypair";
 import { findChrome, launchChrome, sleep, waitFor, type Browser } from "./cdp";
 import { waitForMachineQuiet } from "./machine";
@@ -616,6 +616,110 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
             drift,
             `the ${side} of the frame at ${at} sampled rgb(${sampled.join(",")}), which is not the board's frame`,
           ).toBeLessThanOrEqual(12);
+        }
+      }
+    },
+    240_000,
+  );
+
+  /**
+   * The hover card at the board's extreme edges, where the rails are.
+   *
+   * WHY THE EDGE AND NOWHERE ELSE. The card follows the pointer, so it is the
+   * one piece of chrome whose position is an argument rather than a rule, and
+   * the argument only fails at the ends: anywhere in the middle of a 2170px
+   * board every placement fits and every rule looks right. `viewport.test.ts`
+   * pins the arithmetic across the whole width; this pins that the arithmetic
+   * is what the browser actually applies, against the rails' real boxes.
+   *
+   * It hovers a rectangle sitting on the last ten pixels of the board and one
+   * sitting on the first ten, at both widths where the rails exist, and asks
+   * for the card's own rectangle. What it must never be is over a rail.
+   */
+  it(
+    "keeps the hover card off both side rails, at the board's extreme edges",
+    async () => {
+      // Two rectangles, one against each edge of a 1250-wide board. They have
+      // no bytes, so the card renders its "no picture" state — which is the
+      // state that matters here, because position is what is being asserted.
+      await execute(
+        `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
+                             payment_signature, caption)
+         VALUES (1240, 300, 10, 10, 'paid', 1000000, 100000000, now(), 'edge-right', 'The right edge'),
+                (0, 300, 10, 10, 'paid', 1000000, 100000000, now(), 'edge-left', 'The left edge')`,
+      );
+
+      for (const [width, height] of [
+        [2560, 1440],
+        [3440, 1440],
+      ] as const) {
+        const at = `${width}x${height}`;
+        await browser.resize(width, height);
+        await browser.goto(`${server.origin}/?hover=${at}`);
+        const read = `document.querySelector('canvas')?.dataset.boardRect ?? null`;
+        await waitFor(`the board's fit at ${at} to settle`, async () => {
+          const before = await browser.evaluate<string | null>(read);
+          await sleep(150);
+          const after = await browser.evaluate<string | null>(read);
+          return before !== null && before === after ? after : null;
+        });
+        expect(
+          await browser.evaluate<string | null>(`document.documentElement.dataset.rails`),
+          `the rails should be on at ${at} — without them this asserts nothing`,
+        ).toBe("on");
+
+        for (const [edge, boardX] of [
+          ["right", 1245],
+          ["left", 5],
+        ] as const) {
+          /*
+            The pointer goes on the rectangle itself, in board coordinates
+            converted through the rectangle the renderer reports. Picking a
+            screen coordinate directly would be this test deciding where the
+            board is, which is the thing it is checking.
+          */
+          const moved = await browser.evaluate<boolean>(`(() => {
+            const c = document.querySelector("canvas");
+            const [bx, by, bw, bh] = c.dataset.boardRect.split(",").map(Number);
+            const x = bx + (${boardX} / 1250) * bw;
+            const y = by + (305 / 800) * bh;
+            c.dispatchEvent(new PointerEvent("pointermove", {
+              clientX: x, clientY: y, bubbles: true, pointerId: 1, isPrimary: true,
+            }));
+            return true;
+          })()`);
+          expect(moved).toBe(true);
+
+          const card = await waitFor(`the hover card at the ${edge} edge, ${at}`, async () => {
+            const box = await browser.evaluate<string | null>(
+              `(() => { const el = document.querySelector(".floating-card.fixed");
+                 if (!el) return null; const b = el.getBoundingClientRect();
+                 return JSON.stringify({ left: b.left, right: b.right, width: b.width }); })()`,
+            );
+            return box;
+          });
+          const { left, right, width: cardWidth } = JSON.parse(card) as {
+            left: number;
+            right: number;
+            width: number;
+          };
+
+          const rails = JSON.parse(
+            await browser.evaluate<string>(`JSON.stringify({
+              left: document.querySelector('.board-side--left').getBoundingClientRect(),
+              right: document.querySelector('.board-side--right').getBoundingClientRect(),
+            })`),
+          ) as { left: DOMRect; right: DOMRect };
+
+          expect(cardWidth, `the hover card has no width at the ${edge} edge, ${at}`).toBeGreaterThan(0);
+          expect(
+            left,
+            `the hover card at the ${edge} edge of ${at} starts at ${left}, over the left rail`,
+          ).toBeGreaterThanOrEqual(rails.left.right);
+          expect(
+            right,
+            `the hover card at the ${edge} edge of ${at} ends at ${right}, over the right rail`,
+          ).toBeLessThanOrEqual(rails.right.left);
         }
       }
     },
