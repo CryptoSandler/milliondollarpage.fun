@@ -680,12 +680,31 @@ h3 {
    * chrome allowed to sit over the board — because it is what a reader reaches
    * for while looking at the board, and because it is 28px.
    */
-  .board-rail {
+  /*
+   * THE OVERLAY, which is now two things rather than one.
+   *
+   * The preset pill has always sat here; the one-line instruction joins it
+   * directly underneath, which is what makes them ONE overlay in one place
+   * rather than two exemptions in two corners. The wrapper carries the fixed
+   * position both used to carry separately, so the hint follows the pill's
+   * height instead of being told a number that goes stale the next time a
+   * control changes.
+   */
+  .board-tools {
     position: fixed;
     top: calc(var(--bar-top-h) + 10px);
     left: 50%;
     transform: translateX(-50%);
     z-index: 11;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    max-width: calc(100vw - 24px);
+  }
+
+  .board-rail {
+    position: static;
     display: flex;
     align-items: center;
     gap: 10px;
@@ -701,7 +720,7 @@ h3 {
     border-radius: var(--radius-pill);
     background: var(--card);
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
-    max-width: calc(100vw - 24px);
+    max-width: 100%;
   }
 
   /*
@@ -791,19 +810,16 @@ h3 {
    * deliberately NOT here — somebody who reaches for them finds them, and a
    * line that lists every gesture is a line nobody reads.
    *
-   * IT DOCKS WHERE THE PURCHASE PANEL DOCKS, in all three layouts, because it
-   * is the same slot in the same conversation: this is what that corner says
-   * before there is a rectangle, and the panel is what it says after. The two
-   * are never on screen together — `BoardView` renders exactly one of them —
-   * so nothing here has to get out of the other's way.
+   * IT IS THE SECOND ROW OF THE BOARD'S OWN OVERLAY, directly under the preset
+   * pill, rather than a dock of its own down at the purchase panel. That is a
+   * decision about the vertical chrome budget rather than about where the eye
+   * is: docked, it was a third band and cost the idle chrome 33px against a
+   * 60px budget; here it costs nothing, because the overlay is not a band at
+   * all. DESIGN.md carries the exemption that allows it and the condition
+   * attached to it.
    */
   .board-hint {
-    position: fixed;
-    left: 50%;
-    transform: translateX(-50%);
-    bottom: calc(var(--tape-h) + 10px);
-    z-index: 12;
-    max-width: min(calc(100vw - 24px), 560px);
+    max-width: 100%;
     padding: 7px 15px;
     border: 1px solid var(--control-line);
     border-radius: var(--radius-pill);
@@ -1046,20 +1062,6 @@ h3 {
       padding-bottom: max(0px, env(safe-area-inset-bottom));
     }
 
-    /* The hint takes the same bottom edge as the sheet it stands in for. */
-    .board-hint {
-      left: 0;
-      right: 0;
-      bottom: var(--tape-h);
-      transform: none;
-      max-width: none;
-      border-left: 0;
-      border-right: 0;
-      border-bottom: 0;
-      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-      padding: 9px 12px;
-      padding-bottom: max(9px, env(safe-area-inset-bottom));
-    }
   }
 
   /* A horizontally-scrolling row (the preset buttons on a narrow bottom bar)
@@ -1774,18 +1776,22 @@ h3 {
 }
 
 /*
- * And the hint takes the same foot of the same column, for the same reason it
- * takes the same dock in the other two layouts: it is what that corner says
- * before there is a rectangle to say anything else about.
+ * And in a rail the overlay is simply the head of the column: the pill, then
+ * the line under it, exactly the order they stand in over the board. Nothing
+ * about the pair changes between the two layouts, which is the point of their
+ * being one element.
  */
-[data-rails="on"] .board-hint {
+[data-rails="on"] .board-tools {
   position: static;
   left: auto;
-  bottom: auto;
+  top: auto;
   transform: none;
-  margin-top: auto;
   width: 100%;
   max-width: none;
+  align-items: stretch;
+}
+
+[data-rails="on"] .board-hint {
   padding: 10px 12px;
   border-radius: var(--radius-lg);
   box-shadow: none;

@@ -623,6 +623,112 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
   );
 
   /**
+   * THE CONDITION ON THE OVERLAY'S EXEMPTION: it may sit on the board, and it
+   * may not cover a pixel somebody bought.
+   *
+   * DESIGN.md lets exactly one overlay stand on the board's own margin — the
+   * preset pill and, under it, the line that says how to start — on the ground
+   * that it costs the wall a strip of its own margin rather than costing the
+   * viewport a band. That sentence is only true while the strip it stands on is
+   * the MARGIN. The moment it reaches past the frame onto artwork somebody paid
+   * for, the exemption is a licence to hide a purchase, and this is what says
+   * so out loud.
+   *
+   * It seeds a sale straight across the top-centre of the wall — the strip the
+   * overlay stands on — and asks the page for two rectangles: the overlay's own
+   * box, and where that purchase actually landed on screen, derived from the
+   * rectangle the renderer reports rather than from the fit maths, so this is
+   * not the arithmetic checking itself.
+   */
+  it(
+    "never covers a sold pixel with the board's own overlay, at any width",
+    async () => {
+      // Across the top-centre: 650 wide, 60 tall, starting at x = 300. That is
+      // where the pill is centred at every width, which is the point.
+      await execute(
+        `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
+                             payment_signature, caption)
+         VALUES (300, 0, 650, 60, 'paid', 1000000, 39000000000, now(), 'across-the-top',
+                 'Across the top of the wall')`,
+      );
+
+      const covered: string[] = [];
+
+      for (const [width, height] of [
+        [1440, 900],
+        [1920, 1080],
+        [1280, 800],
+        [2560, 1440],
+        [390, 844],
+      ] as const) {
+        const at = `${width}x${height}`;
+        await browser.resize(width, height);
+        await browser.goto(`${server.origin}/?overlay=${at}`);
+        const read = `document.querySelector('canvas')?.dataset.boardRect ?? null`;
+        await waitFor(`the board's fit at ${at} to settle`, async () => {
+          const before = await browser.evaluate<string | null>(read);
+          await sleep(150);
+          const after = await browser.evaluate<string | null>(read);
+          return before !== null && before === after ? after : null;
+        });
+
+        const reading = JSON.parse(
+          await browser.evaluate<string>(`(() => {
+            const c = document.querySelector("canvas");
+            const [bx, by, bw] = c.dataset.boardRect.split(",").map(Number);
+            /*
+              The reported rectangle carries the 2px frame on every side, so the
+              paper starts one frame in and the scale is the paper's width over
+              the board's own 1250. Everything below is in screen pixels.
+            */
+            const FRAME = 2;
+            const scale = (bw - 2 * FRAME) / 1250;
+            const sold = {
+              left: bx + FRAME + 300 * scale,
+              top: by + FRAME,
+              right: bx + FRAME + 950 * scale,
+              bottom: by + FRAME + 60 * scale,
+            };
+            const box = (selector) => {
+              const el = document.querySelector(selector);
+              if (!el) return null;
+              const b = el.getBoundingClientRect();
+              if (b.width === 0 || b.height === 0) return null;
+              return { left: b.left, top: b.top, right: b.right, bottom: b.bottom };
+            };
+            const hits = (o) =>
+              !!o && o.left < sold.right && sold.left < o.right &&
+              o.top < sold.bottom && sold.top < o.bottom;
+            const tools = box(".board-tools");
+            return JSON.stringify({ sold, tools, covers: hits(tools) });
+          })()`),
+        ) as {
+          sold: { left: number; top: number; right: number; bottom: number };
+          tools: { left: number; top: number; right: number; bottom: number } | null;
+          covers: boolean;
+        };
+
+        expect(reading.tools, `the board's overlay is missing at ${at}`).not.toBeNull();
+        if (reading.covers) {
+          covered.push(
+            `${at}: the overlay spans ${Math.round(reading.tools!.left)}–` +
+              `${Math.round(reading.tools!.right)} × ${Math.round(reading.tools!.top)}–` +
+              `${Math.round(reading.tools!.bottom)} and the sale spans ` +
+              `${Math.round(reading.sold.left)}–${Math.round(reading.sold.right)} × ` +
+              `${Math.round(reading.sold.top)}–${Math.round(reading.sold.bottom)}`,
+          );
+        }
+      }
+
+      expect(
+        covered,
+        "the board's overlay is standing on artwork somebody bought:\n  " + covered.join("\n  "),
+      ).toEqual([]);
+    },
+    240_000,
+  );
+
+  /**
    * The one line that says how to start: there while nothing is drawn, gone the
    * moment something is.
    *
@@ -643,9 +749,16 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
       const LINE = "Drag on the wall to choose your pixels";
       const grounds = new Map<string, string>();
 
+      /*
+        ALL THREE PLACEMENTS, because they are three rules. 1440 is the overlay
+        on the board's own margin, 2560 is the head of the left rail, and 390 is
+        the same overlay on a phone, where the board is letterboxed above and
+        below and the pill sits clear of it.
+      */
       for (const [width, height] of [
         [1440, 900],
         [2560, 1440],
+        [390, 844],
       ] as const) {
         for (const theme of ["light", "dark"] as const) {
           const at = `${theme} at ${width}x${height}`;
@@ -715,9 +828,13 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
         assertions that both ran in dark would pass while saying nothing about
         light. Same guard the capture script makes, for the same reason.
       */
-      for (const width of [1440, 2560]) {
-        const light = grounds.get(`light at ${width}x${width === 1440 ? 900 : 1440}`);
-        const dark = grounds.get(`dark at ${width}x${width === 1440 ? 900 : 1440}`);
+      for (const [width, height] of [
+        [1440, 900],
+        [2560, 1440],
+        [390, 844],
+      ] as const) {
+        const light = grounds.get(`light at ${width}x${height}`);
+        const dark = grounds.get(`dark at ${width}x${height}`);
         expect(
           light,
           `both themes resolved the instruction line to ${light} at ${width} — this compared a register with itself`,

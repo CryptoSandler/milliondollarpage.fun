@@ -860,8 +860,12 @@ somebody who reaches for those finds them, and a line that lists every gesture
 is a line nobody finishes — and the presets, which are four labelled buttons on
 screen and do not need a sentence pointing at them.
 
-**It costs the idle chrome 33px, and that is an open decision rather than a
-settled one.** See the vertical chrome budget below, and `DECISIONS.md`.
+**It costs the idle chrome nothing.** It is the second row of the board's own
+overlay, directly under the preset pill, rather than a dock of its own — see
+*The overlay on the board, and the condition on it* below. Docked at the
+purchase panel it was a third band and cost 33px against a 60px budget; here it
+costs zero, and `scripts/board-share.mts` reports every viewport inside budget
+with the board's rectangle unchanged to the pixel.
 
 ## The wall takes almost the whole screen
 
@@ -874,17 +878,6 @@ preference.
 **≤ 60px with nothing selected**, and that is the whole of it: a **34px** header
 and a **26px** settled rail. **≤ 140px once the purchase panel is open**, which
 is the one piece of chrome that comes and goes.
-
-**THE IDLE BUDGET IS CONTESTED, AND THE DOCUMENT SAYS SO RATHER THAN PICKING.**
-The one-line instruction that replaced the interaction legend docks where the
-purchase panel docks, and a dock is a third band: measured, the idle chrome is
-**93px** at every desktop width (34 header + 33 line + 26 register) and **70px**
-at 390 (34 + 36). `scripts/board-share.mts` still holds 60 and therefore fails,
-deliberately, rather than being edited to admit the thing it was written to
-catch. **The board's own rectangle is identical to the pixel in both states at
-every viewport** — the line floats, exactly as the panel does — so what is at
-stake is how much chrome may be on screen while a reader is only looking, not
-how big the wall is. `DECISIONS.md` carries both outcomes.
 
 **With the side rails on the budget is 34px, and it is the header alone.** That
 is the whole of the vertical chrome there: the settled register and the
@@ -905,6 +898,53 @@ Twenty was chosen when the chrome was a 52px bar and a 288px column, where eight
 would have looked mean. Against a 60px budget, 20px top and bottom is two thirds
 of it spent on clear paper. Eight still reads as hung rather than cropped, and
 the 2px frame still sits inside it and still never covers a pixel.
+
+### The overlay on the board, and the condition on it
+
+**One overlay stands on the board, and it is two rows:** the size presets with
+the zoom, and — while nothing is selected — the one line that says how to start.
+They are one element because they are one exemption. Everything else on this
+page either takes a band of the viewport and is counted in the budget above, or
+sits in the letterbox beside a board that cannot use it.
+
+**The exemption is granted because the overlay is not a band.** It does not push
+the board down, it does not shrink it, and `board-share.mts` reports the board's
+rectangle identical to the pixel with it there.
+
+**THE CONDITION: it may not cover a pixel somebody bought.** An exemption that
+lets chrome stand permanently on artwork a buyer paid for is not a layout
+decision, it is a defect with a rule written round it. `purchase-e2e.test.ts`
+seeds a sale straight across the top-centre of the wall — the strip the overlay
+stands on — and fails if the overlay's box meets it.
+
+**THE CONDITION DOES NOT HOLD AT THREE WIDTHS, AND THIS IS WHERE THAT IS SAID
+OUT LOUD RATHER THAN QUIETLY ALLOWED.** Measured, with a sale at board
+`(300, 0, 650×60)`:
+
+| Viewport | Overlay | The sale | Covers artwork |
+|---|---|---|---|
+| 1440×900 | 483–957 × 44–125 | 386–1053 × 44–105 | **yes** |
+| 1920×1080 | 723–1197 × 44–125 | 554–1367 × 44–119 | **yes** |
+| 1280×800 | 403–877 × 44–125 | 348–933 × 44–98 | **yes** |
+| 2560×1440 | in the left rail | 717–1843 × 44–148 | no |
+| 390×844 | above a letterboxed board | 99–291 × 321–339 | no |
+
+**The arithmetic behind it, because the fix is not a nudge.** At those three
+widths the board is fitted by HEIGHT and takes every pixel the budget leaves, so
+the only space above it is the 8px inset — and the overlay is 81px. The sentence
+this document has carried since the rail was invented, *"it costs the wall a
+strip of its own top margin"*, was never true: the margin is 8px and was always
+8px. **It costs the wall a strip of its own ARTWORK**, about 474×81 at 1440,
+which is 3.7% of the board and — at a dollar a pixel — roughly **$18,000 of wall
+under the pill alone**, in the same place forever.
+
+**Three futures, and none of them is free.** `DECISIONS.md` carries them with
+the numbers: reserve the strip in the board's own inset and the wall's share
+falls from 81.7% to 66.4% at 1440; move the controls into the top bar, which
+fits at 1920 and does not fit at 1440; or keep the overlay where it is and
+retire the condition, which is the only one that costs nothing and the only one
+that leaves a purchase obscured. **It is the owner's, and until it is taken the
+guard stays red.**
 
 ### Why a budget and not a percentage
 
@@ -953,7 +993,8 @@ letterbox where there is one and over the board only where there is not.
 edge.** They are how a rectangle GETS selected, so putting them behind a
 selection made them unreachable exactly when they were wanted. Overlaid rather
 than stacked: a rail that pushed the board down would spend the budget twice, so
-it costs the wall 28px of its own margin instead of costing the viewport a band.
+it costs the viewport no band at all. **What it costs instead is a strip of the
+board — see the section below, which is where that claim finally got measured.**
 
 **The settled rail went from two tiers to one line.** 104px was right when it
 was the only thing under the board and is not right against a 60px budget.

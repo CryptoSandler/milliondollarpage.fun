@@ -81,7 +81,7 @@ const VIEWPORTS = [
 const MEASURE = `(() => {
   const board = document.querySelector("canvas")?.dataset.boardRect ?? null;
   const parts = [];
-  for (const selector of ["header.board-bar", ".board-tape", ".board-controls:not([hidden])", ".board-hint"]) {
+  for (const selector of ["header.board-bar", ".board-tape", ".board-controls:not([hidden])"]) {
     const el = document.querySelector(selector);
     if (!el) continue;
     const box = el.getBoundingClientRect();
@@ -129,6 +129,14 @@ type Reading = {
  * the rails and takes every pixel of height the header leaves. Summing every
  * fixed element's height would report a 1300px column as 1300px of vertical
  * chrome, which is arithmetic answering a question nobody asked.
+ *
+ * WHAT IS NOT IN THE LIST AT ALL is the board's own overlay — the preset pill
+ * and the line of instruction under it. It is not a band: it stands on the
+ * board rather than above or below it, which is the exemption DESIGN.md grants
+ * it by name and the reason its height has never been in this sum. The
+ * condition attached to that exemption is not a budget question and is not
+ * asked here — `purchase-e2e.test.ts` asks it, by seeding a purchase under the
+ * overlay and measuring whether the overlay covers it.
  *
  * So a part is counted only where its horizontal span meets the board's. That
  * is the same predicate the fit guard in `purchase-e2e.test.ts` uses for

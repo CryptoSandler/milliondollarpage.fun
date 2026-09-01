@@ -63,52 +63,66 @@ American buyer to open an account and pass KYC to buy three dollars of pixels.
 
 ---
 
-## Open: what the idle chrome budget is, now that there is a line of instruction in it
+## Settled: the instruction line is the overlay's second row, not a dock
 
-**Status: undecided. The owner asked for the line; the number it breaks is also
-the owner's. Nothing is merged until they pick.**
+**Status: settled 2026-09-01 by the owner, on measurement.**
 
-The interaction legend was deleted and left the pointer half of what it said
-homeless — a drag on a canvas is the one thing on this page that is not
-discoverable, and everything else is a labelled button. The replacement is one
-line, *Drag on the wall to choose your pixels*, docked where the purchase panel
-docks and gone the instant a rectangle exists.
+The line that replaced the interaction legend was docked where the purchase
+panel docks, and a dock is a third band: idle chrome went 60px → 93px on
+desktop, 34px → 70px at 390. The owner chose the other option — the line is the
+second row of the board's own overlay, directly under the preset pill. The idle
+budget stays 60, `scripts/board-share.mts` reports every viewport inside it, and
+the board's rectangle is unchanged to the pixel at every width.
 
-**It does not cost the wall a pixel.** `scripts/board-share.mts` reports the
-board's own rectangle identical, before and after, at every viewport: 1285×824
-at 1440×900, 1567×1004 at 1920×1080, 2170×1390 at 2560×1440, 374×241 at 390×844.
-The line floats, exactly as the purchase panel does.
+---
 
-**It costs the IDLE CHROME BUDGET 33px, and that budget is 60.** Measured:
+## Open: whether the board's overlay may stand on artwork somebody bought
 
-| Viewport | Idle chrome before | Idle chrome with the line | Budget |
-|---|---|---|---|
-| 1440×900 | 60px | **93px** | 60 |
-| 1920×1080 | 60px | **93px** | 60 |
-| 1280×800 | 60px | **93px** | 60 |
-| 390×844 | 34px | **70px** | 60 |
-| 2560×1440, rails on | 34px | **34px** | 34 |
+**Status: undecided, and the guard is red until it is decided.**
 
-The rails are the one layout where it is free: there the line is at the foot of
-the left rail, which is beside the board rather than above or below it.
+The exemption that lets the preset pill sit on the board carries a condition the
+owner set: **neither row of that overlay may cover sold pixels.** Measured, with
+a sale across the top-centre of the wall, it does — at 1440×900, 1920×1080 and
+1280×800. It does not at 2560×1440, where the overlay is in the left rail, nor
+at 390×844, where the board is letterboxed above and below.
 
-**The two futures, both written out:**
+**The claim that was never true.** DESIGN.md has said since the rail was
+invented that it "costs the wall a strip of its own top margin". The margin is
+the 8px board inset; the overlay is 81px with the line and 40px without it. At
+those three widths the board is fitted by height and takes every pixel the
+budget leaves, so there is no margin to stand on and never was. What the overlay
+costs is **artwork**: about 474×81 at 1440, 3.7% of the board, roughly
+**$18,000 of wall at a dollar a pixel**, in the same place forever.
 
-- **Raise the idle budget to 93.** One constant in `board-share.mts` and one
-  paragraph in DESIGN.md's *The vertical chrome budget*. What it concedes is the
-  sentence that budget exists to enforce — "everything that is not the wall is a
-  small contribution to it" — for the state where the reader is only looking.
-  What it buys is the instruction in the corner the eye is already in, and it
-  costs the wall nothing, which is the thing the budget was written to protect.
-- **Keep 60 and move the line onto the board's own margin**, under the preset
-  rail. DESIGN.md already grants that rail an exemption by name — "it costs the
-  wall a strip of its own top margin instead of costing the viewport a band" —
-  and a second overlay would extend it to two. The budget survives untouched and
-  the line moves from the bottom of the eye to the top.
+**Why there is no free fix.** The board is height-limited at those widths, so
+there is no vertical letterbox; the horizontal letterbox is 67px at 1440 and
+66px at 1280 against roughly 86px for the narrowest column the controls fit in;
+and the board cannot trade width for it, because it has no width to trade while
+height is what limits it. The three constraints — the 60px budget, every control
+present, no artwork covered — are mutually exclusive below about 1600px wide.
 
-**What must not happen is the third thing:** editing the guard's number as part
-of shipping the change it catches. The number is red on purpose until somebody
-decides which of the two above is the design.
+**The three futures, with their numbers:**
+
+- **Reserve the strip.** Grow the board's top inset to the overlay's height so
+  the margin is real. The condition holds by construction at every width. The
+  wall's share falls from **81.7% to 66.4%** at 1440 and from 75.9% to 64.1% at
+  1920. The budget stays 60, because an inset is not a band.
+- **Move the controls into the top bar.** The bar is already counted at 34px and
+  its buttons are 24px tall, so the presets and the zoom fit in it and nothing
+  overlays the wall. It fits at 1920 with room; at 1440 the bar would need about
+  1480px of content in 1440px, so the instruction line has nowhere to go there
+  and the shed order would have to reach it.
+- **A tools-only rail at a lower threshold.** The side rails already take the
+  overlay off the board completely, and they begin at a 180px gap because they
+  carry the register and the panel. Controls alone need about 90px, which 1920
+  has (148px) and 1440 does not (67px). It fixes 1920 and everything wider and
+  leaves 1440 and below exactly where they are.
+- **Or retire the condition** and say plainly in DESIGN.md that the overlay
+  stands on the wall. It is the only option that costs nothing and the only one
+  that leaves a purchase obscured.
+
+**What must not happen is the guard being deleted.** It is red because the
+statement it checks is false, and it was the owner who asked for the statement.
 
 ---
 
