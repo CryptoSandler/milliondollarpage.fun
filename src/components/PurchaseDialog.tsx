@@ -783,6 +783,26 @@ export default function PurchaseDialog({
               registered to {shortenAddress(ownerPubkey)}. Your image, link and caption are locked to it
               exactly as you confirmed them. Close this and the block is on the board.
             </p>
+            {/*
+              THE CARD, AND IT IS THE ONE MOMENT TO OFFER IT. A buyer has just
+              paid and the rectangle is theirs; five minutes later they are
+              somewhere else. The link opens the image rather than posting
+              anywhere — this project has no share integration and does not want
+              one, and a plain URL is the thing every platform already knows how
+              to unfurl.
+
+              It carries the rectangle, the amount and the settling signature,
+              and it carries nobody's name. See `share-card.ts`.
+            */}
+            <a
+              // An order's id IS the block's id — one row in `blocks` is both.
+              href={`/api/blocks/${order.id}/card`}
+              target="_blank"
+              rel="noreferrer"
+              className="btn-quiet self-start px-3 py-2 text-[14px]"
+            >
+              Share this block
+            </a>
             <button
               type="button"
               onClick={() => onClose()}
