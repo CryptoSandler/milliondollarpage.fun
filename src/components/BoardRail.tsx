@@ -47,7 +47,7 @@ export default function BoardRail({
 }) {
   return (
     <div className="board-rail">
-      <div className="selection-presets scrollbar-none -m-1 flex min-w-0 max-w-[5rem] shrink items-center gap-1.5 overflow-x-auto p-1 sm:max-w-none">
+      <div className="board-rail__presets flex shrink-0 items-center gap-1">
         {/* Freehand is the default and, below `sm`, tapping the active preset
             already returns to it — so this is the one control the phone drops. */}
         <button
@@ -76,7 +76,7 @@ export default function BoardRail({
           </button>
         ))}
       </div>
-      <div className="selection-zoom hidden shrink-0 items-center gap-1 sm:flex">
+      <div className="board-rail__zoom flex shrink-0 items-center gap-1">
         <button
           type="button"
           onClick={onZoomOut}

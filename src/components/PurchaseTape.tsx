@@ -135,11 +135,6 @@ export default function PurchaseTape({
           <span aria-hidden className="board-tape__pip" />
           Live
         </p>
-        <p className="text-[11.5px] leading-tight text-body">
-          {rows.length === 0
-            ? "the first one lands here"
-            : "newest first · on chain"}
-        </p>
       </div>
 
       {/*
