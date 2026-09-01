@@ -92,11 +92,74 @@ of something that exists:
 
 ---
 
-## Settled: what the side rails show, and what lives only on /stats
+## Settled: the money total is printed on /stats and nowhere else
 
-**Status: settled 2026-08-28 — see the traffic-stats batch.**
+**Status: settled 2026-09-01, by the owner, in the traffic-stats batch.**
 
-Recorded when that batch lands.
+**What ships:** `/stats` prints four figures — people online now, distinct
+visitors today, pixels sold against the million, and **what has been taken
+against what the whole wall costs**. The board prints the first of those and
+none of the rest.
+
+**Why this needed a decision at all.** `DESIGN.md` says, and still says,
+"Nothing on the page promises revenue. Not a million dollars raised, not a
+total, not an implied one" — and the sentence after it is stricter than people
+remember: "A total is not printed, implied, **or counted towards**." A figure
+shown against a ceiling is counted towards. So this is not a gap in the rule; it
+is an exception to it, taken deliberately, and it is recorded here rather than
+quietly absorbed into the design document.
+
+**The distinction the owner drew:** the bar sells, and a number beside an offer
+is read as part of the offer. `/stats` is a page somebody opened to ask what has
+happened, and money already paid is a fact about the past. The rule stands
+everywhere it stood before; it now has one named exception with one named
+reason.
+
+**What holds it in place is a shape, not a habit.** `boardStats` is what
+`/api/board` ships and what the bar renders from, and the total is not a field
+in it. The board is never told the number, so no future component can print it
+by accident. `soldValueBaseUnits` is a separate function with one caller, and
+`stats.test.tsx` asserts the payload's absence rather than the markup's.
+
+**The door, and what closes it:** if the total ever reads as a forecast rather
+than as a receipt — the likeliest way being a launch where it is quoted back as
+a target — the fix is to delete the fourth figure and change nothing else. That
+is one component and one query, because the number never got anywhere near the
+board.
+
+---
+
+## Settled: presence is counted, and there is nothing to identify
+
+**Status: settled 2026-09-01.**
+
+**What ships:** a heartbeat a minute from every open board, a live count in the
+bar, and distinct-visitor history on `/stats`.
+
+**What is stored, in full:** a salted sha256 of a normalised IP, and a minute.
+That is the whole schema. No cookie, no session, no path, no referrer, no user
+agent, no country. The hash is the same key the rate limiter already counts
+against, which is the point — this adds no new way to recognise anybody, it
+reuses the one that was already there and is already one-way. Rotating
+`RATE_LIMIT_SALT` makes every row permanently unlinkable.
+
+**The rate limit is the primary key.** `(caller_hash, minute)` means a second
+heartbeat inside a minute inserts nothing, and the route reports that as a 429
+with the top of the next minute in `Retry-After`. There is no counter to keep
+and no ceiling to tune, and a caller cannot exceed sixty rows an hour however
+hard they try — which is why there is no second limit beside it: it could never
+fire.
+
+**Roll-up, and the mistake it is written against.** Hour and day buckets are
+each counted with `count(DISTINCT caller_hash)` **from the raw minute rows**,
+never by adding smaller buckets. A visitor present in three hours of a day is
+one visitor and three hour-buckets; summing reports three, and reports it
+silently. That is why raw rows are kept for 25 hours — a day bucket needs the
+whole day still present when it closes.
+
+**The door:** there is no scheduler in this project, so the roll-up rides on a
+fraction of heartbeats. If presence ever outgrows that, the upgrade is a cron
+calling the same idempotent function, and nothing else changes.
 
 ---
 

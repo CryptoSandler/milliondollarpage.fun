@@ -217,6 +217,98 @@ export async function boardStats(): Promise<BoardStats> {
   };
 }
 
+export type Standing = {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  pixels: number;
+  totalBaseUnits: number;
+};
+
+/**
+ * The biggest rectangles on the wall, largest first.
+ *
+ * WHO CALLS THIS: `/stats`, and nothing else. The board itself must not have
+ * it — a ranking on the wall would be a second thing competing with the
+ * artwork, and DESIGN.md is explicit that the chrome is subordinate to it.
+ *
+ * ## What it ranks, and why that is the whole decision
+ *
+ * RECTANGLES, BY PIXELS HELD. Not people, not activity, not recency. Three
+ * things follow from that and each one is a refusal recorded in
+ * `docs/references.md`:
+ *
+ * - **Nothing here can be outbid.** The genre's most effective primitive is a
+ *   leaderboard whose positions can be taken by paying more, and this is that
+ *   primitive with its mechanic inverted: a rank changes only when somebody
+ *   buys a bigger rectangle of their own. Nobody's position can be bought away
+ *   from them, because nothing about a sold rectangle can be changed by anyone
+ *   — four database triggers say so.
+ * - **No holder is named.** DESIGN.md: "Never say who holds a rectangle. When,
+ *   yes. Who, never." `buyer_pubkey` and `owner_wallet` are not selected here,
+ *   and a ranking is the surface most likely to be asked for a name.
+ * - **Nothing is ranked by activity.** A block cannot become more or less
+ *   valuable through anything that happens after it is bought, because nothing
+ *   can happen to it. A "hot right now" sort would be the first dishonest
+ *   thing on the page.
+ *
+ * Ties are broken by settlement time, oldest first: two rectangles of the same
+ * area are separated by which one was there first, which is the only fact
+ * about them that is not a coin toss.
+ */
+export async function boardStandings(limit = 10): Promise<Standing[]> {
+  const rows = await query<{
+    id: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    total_usdc: string;
+  }>(
+    `SELECT id, x, y, w, h, total_usdc
+       FROM blocks
+      WHERE status IN ('paid', 'minted')
+      ORDER BY (w * h) DESC, paid_at ASC
+      LIMIT $1`,
+    [limit],
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    x: row.x,
+    y: row.y,
+    w: row.w,
+    h: row.h,
+    pixels: row.w * row.h,
+    totalBaseUnits: Number(row.total_usdc),
+  }));
+}
+
+/**
+ * What the wall has taken, in base units.
+ *
+ * DELIBERATELY NOT PART OF `boardStats`. That shape is what `/api/board` ships
+ * and what the top bar renders from, and DESIGN.md is exact about the bar:
+ * "Nothing on the page promises revenue. Not a million dollars raised, not a
+ * total, not an implied one." Keeping this number out of that payload means
+ * the board cannot print it even by accident, because the board is never told
+ * it — which is a stronger guarantee than a rule about what to render, and it
+ * is what `board.test.ts` asserts.
+ *
+ * `/stats` is a different page with a different contract: somebody opened it
+ * on purpose to ask what has happened. See DESIGN.md's "What only /stats says".
+ */
+export async function soldValueBaseUnits(): Promise<number> {
+  const rows = await query<{ total: string }>(
+    `SELECT COALESCE(SUM(total_usdc), 0)::text AS total
+       FROM blocks
+      WHERE status IN ('paid', 'minted')`,
+  );
+  return Number(rows[0]?.total ?? 0);
+}
+
 /**
  * Deletes reservations whose window has closed.
  *

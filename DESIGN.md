@@ -477,6 +477,57 @@ total, or the Buy button — those are what the controls are for. The bottom bar
 runs out of width; the side panel runs out of height, and sheds the same things
 in the same order.
 
+## What only `/stats` says, and what the bar still may not
+
+The bar's rule does not move: **nothing on the board promises revenue.** Not a
+million dollars raised, not a total, not an implied one. That is unchanged and
+it is the reason the board is not merely told not to print the number — it is
+never handed it. `boardStats` is what `/api/board` ships and what the bar
+renders from, and the money total is not in that shape. `soldValueBaseUnits`
+is a separate call with one caller.
+
+**`/stats` is a different contract, and the difference is who asked.** Nobody
+arrives on the board having asked a question; they arrive to look at a wall,
+and a total beside the offer is read as part of the offer. Somebody on `/stats`
+opened a page whose title is "what the wall has done". A count of what has
+already been paid is a fact about the past there, not a forecast — so **the
+money taken is printed on `/stats`, against the ceiling, and nowhere else.**
+
+The owner took that decision on 2026-09-01. It is recorded in `DECISIONS.md`
+with the door it leaves open, because it is the one place this document says a
+number the rest of it refuses.
+
+**Four figures, and every one of them is a count.** How many people are on the
+wall right now, how many distinct visitors there have been today, how many
+pixels are sold out of the million, and how much has been taken out of what the
+whole wall costs. Two of the four are about people and neither can name one: a
+visitor is a salted one-way hash of an address and a minute, and there is no
+path, referrer, session or cookie in the schema that could turn it back into
+somebody.
+
+**"X online" shows from one.** The obvious rule is to hide it until the number
+flatters, and it is wrong twice: a number that appears only when it is
+impressive is a claim rather than a count, and the first person on a wall
+nobody has found yet is exactly the reader for whom "1 online" is true and
+nothing is a lie. Zero is the only state it does not draw, and zero cannot
+happen while somebody is reading it.
+
+**The ranking is the genre's leaderboard with its mechanic inverted, and the
+page says so in as many words.** It ranks **rectangles by pixels held** —
+never people, never bids, never activity. **Nothing on it can be outbid: a rank
+changes only when somebody buys a bigger rectangle of their own**, because
+nothing about a sold rectangle can be changed by anybody, including us. A tie
+is broken by which rectangle was there first, which is the only fact separating
+two equal areas that is not a payment.
+
+Three refusals come with it, and each one is a thing the genre does that this
+page does not. **No holder is named**, on the ranking or anywhere else — the
+page prints that sentence rather than leaving it to be noticed. **Nothing is
+ranked by activity**, because nothing can happen to a rectangle after it is
+bought and a "hot right now" sort would be the first dishonest thing here. And
+**no rank can be taken by paying**, which is the whole inversion: a leaderboard
+of positions that cannot be lost, rather than one that can.
+
 ## States
 
 | State | How it reads |
