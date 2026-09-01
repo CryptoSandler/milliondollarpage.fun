@@ -16,6 +16,7 @@ import BlockCard from "./BlockCard";
 import BoardCanvas, { type ZoomControls, type ZoomState } from "./BoardCanvas";
 import BoardCounters from "./BoardCounters";
 import InteractionLegend from "./InteractionLegend";
+import OnlineBanner from "./OnlineBanner";
 import PurchaseDialog from "./PurchaseDialog";
 import PurchaseTape from "./PurchaseTape";
 import SelectionPanel from "./SelectionPanel";
@@ -38,6 +39,8 @@ type BoardPayload = {
   tape: TapeRow[];
   /** When the server built this payload, so the tape's ages hydrate cleanly. */
   asOf: string;
+  /** How many people are on the wall right now. See `OnlineBanner`. */
+  online: number;
 };
 
 // Matches the --bar-top-h / --bar-bottom-h defaults in globals.css: the very
@@ -488,6 +491,14 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
         <div className="ml-auto min-w-0">
           <BoardCounters stats={board.stats} perPixel={board.pricePerPixelBaseUnits} />
         </div>
+        {/*
+          Who else is here. It sits after the counters in the shed order, which
+          puts it among the first things to go as the bar narrows — the offer
+          and the count are what the bar is for, and this is context. It is
+          also the only thing in the bar that is about people rather than
+          pixels, which is why it carries a dot and not a number alone.
+        */}
+        <OnlineBanner online={board.online} />
         {/*
           The way to the answers, in the bar rather than buried in the
           checkout. What losing a key costs and what a takedown does are things
