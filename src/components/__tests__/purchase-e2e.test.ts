@@ -142,6 +142,39 @@ function token(name: string, theme: "light" | "dark" = "light"): [number, number
  */
 const PIN_LIGHT = `document.documentElement.setAttribute("data-theme", "light")`;
 
+/**
+ * Draws a rectangle on the board, which is now what makes the purchase panel
+ * exist at all.
+ *
+ * THE FLOW CHANGED WITH THE LAYOUT. The wallet, the price and Buy used to live
+ * in a column that was always on screen, so a buyer could connect before
+ * choosing anything. The panel floats now and is present only while something
+ * is selected — so the order is draw, then connect, then buy, and a test that
+ * reaches for Connect on an empty board is reaching into a panel that is not
+ * there.
+ */
+async function selectARectangle(browser: Browser): Promise<void> {
+  const armed = await browser.evaluate<boolean>(
+    `(() => { const b = [...document.querySelectorAll(".board-rail button")]
+        .find((el) => /^\\d+×\\d+$/.test(el.textContent.trim()));
+      if (b) b.click(); return !!b; })()`,
+  );
+  if (!armed) throw new Error("no size preset on the rail to arm");
+  await sleep(200);
+  await browser.evaluate(
+    `(() => { const c = document.querySelector("canvas");
+      const r = c.getBoundingClientRect();
+      const at = { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2,
+                   bubbles: true, pointerId: 1, isPrimary: true, button: 0 };
+      c.dispatchEvent(new PointerEvent("pointerdown", at));
+      c.dispatchEvent(new PointerEvent("pointerup", at));
+      return true; })()`,
+  );
+  await waitFor("the purchase panel to come up", () =>
+    browser.evaluate<boolean>(`!!document.querySelector(".board-controls:not([hidden])")`),
+  );
+}
+
 describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
   beforeAll(async () => {
     // THE LOCK COMES FIRST, before the load check, and the order is the point.
@@ -183,11 +216,36 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
       await browser.goto(`${server.origin}/`);
 
       // Hydration. The connect button exists only once the registry has been
-      // asked, which is the first thing on this page that needs the client.
+      // asked, which is the first thing on this page that needs the client —
+      // and `querySelector` finds it inside the retracted panel, so this does
+      // not need a selection first. The keydown below does.
       await waitFor("the wallet's Connect button", () =>
         browser.evaluate<boolean>(
           `!!document.querySelector('[aria-label="Connect Mock Wallet"]')`,
         ),
+      );
+
+      /*
+        THE SELECTION COMES BEFORE THE CONNECT AND AFTER HYDRATION. and that is the flow changing rather
+        than the test being rearranged for convenience. The wallet control used
+        to live in a column that was always on screen; it lives in a panel that
+        exists only while something is selected, so a buyer draws, then
+        connects, then buys.
+
+        The keyboard path, because it is the one that does not need the board's
+        fit maths recomputed here: the first arrow puts a 10x10 cursor at the
+        origin (keyboard-cursor.ts).
+      */
+      await waitFor("the board to accept a keyboard cursor", () =>
+        browser.evaluate<boolean>(`!!document.querySelector("canvas")`),
+      );
+      await browser.evaluate(`(() => {
+        const board = document.querySelector('canvas');
+        board.focus();
+        board.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+      })()`);
+      await waitFor("the purchase panel to come up with it", () =>
+        browser.evaluate<boolean>(`!!document.querySelector(".board-controls:not([hidden])")`),
       );
 
       // 1. CONNECT. The address the page shows afterwards must be the mock
@@ -201,16 +259,8 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
         ),
       );
 
-      // 2. HOLD A RECTANGLE. The keyboard path, because it is the one that
-      //    does not need the board's fit maths to be recomputed here: the
-      //    first arrow puts a 10x10 cursor at the origin (keyboard-cursor.ts)
-      //    and Enter is the Buy button (BoardCanvas).
-      await browser.evaluate(`(() => {
-        const board = document.querySelector('canvas');
-        board.focus();
-        board.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
-      })()`);
-
+      // 2. HOLD IT. The rectangle is already selected — see above — and Enter
+      //    is the Buy button (BoardCanvas).
       // Enter goes in a SEPARATE round trip, and that is not politeness: the
       // canvas's `onActivate` is the handler from the render that is on screen,
       // so an Enter dispatched in the same tick as the arrow is handled by a
@@ -318,9 +368,8 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
    * the stylesheet said 2px of --primary the whole time, and the screenshot
    * said #d78f73"), and this is that lesson kept rather than relearned.
    *
-   * Both layouts, because they are two different boxes: the side panel is the
-   * one with `overflow-x: hidden` down its side, and the bottom bar is the one
-   * with no room to spare. `#c2451e` is DESIGN.md's `primary`, measured at
+   * Both layouts, because they are two different boxes: the floating panel
+   * above 640, and the bottom sheet below it. `#c2451e` is DESIGN.md's `primary`, measured at
    * 4.64:1 against the `card-lift` these buttons sit on.
    */
   it(
@@ -333,7 +382,7 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
       // right because its neighbour is.
       const controls = [
         ['[aria-label="Connect Mock Wallet"]', "the Connect button"],
-        [".selection-presets button", "the first size preset"],
+        [".board-rail button", "the first size preset"],
       ] as const;
 
       for (const [layout, width, height] of [
@@ -344,6 +393,9 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
         await browser.resize(width, height);
         await browser.goto(`${server.origin}/`);
         await browser.evaluate(PIN_LIGHT);
+        // The panel — and the Connect button in it — only exists once a
+        // rectangle is selected, so the sampler has to make one first.
+        await selectARectangle(browser);
         /*
          * The VISIBLE one. Both layouts are in the DOM at once and CSS hides
          * the one that does not apply, so a bare `querySelector` returns the

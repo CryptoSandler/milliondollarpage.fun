@@ -826,6 +826,86 @@ total, or the Buy button — those are what the controls are for. The bottom bar
 runs out of width; the side panel runs out of height, and sheds the same things
 in the same order.
 
+## The wall takes almost the whole screen
+
+**Everything that is not the wall is a small contribution to it.** That is the
+governing sentence of the layout, and it is enforced as a number rather than a
+preference.
+
+### The vertical chrome budget
+
+**≤ 60px with nothing selected**, and that is the whole of it: a **34px** header
+and a **26px** settled rail. **≤ 140px once the purchase panel is open**, which
+is the one piece of chrome that comes and goes.
+
+The board then takes every pixel of height the budget leaves, scaled by
+whichever of its dimensions limits first, centred — so the spare width becomes
+letterbox, and the letterbox is where the floating panel goes.
+
+**The inset dropped from 20px to 8px** and that is an amendment, not a slip.
+Twenty was chosen when the chrome was a 52px bar and a 288px column, where eight
+would have looked mean. Against a 60px budget, 20px top and bottom is two thirds
+of it spent on clear paper. Eight still reads as hung rather than cropped, and
+the 2px frame still sits inside it and still never covers a pixel.
+
+### Why a budget and not a percentage
+
+The obvious guard is "the board is at least N% of the viewport". It does not
+survive the arithmetic. The board is **1.5625:1** and a 1920×1080 viewport is
+**1.778:1**, so the board can never fill it: with **no chrome at all** — no
+header, no rail, no inset — the ceiling there is **87.9%**. An 85% threshold
+would leave an 18px budget for everything, which is less than one line of
+anything.
+
+A percentage therefore encodes the monitor as much as the design, and fails on
+one nobody was thinking about. What the design controls is how much vertical
+room the chrome takes; that is the same number at every viewport, so that is
+what is guarded. **The shares are reported, not asserted:**
+
+| Viewport | Chrome idle | Chrome open | Board | Share |
+|---|---|---|---|---|
+| 1440×900 | 60px | 140px | 1285×824 | **81.7%** |
+| 1920×1080 | 60px | 140px | 1567×1004 | **75.9%** |
+| 1280×800 | 60px | 140px | 1129×724 | **79.8%** |
+| 390×844 | 34px | 126px | 374×241 | **27.4%** |
+
+The board's size is **identical** with the panel open and closed at every
+viewport, which is the point of the panel floating: opening it does not resize
+the wall. On a phone the share is small because a 1.5625:1 board in a 0.46:1
+window is mostly letterbox, and no layout decision changes that.
+
+### What moved, and why each one
+
+**The header is one line and carries three things** — the wordmark, the count of
+what is left, and the theme toggle, plus the way to the questions. **The offer
+line left it.** It was the widest thing in the bar, and a reader who wants the
+terms finds them as the wordmark's own tooltip and as the first paragraph of
+`/faq`. It also carried the last irreducible drift between the two themes, 20px
+of prose in two body faces; removing it for a layout reason closed that too.
+
+**The purchase panel stopped being a column.** 288px down the left was 20% of a
+1440 window taken from the dimension the board is shortest in, and taken whether
+or not anybody was buying anything. It is a compact floating bar now — size,
+price, wallet, Buy — that appears on selection and retracts when there is none,
+and it is **not part of the chrome the fit maths sees**. It sits over the
+letterbox where there is one and over the board only where there is not.
+
+**The size presets and the zoom went to a thin rail on the board's own top
+edge.** They are how a rectangle GETS selected, so putting them behind a
+selection made them unreachable exactly when they were wanted. Overlaid rather
+than stacked: a rail that pushed the board down would spend the budget twice, so
+it costs the wall 28px of its own margin instead of costing the viewport a band.
+
+**The settled rail went from two tiers to one line.** 104px was right when it
+was the only thing under the board and is not right against a 60px budget.
+
+**At 390 the panel is a bottom sheet**, full width on the bottom edge, because
+there is no letterbox to float over and no room to float in.
+
+**`scripts/board-share.mts` is the guard**, and it was validated by putting the
+header back to 52px: `chrome 78px over a 60px budget`, at every desktop
+viewport, exit 1.
+
 ## No new column takes width from the wall
 
 **The board is the product and width is what it is short of.** Every layout

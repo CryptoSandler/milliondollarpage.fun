@@ -155,9 +155,17 @@ export const BOARD_FRAME_PX = 2;
  * is not allowed to scroll; an inset takes the room out of the board's share
  * before the fit maths ever sees it. DESIGN.md's gutter is 16px and the brief
  * asks for 16–24; 20 sits in the middle of both, and the frame is added to it
- * so the 20 is clear paper rather than paper the border is drawn over.
+ * so the number is clear paper rather than paper the border is drawn over.
+ *
+ * IT WAS 20 AND IS NOW 8, and that is an amendment with a reason rather than a
+ * slip. Twenty was chosen when the chrome around the board was a 52px bar and a
+ * 288px column, where eight would have looked mean. The layout now runs on a
+ * vertical chrome budget of 60px — a 34px header and a 26px rail — and against
+ * that, a 20px inset top and bottom is 40px, two thirds of the entire budget
+ * spent on clear paper. Eight still reads as hung rather than cropped, and the
+ * 2px frame still sits inside it and still never covers a pixel.
  */
-export const BOARD_INSET = 20 + BOARD_FRAME_PX;
+export const BOARD_INSET = 8 + BOARD_FRAME_PX;
 
 /** The rectangle of viewport the board may use: everything the chrome leaves. */
 export function freeRegion(screen: Size, chrome: Chrome): { x: number; y: number } & Size {

@@ -8,6 +8,7 @@ import type { BlockDetails, BoardRect, BoardStats } from "../lib/board/blocks";
 import type { Wall } from "../lib/board/composite";
 import type { Point } from "../lib/board/geometry";
 import { holdMinutes } from "../lib/board/hold-clock";
+import { offerLine } from "../lib/board/pricing";
 import { walletSigner } from "../lib/board/purchase-client";
 import type { Selection } from "../lib/board/selection";
 import type { TapeRow } from "../lib/board/tape";
@@ -16,7 +17,7 @@ import BlockCard from "./BlockCard";
 import BoardCanvas, { type ZoomControls, type ZoomState } from "./BoardCanvas";
 import BoardCounters from "./BoardCounters";
 import EmptyWall from "./EmptyWall";
-import InteractionLegend from "./InteractionLegend";
+import BoardRail from "./BoardRail";
 import OnlineBanner from "./OnlineBanner";
 import PurchaseDialog from "./PurchaseDialog";
 import PurchaseTape from "./PurchaseTape";
@@ -50,11 +51,11 @@ type BoardPayload = {
 // something, and this is what the CSS assumes too. Every side already carries
 // BOARD_INSET, so the first paint leaves the same strip of paper round the
 // board — and the same room for its frame — that every later one does.
-const FALLBACK_BAR_BOTTOM = 88;
+const FALLBACK_TAPE = 26;
 const FALLBACK_CHROME: Chrome = {
-  top: 52 + BOARD_INSET,
+  top: 34 + BOARD_INSET,
   right: BOARD_INSET,
-  bottom: FALLBACK_BAR_BOTTOM + BOARD_INSET,
+  bottom: FALLBACK_TAPE + BOARD_INSET,
   left: BOARD_INSET,
 };
 
@@ -406,13 +407,11 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
    */
   useEffect(() => {
     const topEl = topBarRef.current;
-    const controlsEl = controlsRef.current;
     const tapeEl = tapeRef.current;
-    if (!topEl || !controlsEl || !tapeEl) return;
+    if (!topEl || !tapeEl) return;
 
     function measure() {
       const top = topEl!.offsetHeight || FALLBACK_CHROME.top;
-      const box = controlsEl!.getBoundingClientRect();
       // The settled-purchase rail. `display: none` below the side-panel
       // layout, and an element that is not displayed measures zero — so this
       // one number covers both layouts without a second media query in JS,
@@ -421,40 +420,34 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
       // same reason everything else here is: the rail's real height includes
       // whatever line-height and rem sizing the browser actually applied.
       const tape = tapeEl!.getBoundingClientRect().height;
-      // A controls block narrower than the window is the side panel, anchored
-      // to the left edge; one that spans the window is the bottom bar.
-      const side = box.width > 0 && box.width < window.innerWidth - 1;
-      // BOARD_INSET is added to all four sides in both layouts, because in
-      // both of them every edge is one the board would otherwise sit flush
-      // against: the window's own edges, the bar's top edge, the panel's right
-      // edge. It used to be a bottom gap only, and the two sides it left out
-      // are exactly where the board was being cut off — the fit is scaled by
-      // its limiting dimension, so when width limits, the board's edge lands
-      // on the free region's edge to the pixel and its frame lands outside the
-      // window. It is part of the chrome, so the fit maths takes it out of the
-      // board's share rather than a margin adding it to the page, which is
-      // what keeps the document from scrolling.
-      setChrome(
-        side
-          ? {
-              top: top + BOARD_INSET,
-              right: BOARD_INSET,
-              bottom: tape + BOARD_INSET,
-              left: box.right + BOARD_INSET,
-            }
-          : {
-              top: top + BOARD_INSET,
-              right: BOARD_INSET,
-              bottom: (box.height || FALLBACK_BAR_BOTTOM) + tape + BOARD_INSET,
-              left: BOARD_INSET,
-            },
-      );
+      /*
+        THE BOARD TAKES EVERY PIXEL OF HEIGHT THE BUDGET LEAVES.
+
+        The chrome is a 34px header and a 26px rail — 60px — plus 8px of inset
+        on each side. Nothing else displaces the board: the purchase panel
+        FLOATS, so it is not in this sum at all, and the preset rail sits over
+        the board's own edge.
+
+        Left and right are the inset alone. There is no column any more, which
+        is the whole of this change: a 288px panel was 20% of a 1440 window
+        taken from the dimension the board is shortest in, and it was taken
+        whether or not anybody was buying anything.
+
+        The board is then scaled by whichever of its dimensions limits first and
+        centred, so the spare width becomes letterbox — which is exactly where
+        the floating panel goes when there is any.
+      */
+      setChrome({
+        top: top + BOARD_INSET,
+        right: BOARD_INSET,
+        bottom: tape + BOARD_INSET,
+        left: BOARD_INSET,
+      });
     }
 
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(topEl);
-    observer.observe(controlsEl);
     observer.observe(tapeEl);
     return () => observer.disconnect();
   }, []);
@@ -483,7 +476,10 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
       />
 
       <header ref={topBarRef} className="board-bar board-bar--top">
-        <h1 className="flex shrink-0 items-center gap-2 font-display text-[17px] font-bold tracking-tight">
+        <h1
+          className="flex shrink-0 items-center gap-2 font-display text-[15px] font-bold tracking-tight"
+          title={offerLine(board.pricePerPixelBaseUnits)}
+        >
           <span
             aria-hidden
             className="size-2.5 rounded-full bg-ink"
@@ -491,7 +487,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           milliondollarpage.fun
         </h1>
         <div className="ml-auto min-w-0">
-          <BoardCounters stats={board.stats} perPixel={board.pricePerPixelBaseUnits} />
+          <BoardCounters stats={board.stats} />
         </div>
         {/*
           Who else is here. It sits after the counters in the shed order, which
@@ -537,24 +533,37 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
 
       <PurchaseTape ref={tapeRef} rows={board.tape} asOf={board.asOf} />
 
-      <div ref={controlsRef} className="board-controls">
+      {/* The two controls that MAKE a selection, so they cannot live behind
+          one. On the board's own top edge — see `BoardRail`. */}
+      <BoardRail
+        perPixel={board.pricePerPixelBaseUnits}
+        activePreset={activePreset}
+        zoom={zoom}
+        onPresetChange={changePreset}
+        onClear={clear}
+        onZoomIn={zoomIn}
+        onZoomOut={zoomOut}
+        onZoomFit={zoomFit}
+      />
+
+      {/*
+        THE PANEL IS PRESENT ONLY WHILE THERE IS SOMETHING TO BUY.
+
+        `hidden` rather than unmounting, so the wallet's connection and every
+        piece of state inside it survive a reader clearing a selection and
+        drawing another — and so a screen reader is not read a purchase panel
+        for a purchase nobody has started. It is not measured into the chrome
+        either way: the board does not resize when this appears.
+      */}
+      <div ref={controlsRef} className="board-controls" hidden={selection === null}>
         <SelectionPanel
           selection={selection}
           perPixel={board.pricePerPixelBaseUnits}
-          activePreset={activePreset}
-          zoom={zoom}
           canBuy={buyState.canBuy && purchaseSelection === null}
           hint={buyState.hint}
           hintTone={buyState.tone}
-          onPresetChange={changePreset}
-          onClear={clear}
           onBuy={handleBuy}
-          onZoomIn={zoomIn}
-          onZoomOut={zoomOut}
-          onZoomFit={zoomFit}
         >
-          <InteractionLegend />
-
           {/* The wallet lives exactly where the address field lived — same
               slot, same `.wallet-field` hook — so the panel and the bar place
               it without either layout knowing it changed. See WalletConnect

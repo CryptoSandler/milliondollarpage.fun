@@ -1,9 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { PRESETS, type Selection } from "../lib/board/selection";
+import type { Selection } from "../lib/board/selection";
 import { formatUsdc, pixelCount, unitOfSale } from "../lib/board/pricing";
-import type { ZoomState } from "./BoardCanvas";
 
 /**
  * What you are selecting, what it costs, and the one button that buys it.
@@ -36,34 +35,20 @@ import type { ZoomState } from "./BoardCanvas";
 export default function SelectionPanel({
   selection,
   perPixel,
-  activePreset,
-  zoom,
   canBuy,
   hint,
   hintTone,
-  onPresetChange,
-  onClear,
   onBuy,
-  onZoomIn,
-  onZoomOut,
-  onZoomFit,
   children,
 }: {
   selection: Selection | null;
   perPixel: number;
-  activePreset: number | null;
   /** Which ends of the zoom ladder still have a rung, straight from the canvas. */
-  zoom: ZoomState;
   canBuy: boolean;
   hint: string;
   /** "refused" paints the hint in danger; the board has painted the offending blocks to match. */
   hintTone: "info" | "refused";
-  onPresetChange: (size: number | null) => void;
-  onClear: () => void;
   onBuy: () => void;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
-  onZoomFit: () => void;
   /**
    * Whatever else the controls carry — the legend, the wallet control —
    * rendered between the readout and the Buy button. DESIGN.md puts the
@@ -84,69 +69,6 @@ export default function SelectionPanel({
         batch's remit — this is that report being acted on. See WalletConnect.tsx
         for the sampled evidence.
       */}
-      <div className="selection-presets scrollbar-none -m-1 flex min-w-0 max-w-[5rem] shrink items-center gap-1.5 overflow-x-auto p-1 sm:max-w-none">
-        {/* Freehand is the default and, below `sm`, tapping the active preset
-            already returns to it — so this is the one control the phone drops. */}
-        <button
-          type="button"
-          aria-pressed={activePreset === null}
-          onClick={() => {
-            onPresetChange(null);
-            onClear();
-          }}
-          className="btn-quiet hidden shrink-0 px-2.5 py-1.5 text-[12.5px] sm:block"
-        >
-          Freehand
-        </button>
-        {PRESETS.map((preset) => (
-          <button
-            key={preset.size}
-            type="button"
-            aria-pressed={activePreset === preset.size}
-            onClick={() => onPresetChange(activePreset === preset.size ? null : preset.size)}
-            title={`${pixelCount(preset.size * preset.size)} · ${formatUsdc(
-              preset.size * preset.size * perPixel,
-            )}`}
-            className="btn-quiet tabular shrink-0 px-2.5 py-1.5 text-[12.5px]"
-          >
-            {preset.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="selection-zoom hidden shrink-0 items-center gap-1 sm:flex">
-        <button
-          type="button"
-          onClick={onZoomOut}
-          disabled={!zoom.canZoomOut}
-          aria-label="Zoom out one step"
-          title="Zoom out one step"
-          className="btn-quiet size-8 shrink-0 text-[16px] font-bold leading-none"
-        >
-          −
-        </button>
-        <button
-          type="button"
-          onClick={onZoomFit}
-          disabled={!zoom.canZoomOut}
-          aria-label="Fit the whole board on screen"
-          title="Fit the whole board on screen"
-          className="btn-quiet h-8 shrink-0 px-2 text-[12.5px] leading-none"
-        >
-          Fit
-        </button>
-        <button
-          type="button"
-          onClick={onZoomIn}
-          disabled={!zoom.canZoomIn}
-          aria-label="Zoom in one step"
-          title="Zoom in one step"
-          className="btn-quiet size-8 shrink-0 text-[16px] font-bold leading-none"
-        >
-          +
-        </button>
-      </div>
-
       <div className="selection-readout flex min-w-0 flex-1 flex-col justify-center gap-0.5">
         {selection === null ? (
           <>

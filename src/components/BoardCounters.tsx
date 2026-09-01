@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { TOTAL_PIXELS } from "../lib/board/geometry";
 import type { BoardStats } from "../lib/board/blocks";
-import { formatPercentSold, offerLine } from "../lib/board/pricing";
+import { formatPercentSold } from "../lib/board/pricing";
 
 /**
  * The offer, and how much of it is left.
@@ -28,31 +28,17 @@ import { formatPercentSold, offerLine } from "../lib/board/pricing";
  * itself, then the word "pixels". The remaining count is the one that never
  * leaves.
  */
-export default function BoardCounters({
-  stats,
-  perPixel,
-}: {
-  stats: BoardStats;
-  perPixel: number;
-}) {
+export default function BoardCounters({ stats }: { stats: BoardStats }) {
   const left = TOTAL_PIXELS - stats.pixelsSold;
 
   /*
-    THE MILLION IS SAID ONCE IN THIS BAR, NOT TWICE.
+    THE SUPPRESSION IS GONE WITH THE LINE IT AVOIDED.
 
-    `offerLine` opens with `1,000,000 pixels`, and on a board nobody has bought
-    anything on yet the remaining count is the same million — so the row read
-    `1,000,000 pixels · $1 per pixel · yours forever · 1,000,000 pixels left`,
-    which says one number twice and reads as a bar that is not paying
-    attention. It is exactly the state the wall spends its first day in.
-
-    The count gives way, and only where the offer line is actually on screen
-    to replace it: below `sm` the offer is hidden and the count is the only
-    thing there is, so it stays. That is one utility class rather than a second
-    branch of markup, and the moment a single pixel sells the two numbers stop
-    being the same one and the count comes back at every width.
+    This used to hide the count above `sm` on an untouched board, because the
+    offer line beside it already opened with the same million. The offer line
+    has left the bar, so there is nothing to say the number twice with, and the
+    count is simply always here — which is what it should have been all along.
   */
-  const sameNumberTwice = left === TOTAL_PIXELS;
 
   /*
     A COUNT THAT DROPS WHILE SOMEBODY IS LOOKING AT IT SHOULD SAY SO.
@@ -85,23 +71,22 @@ export default function BoardCounters({
 
   return (
     <div className="flex min-w-0 items-center gap-x-3 overflow-hidden whitespace-nowrap text-[13px] text-body">
-      {/* Below `sm` the wordmark and the count are all a phone has room for,
-          and the line is what gives way. It is the offer, not the state of
-          the board, and a buyer meets it again beside the Buy button. */}
-      <p className="hidden truncate text-ink sm:block">{offerLine(perPixel)}</p>
-      <span
-        className={`hidden text-hairline-strong ${sameNumberTwice ? "" : "sm:inline"}`}
-      >
-        ·
-      </span>
-      <p
-        className={`pixels-left truncate ${sameNumberTwice ? "sm:hidden" : ""} ${
-          ticked ? "pixels-left--ticked" : ""
-        }`}
-      >
+      {/*
+        THE OFFER LINE HAS LEFT THIS BAR. It was the widest thing in a header
+        that is now one 34px line, and the norm is that the wall takes almost
+        the whole screen while everything else is a small contribution. It is
+        not lost: it is the wordmark's own tooltip and the first paragraph of
+        `/faq`, both of which a reader reaches deliberately.
+
+        It also carried the last irreducible drift between the two themes — 20
+        pixels of prose set in two different body faces. Removing it for a
+        layout reason happens to close that too.
+      */}
+      <p className={`pixels-left ${ticked ? "pixels-left--ticked" : ""}`}>
         <span className="pixels-left__n">{left.toLocaleString("en-US")}</span>
         <span className="pixels-left__u">pixels left</span>
       </p>
+
       <span
         className="tabular hidden shrink-0 rounded-full bg-canvas-deep px-2 py-0.5 text-[12px] font-bold text-ink-soft md:inline"
         title="Share of the board sold so far"

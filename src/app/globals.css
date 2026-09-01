@@ -215,8 +215,26 @@
 
   /* The chrome is fixed-size, and the board's fit maths reads its measured
      box. Changing these changes how much board is visible; nothing else. */
-  --bar-top-h: 52px;
-  --bar-bottom-h: 88px;
+  /*
+   * THE VERTICAL CHROME BUDGET, and it is the layout's governing number.
+   *
+   * The wall takes almost the whole screen and everything else is a small
+   * contribution. Concretely: 34 + 26 = 60px of chrome with nothing selected,
+   * plus 8px of board inset, and the board takes every pixel of height that is
+   * left — scaled by whichever of its dimensions limits first, centred, with
+   * the spare width as letterbox.
+   *
+   * THE INSET DROPPED FROM 20px TO 8px, and that is a deliberate amendment
+   * rather than a slip. Twenty was chosen when the chrome was a 52px bar and a
+   * 288px column, where eight would have looked mean; against a 34px bar it is
+   * a quarter of the entire budget. The 2px frame still lives inside it and
+   * still never covers a pixel.
+   */
+  --bar-top-h: 34px;
+  /* The floating purchase panel's height, which only exists while something is
+     selected. It raises the budget to 140px and overlays the letterbox where
+     there is one — see `.board-panel`. */
+  --bar-bottom-h: 80px;
   /*
    * The settled-purchase rail along the bottom of the wall.
    *
@@ -240,7 +258,7 @@
    * second column, and a second column comes out of the board's width in the
    * one layout where width is what the board is short of. See DESIGN.md.
    */
-  --tape-h: 104px;
+  --tape-h: 26px;
 
   /* The side panel's width in the landscape layout, and it is MEASURED.
 
@@ -270,12 +288,19 @@
 
 @media (max-width: 640px) {
   :root {
-    --bar-top-h: 48px;
+    --bar-top-h: 34px;
     --bar-bottom-h: 92px;
   }
 
   /* One row still, on a phone: the gaps close before anything in the row is
      allowed to wrap or scroll out of reach. */
+  /*
+   * ONE LOW LINE: the wordmark, the count, the theme toggle and the way to the
+   * questions. The offer line has left it — a reader who wants the terms finds
+   * them on `/faq` and on the wordmark's own tooltip, and the bar's job is to
+   * be small.
+   */
+
   .board-bar {
     gap: 8px;
     padding: 0 10px;
@@ -638,23 +663,82 @@ h3 {
    * down to a phone width — see SelectionPanel and InteractionLegend for what
    * gives way first.
    */
-  .board-controls {
+  /*
+   * THE RAIL, on the board's own top edge.
+   *
+   * Overlaid rather than stacked: a rail that pushed the board down would spend
+   * the vertical budget twice. It costs the wall a 28px strip of its own top
+   * margin instead of costing the viewport a band, and it is the only piece of
+   * chrome allowed to sit over the board — because it is what a reader reaches
+   * for while looking at the board, and because it is 28px.
+   */
+  .board-rail {
     position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 10;
+    top: calc(var(--bar-top-h) + 10px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 11;
     display: flex;
     align-items: center;
-    gap: 16px;
-    padding: 0 16px;
+    gap: 10px;
+    height: 28px;
+    padding: 0 8px;
+    border: 1px solid var(--control-line);
+    border-radius: var(--radius-pill);
+    background: var(--card);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
+    max-width: calc(100vw - 24px);
+  }
+
+  .board-rail .btn-quiet {
+    height: 20px;
+    padding: 0 8px;
+    font-size: 11.5px;
+  }
+
+  /*
+   * THE PURCHASE PANEL FLOATS, AND ONLY EXISTS WHILE SOMETHING IS SELECTED.
+   *
+   * It was a 288px column down the left, taken from the board's width whether
+   * or not anybody was buying anything — 20% of a 1440 window, permanently, for
+   * controls that are only useful once a rectangle is drawn. Now it is a
+   * compact bar that comes up when there is a selection and goes away when
+   * there is not, and it is NOT part of the chrome the fit maths sees: the
+   * board does not resize when it appears.
+   *
+   * IT SITS OVER THE LETTERBOX WHERE THERE IS ONE. The board is scaled by its
+   * limiting dimension and centred, so a window wider than 1.5625:1 leaves
+   * spare height below it — and that is where this lands. It covers artwork
+   * only when there is no letterbox to cover instead, which is the trade the
+   * norm allows and the reason it is centred on the board's own width rather
+   * than the window's.
+   */
+  .board-controls {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(var(--tape-h) + 10px);
+    z-index: 12;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0 14px;
     height: var(--bar-bottom-h);
-    border-color: var(--hairline-strong);
-    border-top-width: 1px;
-    padding-bottom: max(0px, env(safe-area-inset-bottom));
-    background: var(--card-lift);
-    box-shadow: 0 -1px 0 rgba(122, 138, 160, 0.06);
+    max-width: min(calc(100vw - 24px), 980px);
+    border: 1px solid var(--control-line);
+    border-radius: var(--radius-lg);
+    background: var(--card);
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
     overflow: hidden;
+  }
+
+  /*
+    Retracted. `display: none` rather than opacity, so nothing about it is in
+    the layout, nothing about it is focusable, and a screen reader is not read a
+    purchase panel for a purchase nobody has started.
+  */
+  .board-controls[hidden] {
+    display: none;
   }
 
   /*
@@ -755,14 +839,32 @@ h3 {
     overflow-y: hidden;
   }
 
+  /*
+   * ONE LINE. The rail was two tiers at 104px, which was right when it was the
+   * only thing under the board and is not right against a 60px budget. The
+   * numbers, the metadata and the proof are one row now, and the size and the
+   * amount keep their weight so a settled purchase still reads first.
+   */
   .board-tape__row {
     display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 3px;
-    padding: 0 16px;
+    align-items: baseline;
+    gap: 9px;
+    padding: 0 12px;
     white-space: nowrap;
     border-right: 1px solid var(--hairline);
+  }
+
+  .board-tape__row .board-tape__numbers,
+  .board-tape__row .board-tape__meta {
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+  }
+
+  .board-tape__row .board-tape__meta {
+    font-family: var(--font-numeric);
+    font-size: 10.5px;
+    color: var(--body);
   }
 
   .board-tape__row .board-tape__numbers {
@@ -827,7 +929,7 @@ h3 {
   /* Two tiers now that there is room: the numbers, then the metadata under. */
   .board-tape__size {
     font-family: var(--font-numeric);
-    font-size: 20px;
+    font-size: 13px;
     font-weight: 700;
     line-height: 1.1;
     color: var(--ink-soft);
@@ -836,7 +938,7 @@ h3 {
 
   .board-tape__amount {
     font-family: var(--font-numeric);
-    font-size: 16px;
+    font-size: 12.5px;
     font-weight: 600;
     line-height: 1.1;
     color: var(--ink-soft);
@@ -867,10 +969,25 @@ h3 {
      than beside the token overrides above, so the side-panel layout — which
      starts at exactly this width — is not fighting an unlayered rule for the
      one viewport where both queries match. */
+  /*
+   * A PHONE GETS A BOTTOM SHEET, not a floating bar. At 390 there is no
+   * letterbox worth speaking of and no room to float anything, so the panel
+   * takes the bottom edge, full width, and the board keeps everything above it.
+   */
   @media (max-width: 640px) {
     .board-controls {
+      left: 0;
+      right: 0;
+      bottom: var(--tape-h);
+      transform: none;
+      max-width: none;
       gap: 8px;
       padding: 0 10px;
+      border-left: 0;
+      border-right: 0;
+      border-bottom: 0;
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      padding-bottom: max(0px, env(safe-area-inset-bottom));
     }
   }
 
@@ -1223,12 +1340,12 @@ h3 {
  * deterministically, without an `!important` anywhere.
  */
 @layer utilities {
-  @media (min-width: 640px) and (min-aspect-ratio: 5 / 4) {
-    /*
-     * The rail exists in this layout and only in this layout. It is fixed to
-     * the bottom across the whole window; the panel above stops at its top
-     * edge, which is the one line that keeps the two from overlapping.
-     */
+  /*
+   * THE RAIL IS SHOWN FROM THIS WIDTH UP, and nothing else in this query
+   * survives. It used to turn the controls into a 288px column here; the
+   * purchase panel floats now and the board keeps the width.
+   */
+  @media (min-width: 640px) {
     .board-tape {
       position: fixed;
       left: 0;
@@ -1238,115 +1355,10 @@ h3 {
       display: flex;
       align-items: stretch;
       height: var(--tape-h);
-      padding: 4px 16px;
-      padding-bottom: max(4px, env(safe-area-inset-bottom));
+      padding: 0 12px;
+      padding-bottom: max(0px, env(safe-area-inset-bottom));
       background: var(--card-lift);
       border-top: 1px solid var(--hairline-strong);
-      box-shadow: 0 -1px 0 rgba(43, 36, 28, 0.04);
-    }
-
-    .board-controls {
-      top: var(--bar-top-h);
-      right: auto;
-      bottom: var(--tape-h);
-      width: var(--panel-w);
-      height: auto;
-      flex-direction: column;
-      align-items: stretch;
-      gap: 16px;
-      padding: 16px;
-      padding-bottom: max(16px, env(safe-area-inset-bottom));
-      border-top-width: 0;
-      border-right-width: 1px;
-      box-shadow: 1px 0 0 rgba(122, 138, 160, 0.06);
-      /* The panel sheds the legend and closes its gaps on a short window
-         (below), so in practice this never scrolls. It is here so that a
-         window shorter than every fallback clips nothing a buyer needs — the
-         Buy button stays reachable. The DOCUMENT still never scrolls; this
-         one box may, and it is the only one that can. */
-      overflow-y: auto;
-      overflow-x: hidden;
-    }
-
-    .board-controls .selection-panel {
-      flex: 1 1 auto;
-      flex-direction: column;
-      align-items: stretch;
-      gap: 16px;
-    }
-
-    /* Reading order down the panel, independent of the source order the
-       bottom bar needs: pick a size, see what it costs, say where it goes,
-       buy it. The legend is last and pinned to the floor of the panel. */
-    .board-controls .selection-presets {
-      order: 1;
-      max-width: none;
-      flex-wrap: wrap;
-      overflow: visible;
-    }
-
-    /* Under the presets: both are about aiming at the board, and both come
-       before the money. */
-    .board-controls .selection-zoom {
-      order: 2;
-    }
-
-    .board-controls .selection-readout {
-      order: 3;
-      flex: 0 0 auto;
-    }
-
-    .board-controls .wallet-field {
-      order: 4;
-    }
-
-    /*
-     * The panel has the height the bottom bar does not, so it PRINTS what a
-     * connect did instead of only announcing it.
-     *
-     * DESIGN.md's shed order is what decides this: "the bottom bar runs out of
-     * width; the side panel runs out of height, and sheds the same things in
-     * the same order". Wherever there is room, an outcome a screen reader is
-     * told is an outcome everybody else can read too. The declarations undo
-     * Tailwind's `.sr-only`, which is why they are spelled out rather than
-     * simply switched off.
-     */
-    .board-controls .wallet-notice {
-      position: static;
-      width: auto;
-      height: auto;
-      margin: 0;
-      padding: 0;
-      overflow: visible;
-      clip: auto;
-      clip-path: none;
-      white-space: normal;
-      font-size: 12.5px;
-      line-height: 1.45;
-      color: var(--body);
-    }
-
-    /* No `:empty { display: none }` here on purpose. A live region has to be
-       in the accessibility tree BEFORE the sentence lands for the sentence to
-       be announced, and a region that appears at the same moment its text does
-       is a region assistive technology may never have been watching. An empty
-       <p> lays out no line boxes and is already zero pixels tall. */
-
-    .board-controls .selection-buy {
-      order: 5;
-      align-items: stretch;
-    }
-
-    .board-controls .selection-buy p {
-      max-width: none;
-      text-align: left;
-    }
-
-    /* Room for it here, so the legend the bottom bar drops first comes back. */
-    .board-controls .interaction-legend {
-      order: 6;
-      display: flex;
-      margin-top: auto;
     }
   }
 
