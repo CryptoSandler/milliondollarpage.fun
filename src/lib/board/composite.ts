@@ -59,10 +59,35 @@ const KEEP_VERSIONS = 3;
  * have the artwork cover them exactly where a purchase covers them. A cream
  * background here would hide the ruling under the whole wall.
  */
-const PAPER = { r: 0x07, g: 0x0a, b: 0x0e, alpha: 1 };
+/**
+ * Written as hex and parsed, rather than as three channel literals.
+ *
+ * `sharp` wants `{ r, g, b }` and DESIGN.md states a hex, and until this batch
+ * this file held the second spelling of the same colour — which is exactly how
+ * `SOLD_FALLBACK` below came through a whole register change still set to the
+ * cream wall's value. `design-tokens.test.ts` reads these files looking for the
+ * documented hex; a colour spelled in channels is a colour that guard cannot
+ * see, and a guard that cannot see a value is not guarding it.
+ */
+function rgb(hex: string): { r: number; g: number; b: number; alpha: number } {
+  return {
+    r: parseInt(hex.slice(1, 3), 16),
+    g: parseInt(hex.slice(3, 5), 16),
+    b: parseInt(hex.slice(5, 7), 16),
+    alpha: 1,
+  };
+}
 
-/** What a sold rectangle shows when its stored bytes cannot be decoded. */
-const SOLD_FALLBACK = { r: 0x44, g: 0x3a, b: 0x2c, alpha: 1 };
+const PAPER = rgb("#070a0e");
+
+/**
+ * What a sold rectangle shows when its stored bytes cannot be decoded.
+ *
+ * LIGHTER than the paper, which is the opposite of what it was: on cream the
+ * fallback was a dark slab, and the same slab on near-black paper is
+ * indistinguishable from a rectangle nobody bought.
+ */
+const SOLD_FALLBACK = rgb("#2e3642");
 
 export type Wall = {
   /** The sha256 of the PNG, and the only thing in its URL that changes. */

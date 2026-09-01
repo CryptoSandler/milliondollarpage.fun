@@ -253,11 +253,22 @@ describe("the typefaces", () => {
 
   it("loads exactly those two, and nothing else", () => {
     const layout = readFileSync("src/app/layout.tsx", "utf8");
-    const loaded = [...layout.matchAll(/from "next\/font\/google";?|\b([A-Z][A-Za-z_]+)\(\{/g)]
-      .map((m) => m[1])
-      .filter(Boolean);
 
-    expect(loaded.sort()).toEqual(["IBM_Plex_Mono", "Space_Grotesk"]);
+    // The IMPORT is what decides which families next/font fetches and
+    // self-hosts, so that is what this reads. An earlier version scanned for
+    // `Name({` anywhere in the file and matched `RootLayout({` — a guard that
+    // fails on correct code is worse than no guard, because the first thing
+    // anybody does with one is widen it until it stops complaining.
+    const imported = /import \{([^}]+)\} from "next\/font\/google";/.exec(layout);
+    expect(imported, "layout.tsx does not import from next/font/google").not.toBeNull();
+
+    const families = imported![1]
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean)
+      .sort();
+
+    expect(families).toEqual(["IBM_Plex_Mono", "Space_Grotesk"]);
   });
 
   /**
