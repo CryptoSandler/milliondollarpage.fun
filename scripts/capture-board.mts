@@ -19,10 +19,12 @@
  * A screenshot is evidence for a person; the assertions about the board's fit
  * and its frame live in `purchase-e2e.test.ts`, where they can fail.
  */
+import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { config } from "dotenv";
 import { Pool } from "pg";
+import sharp from "sharp";
 import { launchChrome, sleep, waitFor } from "../src/components/__tests__/cdp";
 import { startDevServer } from "../src/components/__tests__/dev-server";
 import { BOARD_HEIGHT, BOARD_WIDTH } from "../src/lib/board/geometry";
@@ -105,50 +107,157 @@ const WIDTHS = [
 ];
 
 /**
- * A board with enough on it to judge the register against real artwork, laid
- * out deterministically so two captures taken a week apart are comparable.
+ * A board with enough on it to judge the register, laid out from a fixed seed
+ * so two captures taken a week apart are comparable.
  *
- * The colours are chosen to be hostile on purpose: a photograph-ish brown, a
- * near-white, a saturated yellow and a near-black. If a sold rectangle can be
- * told from a free one in all four, the "state never depends on the buyer's
- * hue" rule is holding.
+ * IT WRITES REAL ARTWORK, and the first version of this did not. It seeded 140
+ * rectangles with no image bytes, so every one of them rendered as the
+ * sold-fallback slab and four screenshots showed a wall of grey boxes — which
+ * is an honest picture of the fallback state and no picture at all of the
+ * register somebody was being asked to judge. The owner said "mmm" to it, which
+ * was the correct response.
+ *
+ * The mix is what a living wall looks like: a few project wordmarks on the
+ * largest rectangles, then pixel art, photographs and flat marks, each with a
+ * caption, a link and a fit. Stored at BLOCK_PIXEL_SCALE the way image-plan.ts
+ * specifies, so the composite and a zoomed block both get the resolution they
+ * expect.
+ *
+ * The project tiles are wordmarks generated here. They stand for CryptoSandler's
+ * projects; the real brand assets are not on this machine.
  */
-const FILL = [
-  "#1f4fd8",
-  "#eab308",
-  "#f8fafc",
-  "#ef4444",
-  "#8c5a3c",
-  "#0b0f14",
-  "#a855f7",
-  "#22d3ee",
+/* ------------------------------------------------------------------ artwork */
+
+/** CryptoSandler's projects, as wordmark tiles. Placeholders, not real logos. */
+const PROJECTS = [
+  { name: "nftraffle", bg: "#1b1f3b", fg: "#f5c518", caption: "nftraffle — one ticket, one NFT" },
+  { name: "pixelwar", bg: "#0f2f24", fg: "#3ee87f", caption: "pixelwar.fun — claim your tile" },
+  { name: "kolscan", bg: "#2a1030", fg: "#e879f9", caption: "kolscanhispano — quién mueve el mercado" },
+  { name: "bidoor", bg: "#3a1408", fg: "#ff8a3d", caption: "bidoor.lol — the last bid wins" },
+  { name: "mdp", bg: "#101820", fg: "#eef2f7", caption: "milliondollarpage.fun" },
 ];
 
-type Rect = { x: number; y: number; w: number; h: number; fill: string };
+type Project = { name: string; bg: string; fg: string; caption: string };
+
+async function wordmark(project: Project, w: number, h: number): Promise<Buffer> {
+  const fontSize = Math.max(9, Math.min(h * 0.42, (w / Math.max(4, project.name.length)) * 1.5));
+  const svg = `<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">
+    <rect width="${w}" height="${h}" fill="${project.bg}"/>
+    <rect x="${w * 0.04}" y="${h * 0.04}" width="${w * 0.92}" height="${h * 0.92}"
+          fill="none" stroke="${project.fg}" stroke-opacity="0.35" stroke-width="${Math.max(1, w * 0.012)}"/>
+    <text x="50%" y="50%" dominant-baseline="central" text-anchor="middle"
+          font-family="Helvetica, Arial, sans-serif" font-weight="700"
+          font-size="${fontSize}" fill="${project.fg}">${project.name}</text>
+  </svg>`;
+  return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+/** Hard-edged pixel art, drawn at one image pixel per pattern cell. */
+async function pixelArt(w: number, h: number, seedFn: () => number): Promise<Buffer> {
+  const cols = Math.max(3, Math.min(24, Math.round(w / 6)));
+  const rows = Math.max(3, Math.min(24, Math.round(h / 6)));
+  const palettes = [
+    ["#0b0f14", "#22d3ee", "#7c3aed", "#f8fafc"],
+    ["#1a0b2e", "#ff2e88", "#ffd166", "#06d6a0"],
+    ["#08160f", "#2ce08a", "#0ea5e9", "#eab308"],
+    ["#2b0a0a", "#ef4444", "#f97316", "#fde68a"],
+  ];
+  const palette = palettes[Math.floor(seedFn() * palettes.length)];
+  const mode = Math.floor(seedFn() * 4);
+
+  const px = Buffer.alloc(cols * rows * 3);
+  for (let y = 0; y < rows; y += 1) {
+    for (let x = 0; x < cols; x += 1) {
+      let index;
+      if (mode === 0) index = (x + y) % palette.length;                    // diagonal bands
+      else if (mode === 1) index = ((x >> 1) ^ (y >> 1)) % palette.length; // blocky xor
+      else if (mode === 2) index = Math.floor(seedFn() * palette.length);  // noise
+      else index = Math.abs(x - cols / 2) + Math.abs(y - rows / 2) < cols / 3 ? 1 : 0; // a lozenge
+      const hex = palette[index];
+      const at = (y * cols + x) * 3;
+      px[at] = parseInt(hex.slice(1, 3), 16);
+      px[at + 1] = parseInt(hex.slice(3, 5), 16);
+      px[at + 2] = parseInt(hex.slice(5, 7), 16);
+    }
+  }
+  return sharp(px, { raw: { width: cols, height: rows, channels: 3 } }).png().toBuffer();
+}
+
+/** A photograph, in the only way this machine can make one: smooth and noisy. */
+async function photograph(w: number, h: number, seedFn: () => number): Promise<Buffer> {
+  const hue = Math.floor(seedFn() * 360);
+  const svg = `<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">
+    <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="hsl(${hue},55%,62%)"/>
+      <stop offset="45%" stop-color="hsl(${(hue + 40) % 360},48%,44%)"/>
+      <stop offset="100%" stop-color="hsl(${(hue + 200) % 360},40%,22%)"/>
+    </linearGradient></defs>
+    <rect width="${w}" height="${h}" fill="url(#g)"/>
+    <circle cx="${w * 0.7}" cy="${h * 0.3}" r="${Math.min(w, h) * 0.28}" fill="hsl(${(hue + 90) % 360},60%,70%)" opacity="0.55"/>
+    <ellipse cx="${w * 0.25}" cy="${h * 0.75}" rx="${w * 0.35}" ry="${h * 0.22}" fill="hsl(${(hue + 300) % 360},50%,30%)" opacity="0.5"/>
+  </svg>`;
+  const base = await sharp(Buffer.from(svg)).blur(Math.max(0.4, Math.min(w, h) / 90)).png().toBuffer();
+  const grain = await sharp({
+    create: {
+      width: w,
+      height: h,
+      channels: 3,
+      background: { r: 0, g: 0, b: 0 },
+      noise: { type: "gaussian", mean: 128, sigma: 16 },
+    },
+  }).png().toBuffer();
+  return sharp(base).composite([{ input: grain, blend: "overlay" }]).png().toBuffer();
+}
+
+/** One strong flat colour with a mark on it — a logo nobody drew carefully. */
+async function flat(w: number, h: number, seedFn: () => number): Promise<Buffer> {
+  const colours = ["#ef4444", "#eab308", "#22c55e", "#3b82f6", "#a855f7", "#f8fafc", "#0b0f14", "#f97316"];
+  const bg = colours[Math.floor(seedFn() * colours.length)];
+  const fg = colours[Math.floor(seedFn() * colours.length)];
+  const svg = `<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">
+    <rect width="${w}" height="${h}" fill="${bg}"/>
+    <circle cx="${w / 2}" cy="${h / 2}" r="${Math.min(w, h) * 0.3}" fill="${fg}"/>
+  </svg>`;
+  return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+const CAPTIONS = [
+  "Ship fast. Break nothing.", "we do audits", "gm", "buy the dip, keep the pixels",
+  "gnomes were here", "gato feliz", "gone forever, and that is the point",
+  "gm from Buenos Aires", "gg", "wagmi but literally", "not financial advice",
+  "one pixel at a time", "for Mia", "hola mundo", "still up",
+];
+const LINKS = [
+  "https://example.com", "https://example.org/blog", "https://example.net/mint",
+  "https://example.com/gallery", "https://example.org",
+];
+
+type Rect = { x: number; y: number; w: number; h: number };
+
+/*
+  One deterministic stream for the whole fixture — the layout AND the artwork
+  draw from it in order, so the same wall comes back every run. It is named
+  `lcg` rather than `seed` because `seed()` below is the function that writes
+  the wall, and two things called seed in one file is how the first version of
+  this failed to compile.
+*/
+let lcg = 20260901;
+const next = () => (lcg = (lcg * 1103515245 + 12345) % 2147483648) / 2147483648;
 
 function layout(): Rect[] {
-  // A deterministic pseudo-random walk: same board every run, no dependency on
-  // Math.random, and no two rectangles overlapping (which the database would
-  // refuse anyway, loudly).
-  let seed = 20260901;
-  const next = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
-
   const placed: Rect[] = [];
   const hits = (r: Rect) =>
-    placed.some(
-      (p) => r.x < p.x + p.w && p.x < r.x + r.w && r.y < p.y + p.h && p.y < r.y + r.h,
-    );
+    placed.some((p) => r.x < p.x + p.w && p.x < r.x + r.w && r.y < p.y + p.h && p.y < r.y + r.h);
 
-  for (let i = 0; i < 140; i += 1) {
-    for (let attempt = 0; attempt < 60; attempt += 1) {
-      const w = Math.max(1, Math.round(next() ** 2.2 * 260));
-      const h = Math.max(1, Math.round(next() ** 2.2 * 170));
+  for (let i = 0; i < 150; i += 1) {
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      const w = Math.max(6, Math.round(next() ** 2.0 * 270));
+      const h = Math.max(6, Math.round(next() ** 2.0 * 180));
       const candidate = {
         x: Math.round(next() * (BOARD_WIDTH - w)),
         y: Math.round(next() * (BOARD_HEIGHT - h)),
         w,
         h,
-        fill: FILL[Math.floor(next() * FILL.length)],
       };
       if (!hits(candidate)) {
         placed.push(candidate);
@@ -163,20 +272,44 @@ async function seed(rects: Rect[]): Promise<void> {
   const pool = new Pool({ connectionString: DATABASE });
   try {
     await pool.query("TRUNCATE blocks, hold_meter CASCADE");
+    let projectAt = 0;
     for (const [index, rect] of rects.entries()) {
+      const scale = Math.min(4, 1024 / Math.max(rect.w, rect.h));
+      const tw = Math.max(1, Math.round(rect.w * scale));
+      const th = Math.max(1, Math.round(rect.h * scale));
+
+      const roll = next();
+      let bytes: Buffer;
+      let caption: string;
+      if (projectAt < PROJECTS.length && rect.w * rect.h > 12_000) {
+        const project = PROJECTS[projectAt++];
+        bytes = await wordmark(project, tw, th);
+        caption = project.caption;
+      } else if (roll < 0.5) {
+        bytes = await pixelArt(tw, th, next);
+        caption = CAPTIONS[Math.floor(next() * CAPTIONS.length)];
+      } else if (roll < 0.72) {
+        bytes = await photograph(tw, th, next);
+        caption = CAPTIONS[Math.floor(next() * CAPTIONS.length)];
+      } else {
+        bytes = await flat(tw, th, next);
+        caption = CAPTIONS[Math.floor(next() * CAPTIONS.length)];
+      }
+
       await pool.query(
-        `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc,
-                             paid_at, payment_signature, caption)
-         VALUES ($1, $2, $3, $4, 'paid', 1000000, $5, now() - make_interval(mins => $6), $7, $8)`,
+        `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
+                             payment_signature, pending_image, pending_image_mime,
+                             image_sha256, is_animated, caption, link, image_fit)
+         VALUES ($1,$2,$3,$4,'paid',1000000,$5, now() - make_interval(mins => $6), $7,$8,'image/png',
+                 $9, false, $10, $11, $12)`,
         [
-          rect.x,
-          rect.y,
-          rect.w,
-          rect.h,
-          rect.w * rect.h * 1_000_000,
-          index,
-          `capture-${index}`.padEnd(88, "x"),
-          "A rectangle somebody bought",
+          rect.x, rect.y, rect.w, rect.h, rect.w * rect.h * 1_000_000, index,
+          `capture${index}`.padEnd(88, "Kq2xVn7"),
+          bytes,
+          createHash("sha256").update(bytes).digest("hex"),
+          caption.slice(0, 32),
+          LINKS[Math.floor(next() * LINKS.length)],
+          next() < 0.75 ? "contain" : "cover",
         ],
       );
     }
@@ -220,6 +353,28 @@ async function main(): Promise<void> {
         // "full" capture is a board of fallback rectangles, which is a real
         // state and not the one being judged.
         await sleep(1_200);
+
+        /*
+          FREEZE EVERY ANIMATION AT ITS FIRST FRAME BEFORE SHOOTING.
+
+          The settled rail rolls, so a screenshot catches it wherever it happens
+          to be — which put the newest sale half off the left edge of the first
+          capture and made the one treatment the gate was meant to judge
+          unreadable. It also made two runs of this script incomparable, which
+          is worse: a before/after pair has to differ only by the thing being
+          decided.
+
+          `animation: none` rather than `animation-play-state: paused`, because
+          paused holds the current offset and none returns the track to
+          translateX(0) — the rail's designed state, newest first.
+        */
+        await browser.evaluate(`(() => {
+          const style = document.createElement("style");
+          style.textContent = "*,*::before,*::after{animation:none!important;transition:none!important}";
+          document.head.appendChild(style);
+          return true;
+        })()`);
+        await sleep(150);
 
         const name = `board-${state}-${size.name}.png`;
         await writeFile(join(OUT, name), await browser.screenshot());

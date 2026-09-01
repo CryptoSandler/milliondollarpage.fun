@@ -658,9 +658,12 @@ h3 {
     color: var(--body);
   }
 
-  .board-tape__row:first-child {
-    padding-left: 0;
-  }
+  /*
+   * The first row keeps its padding now, where it used to have none. That zero
+   * was right when the rail's left edge was just a gap; the newest sale draws a
+   * 2px edge inside its own box, and with no padding the first character of its
+   * metadata sat under that edge.
+   */
 
   /*
    * THE NEWEST SALE IS THE ONE THE RAIL IS ABOUT.
