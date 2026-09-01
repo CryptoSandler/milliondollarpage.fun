@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  BOARD_BOTTOM_GAP,
+  BOARD_FRAME_PX,
+  BOARD_INSET,
   type Chrome,
   type Size,
   TAP_SLOP_PX,
@@ -257,18 +258,18 @@ describe("initialViewport fits the whole board inside the free region", () => {
  */
 describe("the board plus its chrome never needs more room than the viewport has", () => {
   const board = WALL;
-  const SIDE_PANEL_MIN = 280;
-  const SIDE_PANEL_MAX = 560;
   /**
-   * 1250 / 800. The panel's width is what the board does not need, and a board
-   * that fits by height needs its height times this. globals.css carries the
-   * same number, spelled 1.5625, for the same reason.
+   * The measured width of the side panel — `--panel-w` in globals.css, and the
+   * width its widest un-shrinkable control actually needs. Not a leftover any
+   * more: a panel sized by what the board does not want is a panel that can
+   * take width the board does want, which is how the board came to be fitted
+   * by width with its own edge off the window.
    */
-  const BOARD_ASPECT = WALL.width / WALL.height;
+  const SIDE_PANEL = 288;
 
-  // Mirrors BoardView's measurement, BOARD_BOTTOM_GAP included: the gap is
-  // part of the chrome, so the no-scroll arithmetic below has to be done with
-  // it rather than around it.
+  // Mirrors BoardView's measurement, BOARD_INSET included: the margin and the
+  // frame are part of the chrome, so the no-scroll arithmetic below has to be
+  // done with them rather than around them.
   function chromeFor(screen: Size): Chrome {
     const barTop = screen.width <= 640 ? 48 : 52;
     // The side panel takes over at 640px and a 5:4 aspect — see the `side`
@@ -276,15 +277,19 @@ describe("the board plus its chrome never needs more room than the viewport has"
     const side = screen.width >= 640 && screen.width * 4 >= screen.height * 5;
     if (!side) {
       const bar = screen.width <= 640 ? 92 : 88;
-      return { top: barTop, right: 0, bottom: bar + BOARD_BOTTOM_GAP, left: 0 };
+      return {
+        top: barTop + BOARD_INSET,
+        right: BOARD_INSET,
+        bottom: bar + BOARD_INSET,
+        left: BOARD_INSET,
+      };
     }
-    // The panel absorbs whatever width the board does not need, between a
-    // width its controls stay usable at and one they stop growing at. On a
-    // square board that was the free height; on this one it is the free
-    // height times the board's aspect, which is a good deal more.
-    const wanted = screen.width - BOARD_ASPECT * (screen.height - barTop);
-    const panel = Math.min(SIDE_PANEL_MAX, Math.max(SIDE_PANEL_MIN, wanted));
-    return { top: barTop, right: 0, bottom: BOARD_BOTTOM_GAP, left: Math.min(panel, screen.width) };
+    return {
+      top: barTop + BOARD_INSET,
+      right: BOARD_INSET,
+      bottom: BOARD_INSET,
+      left: Math.min(SIDE_PANEL, screen.width) + BOARD_INSET,
+    };
   }
 
   const viewports: Array<[string, Size]> = [
@@ -324,28 +329,45 @@ describe("the board plus its chrome never needs more room than the viewport has"
     });
   }
 
-  // The board used to sit flush against the bottom of the window in the
-  // side-panel layout, which reads as a sheet cropped by the frame rather
-  // than one pinned to a wall. The gap is chrome, so it costs the board a
-  // little scale instead of costing the document its no-scroll contract —
-  // which every viewport above still keeps.
-  it("leaves a strip of paper under the board instead of letting it touch the bottom edge", () => {
+  /*
+   * The board used to sit flush against the edge it was fitted by — the bottom
+   * of the window before the gap was added there, and then the left and right
+   * of the free region, which the gap never reached. Flush is not a margin
+   * that is merely tight: the board's own 2px frame is drawn OUTSIDE the
+   * paper, so a board flush against the free region has its frame under the
+   * side panel on one side and off the window on the other.
+   *
+   * So the strip is checked on all four sides, and it is checked against the
+   * FRAME's outer edge rather than the paper's. The margin is chrome, so it
+   * costs the board a little scale instead of costing the document its
+   * no-scroll contract — which every viewport above still keeps.
+   */
+  it("leaves a strip of paper on all four sides of the board, frame included", () => {
+    const margin = BOARD_INSET - BOARD_FRAME_PX;
     for (const [name, screen] of viewports) {
       const chrome = chromeFor(screen);
-      expect(chrome.bottom, name).toBeGreaterThanOrEqual(BOARD_BOTTOM_GAP);
-
       const free = freeRegion(screen, chrome);
       const fitted = fittedBoardSize(screen, chrome, board);
-      // Where the board's bottom edge lands: it is centred in the free
-      // region, so half the slack sits under it.
-      const bottomEdge = free.y + (free.height + fitted.height) / 2;
-      expect(screen.height - bottomEdge, name).toBeGreaterThanOrEqual(BOARD_BOTTOM_GAP - 1e-9);
+      // The board is centred in the free region, so half the slack sits on
+      // each side of it. What is on the other side of the inset is whatever
+      // that edge's chrome is — the panel, a bar, or the window itself — so
+      // the clearance from THAT is the inset plus the slack, less the frame
+      // the inset is partly there to hold.
+      // The board is centred in the free region, so the two sides of an axis
+      // get the same clearance and there are two numbers here, not four.
+      const clearance = {
+        "left and right": BOARD_INSET + (free.width - fitted.width) / 2 - BOARD_FRAME_PX,
+        "top and bottom": BOARD_INSET + (free.height - fitted.height) / 2 - BOARD_FRAME_PX,
+      };
+      for (const [sides, gap] of Object.entries(clearance)) {
+        expect(gap, `${sides} of the board on ${name}`).toBeGreaterThanOrEqual(margin - 1e-9);
+      }
     }
   });
 
   it("keeps that strip between 16 and 24 pixels, which is the gutter the rest of the page uses", () => {
-    expect(BOARD_BOTTOM_GAP).toBeGreaterThanOrEqual(16);
-    expect(BOARD_BOTTOM_GAP).toBeLessThanOrEqual(24);
+    expect(BOARD_INSET - BOARD_FRAME_PX).toBeGreaterThanOrEqual(16);
+    expect(BOARD_INSET - BOARD_FRAME_PX).toBeLessThanOrEqual(24);
   });
 
   it("names the one exception: a viewport with no room for a board at all", () => {

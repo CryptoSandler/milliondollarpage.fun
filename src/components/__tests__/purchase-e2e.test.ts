@@ -2,7 +2,7 @@ import sharp from "sharp";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { queryOne } from "../../lib/db";
 import { testWallet } from "../../lib/wallet/__tests__/keypair";
-import { findChrome, launchChrome, waitFor, type Browser } from "./cdp";
+import { findChrome, launchChrome, sleep, waitFor, type Browser } from "./cdp";
 import { startDevServer, type DevServer } from "./dev-server";
 import { mockWallet, type MockWallet } from "./mock-wallet";
 
@@ -350,6 +350,128 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
           ).toBeLessThanOrEqual(12);
         }
        }
+      }
+    },
+    240_000,
+  );
+
+  /**
+   * The whole board, its frame included, on screen at four widths.
+   *
+   * WHY THIS EXISTS. The fit scale is contain, not cover, and the arithmetic
+   * for it is unit tested — but the arithmetic was being handed the wrong box.
+   * The board is scaled by its LIMITING dimension, so whenever width limited,
+   * its left and right edges landed exactly on the free region's: the sheet's
+   * own edge went under the side panel on one side and off the window on the
+   * other, and nothing in a pure-function suite could see it, because the pure
+   * function was right about the box it was given. What was wrong was the box.
+   * So this asks the rendered page instead, at the widths a visitor actually
+   * arrives at.
+   *
+   * WHAT IT MEASURES. `data-board-rect` is the renderer reporting the
+   * rectangle it just painted, frame included, in CSS pixels — a canvas has no
+   * DOM box for its contents, so there is nothing else to ask. Re-deriving the
+   * rectangle from the fit maths would test the maths against itself; this
+   * takes the numbers the draw call used. The frame is then confirmed in
+   * PIXELS at all four sides: a rectangle that is inside the viewport and
+   * paints no border there would satisfy every assertion above it and still be
+   * the bug.
+   */
+  it(
+    "opens with the whole board and its frame inside the viewport, at every width",
+    async () => {
+      // The ink the frame is drawn in, and DESIGN.md's `--ink`.
+      const INK: [number, number, number] = [0x2b, 0x24, 0x1c];
+
+      for (const [width, height] of [
+        [1280, 800],
+        [1440, 900],
+        [1920, 1080],
+        [390, 844],
+      ] as const) {
+        const at = `${width}x${height}`;
+        await browser.resize(width, height);
+        await browser.goto(`${server.origin}/`);
+
+        /*
+         * The rectangle once it has SETTLED, not the first one published.
+         * The canvas has no size until layout runs, so the very first paint is
+         * of a board fitted to a zero-sized box; the ResizeObserver then
+         * re-fits it. Two identical reads a beat apart is the cheapest way to
+         * be sure the re-fit has happened — the rectangle changes only on a
+         * resize or a zoom, and neither is happening here.
+         */
+        const read = `document.querySelector('canvas')?.dataset.boardRect ?? null`;
+        const painted = await waitFor(`the board's fit at ${at} to settle`, async () => {
+          const before = await browser.evaluate<string | null>(read);
+          await sleep(150);
+          const after = await browser.evaluate<string | null>(read);
+          return before !== null && before === after ? after : null;
+        });
+        const [x, y, w, h] = painted.split(",").map(Number);
+
+        // 1. Inside the window, on all four sides, frame included.
+        expect(x, `the board's left edge at ${at}`).toBeGreaterThanOrEqual(0);
+        expect(y, `the board's top edge at ${at}`).toBeGreaterThanOrEqual(0);
+        expect(x + w, `the board's right edge at ${at}`).toBeLessThanOrEqual(width);
+        expect(y + h, `the board's bottom edge at ${at}`).toBeLessThanOrEqual(height);
+
+        // 2. Clear of the chrome, which is the other half of "visible": a
+        //    board whose edge is under the side panel is inside the window and
+        //    still cut off.
+        const chrome = JSON.parse(
+          await browser.evaluate<string>(`JSON.stringify({
+            top: document.querySelector('header.board-bar').getBoundingClientRect(),
+            controls: document.querySelector('.board-controls').getBoundingClientRect(),
+          })`),
+        ) as { top: DOMRect; controls: DOMRect };
+        const overlaps = (box: DOMRect) =>
+          x < box.right && box.left < x + w && y < box.bottom && box.top < y + h;
+        expect(overlaps(chrome.top), `the board under the top bar at ${at}`).toBe(false);
+        expect(overlaps(chrome.controls), `the board under the controls at ${at}`).toBe(false);
+
+        // 3. And the document does not scroll, in either axis, which is the
+        //    same claim from the page's side.
+        const scroll = JSON.parse(
+          await browser.evaluate<string>(`(() => {
+            const el = document.documentElement;
+            return JSON.stringify({
+              scrollWidth: el.scrollWidth, clientWidth: el.clientWidth,
+              scrollHeight: el.scrollHeight, clientHeight: el.clientHeight,
+            });
+          })()`),
+        ) as Record<string, number>;
+        expect(scroll.scrollWidth, `horizontal scrolling at ${at}`).toBeLessThanOrEqual(
+          scroll.clientWidth,
+        );
+        expect(scroll.scrollHeight, `vertical scrolling at ${at}`).toBeLessThanOrEqual(
+          scroll.clientHeight,
+        );
+
+        // 4. The frame is really there, read out of the rendered pixels rather
+        //    than believed from the stylesheet — the same lesson as the focus
+        //    ring above.
+        const { data, info } = await sharp(await browser.screenshot())
+          .raw()
+          .toBuffer({ resolveWithObject: true });
+        const channels = (px: number, py: number) => {
+          const offset = (Math.round(py) * info.width + Math.round(px)) * info.channels;
+          return [data[offset], data[offset + 1], data[offset + 2]];
+        };
+        // The middle of each side, one pixel inside the frame's outer edge.
+        const sides = {
+          top: channels(x + w / 2, y + 1),
+          bottom: channels(x + w / 2, y + h - 2),
+          left: channels(x + 1, y + h / 2),
+          right: channels(x + w - 2, y + h / 2),
+        };
+        for (const [side, sampled] of Object.entries(sides)) {
+          const drift = Math.max(...sampled.map((value, index) => Math.abs(value - INK[index])));
+          expect(
+            drift,
+            `the ${side} of the frame at ${at} sampled rgb(${sampled.join(",")}), which is not the ink border`,
+          ).toBeLessThanOrEqual(12);
+        }
       }
     },
     240_000,

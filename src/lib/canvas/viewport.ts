@@ -122,20 +122,42 @@ export function clampToBoard(v: Viewport, board: Size): Viewport {
 const MIN_FIT_SCALE = 0.01;
 
 /**
- * The paper the board keeps between itself and the bottom edge of the window.
+ * The board's frame: 2px of ink drawn immediately OUTSIDE the paper, on all
+ * four sides.
  *
- * The sheet is pinned to a wall, and a sheet flush against the bottom of the
- * frame reads as cropped rather than as hung. Every other edge already has
- * something between the board and the window — the top bar, the side panel,
- * the bottom bar — and this is the one that had nothing.
+ * It replaces the 1px hairline in the coarse rule's tone that used to draw the
+ * sheet's edge. The hairline was the right weight for a boundary nobody had to
+ * find; it was the wrong one for a boundary that has to be seen not to be
+ * clipped — and it was in fact being clipped, off the right-hand edge of the
+ * window, which is the bug this constant exists to make impossible.
+ *
+ * It is part of the board's footprint rather than decoration on top of it: the
+ * fit maths below reserves room for it through BOARD_INSET, so a fit that fits
+ * the board but cuts its own border cannot happen.
+ */
+export const BOARD_FRAME_PX = 2;
+
+/**
+ * The paper the board keeps between its frame and everything around it, on all
+ * four sides, plus the frame itself.
+ *
+ * The sheet is pinned to a wall, and a sheet flush against the edge of the
+ * window reads as cropped rather than as hung. It used to be a bottom gap
+ * alone, on the argument that "every other edge already has something between
+ * the board and the window — the top bar, the side panel, the bottom bar".
+ * That argument was wrong about two edges and it showed: the board is scaled
+ * by its LIMITING dimension, so whenever width is the limit its left and right
+ * edges land exactly on the free region's, which put the sheet's own edge
+ * under the side panel on one side and off the window on the other.
  *
  * It is an INSET, part of the chrome the free region is computed from, not a
- * margin on the canvas. A margin would add to the page's height and the
- * document is not allowed to scroll; an inset takes the room out of the
- * board's share before the fit maths ever sees it. DESIGN.md's gutter is
- * 16px and the brief asks for 16–24; 20 sits in the middle of both.
+ * margin on the canvas. A margin would add to the page's size and the document
+ * is not allowed to scroll; an inset takes the room out of the board's share
+ * before the fit maths ever sees it. DESIGN.md's gutter is 16px and the brief
+ * asks for 16–24; 20 sits in the middle of both, and the frame is added to it
+ * so the 20 is clear paper rather than paper the border is drawn over.
  */
-export const BOARD_BOTTOM_GAP = 20;
+export const BOARD_INSET = 20 + BOARD_FRAME_PX;
 
 /** The rectangle of viewport the board may use: everything the chrome leaves. */
 export function freeRegion(screen: Size, chrome: Chrome): { x: number; y: number } & Size {
