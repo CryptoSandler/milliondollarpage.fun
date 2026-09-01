@@ -658,16 +658,35 @@ right-aligned content in one bar, because digits set in a monospace are wider
 than the same digits set in Karla, and the counter is the longest run of digits
 on the page.
 
-**Where it comes from, and what the alternative costs.** The cream register never
-had a monospace, so light's numeric role falls back to Karla. Giving light a
-mono would take every drift here to zero — and would change the cream
-register's numerals, which is the thing keeping each theme's own typography was
-meant to preserve. That is the trade, and it is the owner's:
+**The decision, taken on those numbers: light gains a monospace for the NUMERIC
+ROLE only.** Counters, prices, coordinates, the rail's rows, the hover price and
+the empty wall's count are set in **IBM Plex Mono in both themes**. Labels,
+prose, headings and the wordmark keep each register's own face — Bricolage
+Grotesque and Karla in light, Space Grotesk in dark.
 
-- **Each theme keeps its faces** — a ~66px horizontal shift of the offer line
-  when the toggle is pressed, no vertical movement, no height change.
-- **Light gains a monospace for numerals only** — zero drift, and the cream
-  register's counters, prices and coordinates stop being Karla.
+**The requirement picked the face rather than taste.** Zero drift needs
+identical metrics, and identical metrics means the same face at the same size: a
+*different* monospace in light would carry different advance widths and put the
+drift straight back. IBM Plex Mono is also already self-hosted for the dark
+register, so light gains a monospace for **zero additional bytes**.
+
+`--font-numeric` is its own token and is not themed, beside `--font-mono` which
+stays each register's own and sets the labels and the dense prose.
+
+**What it fixed, measured the same way:**
+
+| Element | Δx before | Δx after | Δw before | Δw after |
+|---|---|---|---|---|
+| The pixels-left counter | −45.4 | **−2.4** | +20.1 | **0.0** |
+| A rail row | +7.3 | +7.3 | +67.4 | **0.0** |
+| The offer line | −65.7 | −22.7 | +20.1 | +20.1 |
+
+**The counter and the rail carry zero width drift now.** What remains is the
+offer line, which is prose — `1,000,000 pixels · $1 per pixel · yours forever`
+in the body face — and prose in two faces cannot be one width unless the themes
+share a body face, which is what keeping each register's own typography exists
+to prevent. It is 20.1px on one element, and it is the last irreducible drift
+under this decision.
 
 **Two things the measurement caught that no amount of looking would have.**
 Its first run reported a clean 0.0px everywhere — because it measured "light" by

@@ -393,6 +393,20 @@
   --font-display: var(--font-display-theme), ui-sans-serif, system-ui, sans-serif;
   --font-ui: var(--font-ui-theme), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-mono-theme), ui-monospace, SFMono-Regular, Menlo, monospace;
+  /*
+   * THE NUMERIC ROLE, AND IT IS THE SAME FACE IN BOTH THEMES.
+   *
+   * Counters, prices, coordinates, the rail's rows, the hover price. Not the
+   * labels, not the prose, not the wordmark — those stay each register's own.
+   *
+   * IBM Plex Mono, and the requirement picked it rather than taste: the
+   * coherence script has to report 0.0px across the fixed chrome, and identical
+   * metrics are the only way two themes get that. A DIFFERENT monospace in
+   * light would have different advance widths and put the drift straight back.
+   * It is also already self-hosted for the dark register, so light gains a
+   * monospace for zero additional bytes.
+   */
+  --font-numeric: var(--font-mono-family), ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --radius-xs: 4px;
   --radius-sm: 8px;
@@ -455,7 +469,7 @@ h3 {
    * measures larger than the words around it is a price that shouts.
    */
   .tabular {
-    font-family: var(--font-mono);
+    font-family: var(--font-numeric);
     font-size: 0.96em;
     letter-spacing: -0.01em;
     font-variant-numeric: tabular-nums;
@@ -666,7 +680,7 @@ h3 {
   }
 
   .pixels-left__n {
-    font-family: var(--font-mono);
+    font-family: var(--font-numeric);
     font-size: 20px;
     font-weight: 700;
     line-height: 1;
@@ -675,7 +689,7 @@ h3 {
   }
 
   .pixels-left__u {
-    font-family: var(--font-mono);
+    font-family: var(--font-numeric);
     font-size: 11px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -761,7 +775,7 @@ h3 {
     display: flex;
     align-items: baseline;
     gap: 10px;
-    font-family: var(--font-mono);
+    font-family: var(--font-numeric);
     font-size: 11.5px;
     color: var(--body);
   }
@@ -812,7 +826,7 @@ h3 {
 
   /* Two tiers now that there is room: the numbers, then the metadata under. */
   .board-tape__size {
-    font-family: var(--font-mono);
+    font-family: var(--font-numeric);
     font-size: 20px;
     font-weight: 700;
     line-height: 1.1;
@@ -821,7 +835,7 @@ h3 {
   }
 
   .board-tape__amount {
-    font-family: var(--font-mono);
+    font-family: var(--font-numeric);
     font-size: 16px;
     font-weight: 600;
     line-height: 1.1;
@@ -1464,7 +1478,7 @@ h3 {
  * some. Everywhere else a price is `ink` and stays there.
  */
 .block-card-price {
-  font-family: var(--font-mono);
+  font-family: var(--font-numeric);
   font-size: 15px;
   font-weight: 700;
   color: var(--primary);
@@ -1491,7 +1505,7 @@ h3 {
 }
 
 .empty-wall__count {
-  font-family: var(--font-mono);
+  font-family: var(--font-numeric);
   font-size: 34px;
   font-weight: 700;
   letter-spacing: -1px;
