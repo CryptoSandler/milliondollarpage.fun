@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { PRESETS, type Selection } from "../lib/board/selection";
-import { formatUsdc, unitOfSale } from "../lib/board/pricing";
+import { formatUsdc, pixelCount, unitOfSale } from "../lib/board/pricing";
 import type { ZoomState } from "./BoardCanvas";
 
 /**
@@ -104,9 +104,9 @@ export default function SelectionPanel({
             type="button"
             aria-pressed={activePreset === preset.size}
             onClick={() => onPresetChange(activePreset === preset.size ? null : preset.size)}
-            title={`${(preset.size * preset.size).toLocaleString("en-US")} pixels — ${(
-              (preset.size * preset.size) / 100
-            ).toLocaleString("en-US")} blocks · ${formatUsdc(preset.size * preset.size * perPixel)}`}
+            title={`${pixelCount(preset.size * preset.size)} · ${formatUsdc(
+              preset.size * preset.size * perPixel,
+            )}`}
             className="btn-quiet tabular shrink-0 px-2.5 py-1.5 text-[12.5px]"
           >
             {preset.label}
@@ -162,9 +162,13 @@ export default function SelectionPanel({
         ) : (
           <>
             <p className="tabular truncate font-display text-[16px] font-bold leading-tight text-ink sm:text-[20px]">
-              {selection.pixels.toLocaleString("en-US")}
-              <span className="sm:hidden"> px</span>
-              <span className="hidden sm:inline"> pixels</span>
+              {/* "px" is what a phone has room for and "pixels" is what
+                  everything else says; both are `display:none` when hidden, so
+                  a screen reader is read exactly one of them. The noun agrees
+                  with the number — a 1×1 purchase is the smallest thing this
+                  wall sells and it said "1 pixels". */}
+              <span className="sm:hidden">{selection.pixels.toLocaleString("en-US")} px</span>
+              <span className="hidden sm:inline">{pixelCount(selection.pixels)}</span>
               <span className="text-hairline-strong"> · </span>
               {formatUsdc(selection.totalBaseUnits)}
             </p>

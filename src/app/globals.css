@@ -159,6 +159,20 @@
      box. Changing these changes how much board is visible; nothing else. */
   --bar-top-h: 52px;
   --bar-bottom-h: 88px;
+  /*
+   * The settled-purchase rail along the bottom of the wall.
+   *
+   * 76px is two lines and their gap: a 14px row of numbers over a 12px row of
+   * metadata, with the 16px of padding the rest of the chrome uses. It is a
+   * NOMINAL height like the two above it — BoardView measures the real box —
+   * and it is what the panel's `bottom` is held off, so the two cannot overlap
+   * by the width of a rounding error.
+   *
+   * IT TAKES HEIGHT AND NEVER WIDTH. A register down the side would be a
+   * second column, and a second column comes out of the board's width in the
+   * one layout where width is what the board is short of. See DESIGN.md.
+   */
+  --tape-h: 76px;
 
   /* The side panel's width in the landscape layout, and it is MEASURED.
 
@@ -442,6 +456,63 @@ h3 {
     background: var(--card-warm);
     box-shadow: 0 -1px 0 rgba(43, 36, 28, 0.04);
     overflow: hidden;
+  }
+
+  /*
+   * THE SETTLED-PURCHASE RAIL.
+   *
+   * Hidden by default and shown only in the side-panel layout (below, beside
+   * the rule that lifts the panel off it). A phone's bottom bar is already one
+   * fixed row carrying the presets, the price and Buy; a second rail there
+   * would take height from the board on the screen that has the least of it,
+   * and DESIGN.md's shed order is explicit that the board's controls are the
+   * last thing to give way. `/stats` carries the same rows for anybody there.
+   *
+   * It spans the full width, under the panel rather than beside it, so it
+   * costs the board no width in either layout.
+   */
+  .board-tape {
+    display: none;
+  }
+
+  .board-tape__head {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    flex: 0 0 auto;
+    padding-right: 14px;
+    margin-right: 14px;
+    border-right: 1px solid var(--hairline-strong);
+    white-space: nowrap;
+  }
+
+  /*
+   * The scrolling half. `tabindex` makes it reachable, which means it takes a
+   * focus ring, which means the ring needs four pixels that are not inside
+   * this element's own overflow — the rail's padding is where they are. Same
+   * failure, same fix, as the wallet's Connect button and the preset row.
+   */
+  .board-tape__scroller {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: stretch;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .board-tape__row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 14px;
+    white-space: nowrap;
+    border-right: 1px solid var(--hairline);
+  }
+
+  .board-tape__row:first-child {
+    padding-left: 0;
   }
 
   /* Same as the top bar on a phone: the gaps close before anything in the row
@@ -806,10 +877,31 @@ h3 {
  */
 @layer utilities {
   @media (min-width: 640px) and (min-aspect-ratio: 5 / 4) {
+    /*
+     * The rail exists in this layout and only in this layout. It is fixed to
+     * the bottom across the whole window; the panel above stops at its top
+     * edge, which is the one line that keeps the two from overlapping.
+     */
+    .board-tape {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 10;
+      display: flex;
+      align-items: stretch;
+      height: var(--tape-h);
+      padding: 4px 16px;
+      padding-bottom: max(4px, env(safe-area-inset-bottom));
+      background: var(--card-warm);
+      border-top: 1px solid var(--hairline-strong);
+      box-shadow: 0 -1px 0 rgba(43, 36, 28, 0.04);
+    }
+
     .board-controls {
       top: var(--bar-top-h);
       right: auto;
-      bottom: 0;
+      bottom: var(--tape-h);
       width: var(--panel-w);
       height: auto;
       flex-direction: column;

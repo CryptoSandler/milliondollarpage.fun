@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import sharp from "sharp";
 import { execute } from "../../../lib/db";
 import { GET } from "../board/route";
+import { TAPE_ROWS } from "../../../lib/board/tape";
 
 async function insert(x: number, y: number, w: number, h: number, status: string): Promise<void> {
   await execute(
@@ -116,12 +117,53 @@ describe("GET /api/board", () => {
       [Buffer.from([1, 2, 3])],
     );
     const raw = await (await GET()).text();
+    // The address must not appear anywhere, and this row is now on TWO
+    // surfaces in this payload — the rectangle list and the settled-purchase
+    // tape — so this single assertion covers both.
     expect(raw).not.toContain("AWalletNobodyMayLearn");
     expect(raw).not.toContain("buyerPubkey");
     expect(raw).not.toContain("pending_image");
-    // The whole payload for one rectangle stays a few dozen bytes on top of
-    // the wall's own URL: four numbers and an id, not a bitmap.
-    expect(raw.length).toBeLessThan(500);
+
+    /*
+      MEASURED PER RECTANGLE, NOT AS A TOTAL, and that is a correction rather
+      than a relaxation.
+
+      This used to assert the whole body stayed under 500 bytes, with a comment
+      saying it was about "the payload for one rectangle". Those were the same
+      number only while the body was nothing but rectangles. It now also
+      carries the settled-purchase tape, which is a FIXED cost — at most
+      TAPE_ROWS rows however big the board gets — so an absolute ceiling
+      measures the tape and calls it the rectangle list.
+
+      What the claim was always about is the marginal cost of one more
+      purchase, so that is what is measured: add a second rectangle and weigh
+      the difference. Four numbers, an id and a status is well under 150 bytes;
+      a bitmap or a caption on this path would be hundreds, and a payload that
+      went back to shipping either would fail this by an order of magnitude.
+    */
+    // Fill the tape first. It carries at most TAPE_ROWS rows however many
+    // purchases exist, so the marginal cost of a purchase is only honest once
+    // the fixed part has stopped growing — before that, one more purchase is
+    // one rectangle AND one tape row, which is a cost that stops being paid.
+    const filler = Array.from(
+      { length: TAPE_ROWS + 1 },
+      (_, i) => `(${(i + 2) * 20}, 0, 10, 10, 'paid', 1000000, 100000000)`,
+    ).join(", ");
+    await execute(
+      `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc) VALUES ${filler}`,
+    );
+
+    const before = (await (await GET()).text()).length;
+    await execute(
+      `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc)
+       VALUES (20, 0, 10, 10, 'paid', 1000000, 100000000)`,
+    );
+    const grown = await (await GET()).text();
+
+    // The tape stopped growing, so the whole cost of one more purchase is its
+    // rectangle: four numbers, an id and a status.
+    expect(JSON.parse(grown).tape).toHaveLength(TAPE_ROWS);
+    expect(grown.length - before).toBeLessThan(150);
   });
 
   it("is never cached, because a reservation changes the board within seconds", async () => {

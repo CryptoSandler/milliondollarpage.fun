@@ -5,6 +5,7 @@ import { BOARD_HEIGHT, BOARD_WIDTH, TOTAL_PIXELS } from "../../lib/board/geometr
 import { BLOCK_PIXEL_SCALE, STORED_MAX_LONG_EDGE } from "../../lib/board/image-plan";
 import { RESERVATION_MINUTES, SHORT_HOLD_MINUTES } from "../../lib/board/hold-clock";
 import { RESERVATION_LIMITS } from "../../lib/callers/limits";
+import { pixelCount } from "../../lib/board/pricing";
 
 /**
  * The questions a buyer has to have answered before they spend anything.
@@ -51,7 +52,7 @@ export default function FaqPage() {
           Questions, answered before you pay
         </h1>
         <p className="mt-3 text-[16px] leading-relaxed text-body">
-          {BOARD_WIDTH} × {BOARD_HEIGHT} is exactly {TOTAL_PIXELS.toLocaleString("en-US")} pixels, and
+          {BOARD_WIDTH} × {BOARD_HEIGHT} is exactly {pixelCount(TOTAL_PIXELS)}, and
           every one of them is for sale on its own at a dollar. Draw any free rectangle, pay for its
           area, and put a picture, a link and a caption on it. This page is the small print, written
           out at full size.
@@ -175,7 +176,7 @@ export default function FaqPage() {
         <Question title="Is there a limit on how much I can hold at once?">
           <p>
             Yes, and only on holding. One visitor may have{" "}
-            {RESERVATION_LIMITS.heldPixelsPerCaller.toLocaleString("en-US")} pixels held at a time —
+            {pixelCount(RESERVATION_LIMITS.heldPixelsPerCaller)} held at a time —
             a 100 by 100 rectangle, or several smaller ones adding up to it — and there is a limit on
             how long pixels can be kept off the board over an hour, so nobody can park the wall for
             free while everyone else waits.

@@ -425,12 +425,20 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
           await browser.evaluate<string>(`JSON.stringify({
             top: document.querySelector('header.board-bar').getBoundingClientRect(),
             controls: document.querySelector('.board-controls').getBoundingClientRect(),
+            tape: document.querySelector('.board-tape').getBoundingClientRect(),
           })`),
-        ) as { top: DOMRect; controls: DOMRect };
+        ) as { top: DOMRect; controls: DOMRect; tape: DOMRect };
         const overlaps = (box: DOMRect) =>
           x < box.right && box.left < x + w && y < box.bottom && box.top < y + h;
         expect(overlaps(chrome.top), `the board under the top bar at ${at}`).toBe(false);
         expect(overlaps(chrome.controls), `the board under the controls at ${at}`).toBe(false);
+        // The settled-purchase rail is the third piece of chrome and the
+        // newest, which makes it the one most likely to be measured wrongly.
+        // It is `display: none` in the bottom-bar layout, and an undisplayed
+        // element's box is all zeros, so this assertion is trivially true
+        // exactly where the rail is not on screen — which is the correct
+        // answer there rather than a hole in the check.
+        expect(overlaps(chrome.tape), `the board under the settled rail at ${at}`).toBe(false);
 
         // 3. And the document does not scroll, in either axis, which is the
         //    same claim from the page's side.

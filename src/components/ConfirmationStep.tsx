@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { PreparedImage } from "../lib/board/image-encode";
 import { placeImage } from "../lib/board/image-fit";
 import { targetBox } from "../lib/board/image-plan";
-import { formatUsdc } from "../lib/board/pricing";
+import { formatUsdc, pixelCount } from "../lib/board/pricing";
 import type { ClientOrder } from "../lib/board/purchase-client";
 import BlockCard from "./BlockCard";
 import type { ContentDraft } from "./ContentForm";
@@ -148,7 +148,7 @@ export default function ConfirmationStep({
       )}
 
       <p className="text-[14px] leading-relaxed text-body">
-        Paying claims these {pixels.toLocaleString("en-US")} pixels for good and charges{" "}
+        Paying claims {pixelCount(pixels)} for good and charges{" "}
         <span className="font-bold text-ink">{formatUsdc(order.totalBaseUnits)}</span>. The image, the
         link, the caption and the fit above are locked to the block together — none of them can be
         edited, replaced or taken back afterwards.

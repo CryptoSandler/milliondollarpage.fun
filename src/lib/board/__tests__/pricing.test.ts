@@ -4,6 +4,7 @@ import {
   formatPercentSold,
   formatUsdc,
   offerLine,
+  pixelCount,
   totalBaseUnits,
   unitOfSale,
   USDC_DECIMALS,
@@ -143,5 +144,33 @@ describe("the wall's own line", () => {
         expect(said, `the wall's line must not say "${forbidden}"`).not.toContain(forbidden);
       }
     }
+  });
+});
+
+/**
+ * The noun agrees with the number.
+ *
+ * The bug this replaces was visible on the smallest purchase this wall sells
+ * and on the screen that asks for money: "Paying claims these 1 pixels for
+ * good". A wall whose whole offer is "every pixel is for sale on its own"
+ * cannot get the singular of "pixel" wrong.
+ */
+describe("pixelCount", () => {
+  it("says one pixel in the singular", () => {
+    expect(pixelCount(1)).toBe("1 pixel");
+  });
+
+  it("says everything else in the plural", () => {
+    expect(pixelCount(2)).toBe("2 pixels");
+    expect(pixelCount(100)).toBe("100 pixels");
+  });
+
+  it("says nothing at all in the plural, which is what English does", () => {
+    expect(pixelCount(0)).toBe("0 pixels");
+  });
+
+  it("groups thousands the way every other number on this board is grouped", () => {
+    expect(pixelCount(2_500)).toBe("2,500 pixels");
+    expect(pixelCount(TOTAL_PIXELS)).toBe("1,000,000 pixels");
   });
 });
