@@ -31,6 +31,7 @@
  * It does NOT decide. It produces the evidence a person decides on.
  */
 import { config } from "dotenv";
+import { Pool } from "pg";
 import { launchChrome, sleep, waitFor } from "../src/components/__tests__/cdp";
 import { startDevServer } from "../src/components/__tests__/dev-server";
 import { acquireHarnessLock, releaseHarnessLock } from "../src/components/__tests__/harness-lock";
@@ -81,6 +82,32 @@ async function main(): Promise<void> {
   const browser = await launchChrome();
 
   try {
+    /*
+      SEED A KNOWN BOARD FIRST, because the element set depends on it.
+
+      This script used to measure whatever the test database happened to hold,
+      and that is not a constant: the suite truncates between runs. On an EMPTY
+      board the pixels-left counter carries `sm:hidden` — the million is already
+      in the offer line beside it — so it has no box, is skipped, and its drift
+      is silently absent from the table. An earlier run of this reported 0.0px
+      across the fixed chrome for exactly that reason, and the counter turned
+      out to be the largest drift on the page.
+
+      A comparison has to control everything except the thing being compared.
+      The board state is one of those things.
+    */
+    const pool = new Pool({ connectionString: DATABASE });
+    try {
+      await pool.query("TRUNCATE blocks, hold_meter CASCADE");
+      await pool.query(
+        `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
+                             payment_signature, caption)
+         VALUES (0, 0, 120, 90, 'paid', 1000000, 10800000000, now(), 'coherence-fixture', 'A rectangle')`,
+      );
+    } finally {
+      await pool.end();
+    }
+
     await browser.resize(1440, 900);
     await browser.goto(`${server.origin}/?coherence=1`);
     await waitFor("the board to settle", async () => {
@@ -132,7 +159,7 @@ async function main(): Promise<void> {
         mono: getComputedStyle(document.querySelector(".board-tape__size") || document.body).fontFamily,
       })`),
     ) as Record<string, string>;
-    console.log(`  light display: ${lightFaces.display}`);
+    console.log(`\n  light display: ${lightFaces.display}`);
     console.log(`  light mono:    ${lightFaces.mono}`);
 
     // Toggle to dark through the attribute the toggle writes, so this measures
@@ -156,8 +183,33 @@ async function main(): Promise<void> {
         mono: getComputedStyle(document.querySelector(".board-tape__size") || document.body).fontFamily,
       })`),
     ) as Record<string, string>;
-    console.log(`\n  dark display: ${faces.display}`);
-    console.log(`  dark mono:    ${faces.mono}`);
+    console.log(`  dark display:  ${faces.display}`);
+    console.log(`  dark mono:     ${faces.mono}`);
+
+    /*
+      AND REFUSE IF THE TWO PASSES MEASURED THE SAME STATE.
+
+      This is the assertion the whole script exists to have. Its first run
+      reported 0.0px on every element and concluded the two themes were one
+      layout in two colourways — having measured the dark theme twice, because
+      "light" meant "stamp nothing", which follows prefers-color-scheme, and
+      this machine's headless Chrome prefers dark. A perfect score over a
+      comparison that never happened.
+
+      Breaking the thing under test would not have caught it: change the
+      typefaces however you like and a script measuring one theme twice still
+      returns 0.0px. Only the identity of what was measured can. See
+      `~/.claude/GATES.md`, "A comparison names both states".
+    */
+    if (lightFaces.display === faces.display && lightFaces.mono === faces.mono) {
+      console.error(
+        "\n  REFUSED: both passes resolved the same typefaces, so this compared a " +
+          "state with itself.\n  The drift below would be 0.0px whatever the two " +
+          "themes actually do.",
+      );
+      process.exitCode = 1;
+      return;
+    }
 
     console.log(`\n  ${"element".padEnd(46)}  ${"Δx".padStart(7)}${"Δy".padStart(8)}${"Δw".padStart(8)}${"Δh".padStart(8)}`);
     let worst = 0;

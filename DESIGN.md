@@ -630,33 +630,44 @@ records the box of every text-bearing element in the chrome, stamps the other
 theme, and records them again. Re-flow is the measurable cause of that feeling —
 a toggle that only changes colour leaves every box where it was.
 
-**Measured at 1440×900, animations frozen:**
+**Measured at 1440×900, animations frozen, on a board seeded with one sale:**
 
 | Element | Δx | Δy | Δw | Δh |
 |---|---|---|---|---|
-| The wordmark | 0.0 | 0.0 | 0.0 | 0.0 |
-| The offer, the count, the sold share | 0.0 | 0.0 | 0.0 | 0.0 |
+| The wordmark | 0.0 | 0.0 | −2.8 | 0.0 |
+| The offer line | **−65.7** | 0.0 | **+20.1** | 0.0 |
+| The pixels-left counter | **−45.4** | 0.0 | **+20.1** | 0.0 |
+| The sold-share pill | −11.9 | 0.0 | +9.4 | 0.0 |
 | The selection readout | 0.0 | 0.0 | 0.0 | 0.0 |
 | The Buy button | 0.0 | 0.0 | 0.0 | 0.0 |
 | The interaction legend | 0.0 | 0.0 | 0.0 | 0.0 |
-| The rail's head | 0.0 | 0.0 | **+7.3** | 0.0 |
-| A rail row | **+7.3** | 0.0 | **+60.0** | 0.0 |
+| The rail's head | 0.0 | 0.0 | +7.3 | 0.0 |
+| A rail row | +7.3 | 0.0 | **+67.4** | 0.0 |
 
-**The decision: each theme keeps its own faces.** Every fixed element on the
-page — the bar, the panel, the button, the legend — moves by exactly **0.0px**.
-The only drift is inside the settled rail, where a row is 60px wider in dark,
-and a rail is a horizontally scrolling strip whose content position carries no
-meaning: the two themes fit a different number of rows on screen and nothing a
-reader can point at has moved. That is a repaint, not a rebuild.
+**What this says, stated against what an earlier run of the same script said.**
+That run reported 0.0px across the whole top bar. It was measuring an EMPTY
+board, where the pixels-left counter carries `sm:hidden` — the million is
+already in the offer line beside it — so the counter had no box, was skipped,
+and the largest drift in the fixed chrome was silently absent from the table.
+The script seeds a known board now. **The top bar does re-flow.**
 
-**Where the 60px comes from, because it is not really about taste.** The cream
-register never had a monospace, so light's numeric role falls back to Karla,
-which is proportional. Karla carries tabular figures so digits still align and
-the rail's columns still read — but a mono and a proportional face at the same
-size are not the same width, and the rail is the one place this design sets long
-runs of digits. **If the rail ever needs the two themes to be the same width,
-the fix is to give light a monospace for the numeric role, not to give both
-themes one face.**
+**Nothing moves vertically and nothing changes height.** Every Δy and every Δh
+is 0.0, in the bar, in the panel and in the rail. The page's structure is
+identical in the two themes; what differs is the horizontal position of
+right-aligned content in one bar, because digits set in a monospace are wider
+than the same digits set in Karla, and the counter is the longest run of digits
+on the page.
+
+**Where it comes from, and what the alternative costs.** The cream register never
+had a monospace, so light's numeric role falls back to Karla. Giving light a
+mono would take every drift here to zero — and would change the cream
+register's numerals, which is the thing keeping each theme's own typography was
+meant to preserve. That is the trade, and it is the owner's:
+
+- **Each theme keeps its faces** — a ~66px horizontal shift of the offer line
+  when the toggle is pressed, no vertical movement, no height change.
+- **Light gains a monospace for numerals only** — zero drift, and the cream
+  register's counters, prices and coordinates stop being Karla.
 
 **Two things the measurement caught that no amount of looking would have.**
 Its first run reported a clean 0.0px everywhere — because it measured "light" by

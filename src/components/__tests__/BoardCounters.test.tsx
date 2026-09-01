@@ -44,7 +44,12 @@ function shownAt(html: string, width: "phone" | "desktop"): string[] {
   // The offer line: `hidden ... sm:block`.
   if (width === "desktop") shown.push("offer");
   // The remaining count: always on, unless it carries `sm:hidden`.
-  const countIsShed = /class="[^"]*\bsm:hidden\b[^"]*"[^>]*>\s*<span class="font-semibold/.test(html);
+  // Matches the count's own element rather than the span inside it: the
+  // markup's inner class moved from `font-semibold` to `pixels-left__n` when
+  // the counter grew, and a detector keyed on the inner span reported the count
+  // as SHOWN while the class that hides it was still right there. The
+  // suppression never broke; the instrument reading it did.
+  const countIsShed = /class="pixels-left[^"]*\bsm:hidden\b[^"]*"/.test(html);
   if (width === "phone" || !countIsShed) shown.push("count");
   return shown;
 }

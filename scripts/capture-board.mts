@@ -325,9 +325,22 @@ async function main(): Promise<void> {
   const browser = await launchChrome();
 
   try {
+    /*
+      EIGHT SHOTS: two themes, two states, two widths.
+
+      Each pass STAMPS its theme rather than letting one of them be the default.
+      A default is whatever the machine happens to prefer, and this machine's
+      headless Chrome prefers dark — which is how a sibling script measured the
+      dark theme twice and reported a flawless 0.0px over a comparison it had
+      never made. What each pass RESOLVED to is recorded and checked at the end.
+      See `~/.claude/GATES.md`, "A comparison names both states".
+    */
+    const resolved = new Map<string, string>();
+
     for (const state of ["empty", "full"] as const) {
       await seed(state === "full" ? layout() : []);
 
+      for (const theme of ["light", "dark"] as const)
       for (const size of WIDTHS) {
         await browser.resize(size.width, size.height);
         // A DIFFERENT URL PER CAPTURE, and it is not decoration. The first
@@ -337,7 +350,10 @@ async function main(): Promise<void> {
         // genuinely held 140 purchases. A screenshot that silently shows the
         // previous state is the worst possible output from this script: it is
         // evidence, and it was wrong.
-        await browser.goto(`${server.origin}/?capture=${state}-${size.name}`);
+        await browser.goto(`${server.origin}/?capture=${theme}-${state}-${size.name}`);
+        await browser.evaluate(
+          `document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+        );
 
         // The same settle the fit guard uses: the canvas has no size until
         // layout runs, so the first paint is of a board fitted to a zero box.
@@ -376,11 +392,40 @@ async function main(): Promise<void> {
         })()`);
         await sleep(150);
 
-        const name = `board-${state}-${size.name}.png`;
+        // What this pass actually resolved to, read off the page rather than
+        // assumed from what was asked for.
+        const face = await browser.evaluate<string>(
+          `getComputedStyle(document.querySelector("header.board-bar h1")).fontFamily`,
+        );
+        const ground = await browser.evaluate<string>(
+          `getComputedStyle(document.body).backgroundColor`,
+        );
+        resolved.set(`${theme}-${state}-${size.name}`, `${ground} · ${face}`);
+
+        const name = `board-${theme}-${state}-${size.name}.png`;
         await writeFile(join(OUT, name), await browser.screenshot());
-        console.log(`wrote ${name}`);
+        console.log(`wrote ${name.padEnd(30)} ${ground}  ${face.split(",")[0]}`);
       }
     }
+    /*
+      The two themes must have resolved to different things at every state and
+      width. If they did not, these are eight screenshots of one theme and the
+      pair somebody is about to compare is a pair of identical pictures.
+    */
+    for (const state of ["empty", "full"]) {
+      for (const size of WIDTHS) {
+        const light = resolved.get(`light-${state}-${size.name}`);
+        const dark = resolved.get(`dark-${state}-${size.name}`);
+        if (light === dark) {
+          throw new Error(
+            `Both themes resolved to the same thing at ${state}/${size.name}:\n` +
+              `  ${light}\n` +
+              "These captures compare a state with itself. See ~/.claude/GATES.md.",
+          );
+        }
+      }
+    }
+    console.log("\n  both themes resolved differently at every state and width.");
   } finally {
     await browser.close();
     await server.stop();
