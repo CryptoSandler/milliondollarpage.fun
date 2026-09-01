@@ -4,6 +4,7 @@ import { queryOne } from "../../lib/db";
 import { testWallet } from "../../lib/wallet/__tests__/keypair";
 import { findChrome, launchChrome, sleep, waitFor, type Browser } from "./cdp";
 import { assertMachineIsQuiet } from "./machine";
+import { acquireHarnessLock, releaseHarnessLock } from "./harness-lock";
 import { startDevServer, type DevServer } from "./dev-server";
 import { mockWallet, type MockWallet } from "./mock-wallet";
 
@@ -104,6 +105,12 @@ async function waitForPhrase(what: string, phrase: string, timeoutMs = 30_000): 
 
 describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
   beforeAll(async () => {
+    // THE LOCK COMES FIRST, before the load check, and the order is the point.
+    // Another repository's harness is the commonest reason this machine is
+    // loud, so asking "is it quiet" first would report a load average when the
+    // useful answer is a pid and a working directory. Fail by name, then by
+    // number. See `~/.claude/GATES.md`.
+    acquireHarnessLock();
     assertMachineIsQuiet("The end-to-end suite");
     server = await startDevServer();
     browser = await launchChrome();
@@ -114,6 +121,11 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
   }, 240_000);
 
   afterAll(async () => {
+    // Released even when the suite failed — which is the whole reason it lives
+    // in `afterAll` rather than at the end of the last test. A harness lock
+    // that survives a red run blocks every repository on this machine until
+    // somebody deletes a file they have never heard of.
+    releaseHarnessLock();
     // Both by PID, and both even if the test failed: a leaked `next dev` holds
     // the advisory lock's database connection and a leaked Chrome holds a
     // gigabyte.
