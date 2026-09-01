@@ -63,6 +63,55 @@ American buyer to open an account and pass KYC to buy three dollars of pixels.
 
 ---
 
+## Open: what the idle chrome budget is, now that there is a line of instruction in it
+
+**Status: undecided. The owner asked for the line; the number it breaks is also
+the owner's. Nothing is merged until they pick.**
+
+The interaction legend was deleted and left the pointer half of what it said
+homeless — a drag on a canvas is the one thing on this page that is not
+discoverable, and everything else is a labelled button. The replacement is one
+line, *Drag on the wall to choose your pixels*, docked where the purchase panel
+docks and gone the instant a rectangle exists.
+
+**It does not cost the wall a pixel.** `scripts/board-share.mts` reports the
+board's own rectangle identical, before and after, at every viewport: 1285×824
+at 1440×900, 1567×1004 at 1920×1080, 2170×1390 at 2560×1440, 374×241 at 390×844.
+The line floats, exactly as the purchase panel does.
+
+**It costs the IDLE CHROME BUDGET 33px, and that budget is 60.** Measured:
+
+| Viewport | Idle chrome before | Idle chrome with the line | Budget |
+|---|---|---|---|
+| 1440×900 | 60px | **93px** | 60 |
+| 1920×1080 | 60px | **93px** | 60 |
+| 1280×800 | 60px | **93px** | 60 |
+| 390×844 | 34px | **70px** | 60 |
+| 2560×1440, rails on | 34px | **34px** | 34 |
+
+The rails are the one layout where it is free: there the line is at the foot of
+the left rail, which is beside the board rather than above or below it.
+
+**The two futures, both written out:**
+
+- **Raise the idle budget to 93.** One constant in `board-share.mts` and one
+  paragraph in DESIGN.md's *The vertical chrome budget*. What it concedes is the
+  sentence that budget exists to enforce — "everything that is not the wall is a
+  small contribution to it" — for the state where the reader is only looking.
+  What it buys is the instruction in the corner the eye is already in, and it
+  costs the wall nothing, which is the thing the budget was written to protect.
+- **Keep 60 and move the line onto the board's own margin**, under the preset
+  rail. DESIGN.md already grants that rail an exemption by name — "it costs the
+  wall a strip of its own top margin instead of costing the viewport a band" —
+  and a second overlay would extend it to two. The budget survives untouched and
+  the line moves from the bottom of the eye to the top.
+
+**What must not happen is the third thing:** editing the guard's number as part
+of shipping the change it catches. The number is red on purpose until somebody
+decides which of the two above is the design.
+
+---
+
 ## Settled: the chrome may stand in the letterbox, and never in the wall
 
 **Status: settled 2026-09-01, by the owner, as an amendment to DESIGN.md's

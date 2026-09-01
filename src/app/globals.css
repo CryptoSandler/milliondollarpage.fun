@@ -779,6 +779,43 @@ h3 {
   }
 
   /*
+   * THE ONE LINE THAT SAYS HOW TO START, and the only thing on screen while
+   * nothing is selected.
+   *
+   * It closes the hole the interaction legend left. That legend was three
+   * lines, hidden below `lg`, hidden again in a short window, and rendered by
+   * nothing at all for the last three batches — see DESIGN.md, which recorded
+   * the pointer half of what it said as an open gap rather than closing it
+   * quietly. This is that gap closed, at the size the gap actually was: a drag
+   * is not discoverable and everything else is. The wheel and shift-drag are
+   * deliberately NOT here — somebody who reaches for them finds them, and a
+   * line that lists every gesture is a line nobody reads.
+   *
+   * IT DOCKS WHERE THE PURCHASE PANEL DOCKS, in all three layouts, because it
+   * is the same slot in the same conversation: this is what that corner says
+   * before there is a rectangle, and the panel is what it says after. The two
+   * are never on screen together — `BoardView` renders exactly one of them —
+   * so nothing here has to get out of the other's way.
+   */
+  .board-hint {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(var(--tape-h) + 10px);
+    z-index: 12;
+    max-width: min(calc(100vw - 24px), 560px);
+    padding: 7px 15px;
+    border: 1px solid var(--control-line);
+    border-radius: var(--radius-pill);
+    background: var(--card);
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+    font-size: 12.5px;
+    line-height: 1.35;
+    color: var(--body);
+    text-align: center;
+  }
+
+  /*
    * THE COUNT OF WHAT IS LEFT, at the size the thing it counts deserves.
    *
    * It was 13px of body text in a row of body text. This is the number the
@@ -1007,6 +1044,21 @@ h3 {
       border-bottom: 0;
       border-radius: var(--radius-lg) var(--radius-lg) 0 0;
       padding-bottom: max(0px, env(safe-area-inset-bottom));
+    }
+
+    /* The hint takes the same bottom edge as the sheet it stands in for. */
+    .board-hint {
+      left: 0;
+      right: 0;
+      bottom: var(--tape-h);
+      transform: none;
+      max-width: none;
+      border-left: 0;
+      border-right: 0;
+      border-bottom: 0;
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      padding: 9px 12px;
+      padding-bottom: max(9px, env(safe-area-inset-bottom));
     }
   }
 
@@ -1719,6 +1771,25 @@ h3 {
      2px offset — `overflow: hidden` here would clip it, which is the failure
      DESIGN.md has already had three times in three other places. */
   overflow: visible;
+}
+
+/*
+ * And the hint takes the same foot of the same column, for the same reason it
+ * takes the same dock in the other two layouts: it is what that corner says
+ * before there is a rectangle to say anything else about.
+ */
+[data-rails="on"] .board-hint {
+  position: static;
+  left: auto;
+  bottom: auto;
+  transform: none;
+  margin-top: auto;
+  width: 100%;
+  max-width: none;
+  padding: 10px 12px;
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+  text-align: left;
 }
 
 [data-rails="on"] .board-controls .selection-panel {

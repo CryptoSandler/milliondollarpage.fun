@@ -81,7 +81,7 @@ const VIEWPORTS = [
 const MEASURE = `(() => {
   const board = document.querySelector("canvas")?.dataset.boardRect ?? null;
   const parts = [];
-  for (const selector of ["header.board-bar", ".board-tape", ".board-controls:not([hidden])"]) {
+  for (const selector of ["header.board-bar", ".board-tape", ".board-controls:not([hidden])", ".board-hint"]) {
     const el = document.querySelector(selector);
     if (!el) continue;
     const box = el.getBoundingClientRect();

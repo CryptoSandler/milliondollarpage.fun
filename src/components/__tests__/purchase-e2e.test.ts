@@ -623,6 +623,111 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
   );
 
   /**
+   * The one line that says how to start: there while nothing is drawn, gone the
+   * moment something is.
+   *
+   * WHAT IT IS GUARDING. The line closes the hole the interaction legend left,
+   * and the whole of its value is that it goes away — an instruction that is
+   * still on screen after somebody has followed it is not an instruction, it is
+   * furniture. So the absence is asserted as hard as the presence, and both are
+   * asserted in both registers, because a line whose colour is only defined in
+   * one theme is a line that is invisible in the other.
+   *
+   * At 1440 it is in the dock the purchase panel floats in; at 2560 it is at
+   * the foot of the left rail. Both, because those are two different rules and
+   * the second one only exists on monitors nobody develops on.
+   */
+  it(
+    "shows one line of instruction until a rectangle is drawn, in both themes",
+    async () => {
+      const LINE = "Drag on the wall to choose your pixels";
+      const grounds = new Map<string, string>();
+
+      for (const [width, height] of [
+        [1440, 900],
+        [2560, 1440],
+      ] as const) {
+        for (const theme of ["light", "dark"] as const) {
+          const at = `${theme} at ${width}x${height}`;
+          await browser.resize(width, height);
+          await browser.goto(`${server.origin}/?hint=${theme}-${width}`);
+          await browser.evaluate(
+            `document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+          );
+          await waitFor(`the board at ${at}`, async () =>
+            browser.evaluate<string | null>(
+              `document.querySelector('canvas')?.dataset.boardRect ?? null`,
+            ),
+          );
+
+          // 1. THERE, with its words, a real box, and this register's colours.
+          const idle = JSON.parse(
+            await waitFor(`the instruction line ${at}`, async () =>
+              browser.evaluate<string | null>(
+                `(() => { const el = document.querySelector(".board-hint");
+                   if (!el) return null;
+                   const b = el.getBoundingClientRect();
+                   const s = getComputedStyle(el);
+                   return JSON.stringify({ text: el.textContent.trim(), w: b.width, h: b.height,
+                     colour: s.color, ground: s.backgroundColor,
+                     bodyGround: getComputedStyle(document.body).backgroundColor }); })()`,
+              ),
+            ),
+          ) as {
+            text: string;
+            w: number;
+            h: number;
+            colour: string;
+            ground: string;
+            bodyGround: string;
+          };
+
+          expect(idle.text, `the instruction line's words, ${at}`).toBe(LINE);
+          expect(idle.w, `the line has no width, ${at}`).toBeGreaterThan(0);
+          expect(idle.h, `the line has no height, ${at}`).toBeGreaterThan(0);
+          // Painted rather than transparent: a rule defined in one register and
+          // not the other is exactly how a line goes missing in one theme.
+          expect(idle.colour, `the line's colour, ${at}`).not.toBe("rgba(0, 0, 0, 0)");
+          expect(idle.ground, `the line's ground, ${at}`).not.toBe("rgba(0, 0, 0, 0)");
+          grounds.set(at, `${idle.colour} on ${idle.ground}`);
+
+          // And the panel is NOT up: the two share a dock and must never share
+          // a moment.
+          expect(
+            await browser.evaluate<boolean>(
+              `!!document.querySelector(".board-controls:not([hidden])")`,
+            ),
+            `the purchase panel is open with nothing selected, ${at}`,
+          ).toBe(false);
+
+          // 2. GONE, the moment there is a rectangle.
+          await selectARectangle(browser);
+          expect(
+            await browser.evaluate<boolean>(`!!document.querySelector(".board-hint")`),
+            `the instruction line survived a selection, ${at}`,
+          ).toBe(false);
+        }
+      }
+
+      /*
+        AND THE TWO PASSES WERE REALLY TWO REGISTERS. Headless Chrome follows
+        the machine's own preference, and this one prefers dark — a pair of
+        assertions that both ran in dark would pass while saying nothing about
+        light. Same guard the capture script makes, for the same reason.
+      */
+      for (const width of [1440, 2560]) {
+        const light = grounds.get(`light at ${width}x${width === 1440 ? 900 : 1440}`);
+        const dark = grounds.get(`dark at ${width}x${width === 1440 ? 900 : 1440}`);
+        expect(
+          light,
+          `both themes resolved the instruction line to ${light} at ${width} — this compared a register with itself`,
+        ).not.toBe(dark);
+      }
+    },
+    240_000,
+  );
+
+  /**
    * The hover card at the board's extreme edges, where the rails are.
    *
    * WHY THE EDGE AND NOWHERE ELSE. The card follows the pointer, so it is the

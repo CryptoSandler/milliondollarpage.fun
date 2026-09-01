@@ -842,15 +842,26 @@ that floated the panel — rendered by nothing at all: that change dropped it fr
 the tree and left the component, its stylesheet rule and its entry in the
 theme-coherence guard standing. All four are deleted now.
 
-**Half of what it said is still said, and half is not.** The keyboard half is on
+**Half of what it said is still said where it belongs.** The keyboard half is on
 the canvas itself, as its own `aria-describedby` — arrows, shift, alt-arrows,
 enter, escape — read out the moment focus lands on the board, which is a better
-home for it than a paragraph nobody using a pointer reads. **The pointer half is
-now said nowhere in the interface**: drag to outline, click to place a size,
-scroll or pinch to zoom, shift-drag to pan once zoomed in. That is a real loss
-and it is recorded here as an open gap rather than closed on the way past. The
-honest place for it is `/faq`, which does not carry it yet, and a side rail is
-the first layout this design has had with room for it.
+home for it than a paragraph nobody using a pointer reads.
+
+**The pointer half is one line now, and it is only there until it has been
+followed.** *Drag on the wall to choose your pixels* — docked where the purchase
+panel docks, in all three placements, and gone the instant a rectangle exists.
+It replaced an open gap this document carried for one batch: with the legend
+deleted, nothing on screen said a pointer could draw here, and a drag on a
+canvas is the one interaction on this page that is not discoverable. Everything
+else is a labelled button.
+
+**What it deliberately does not say**: the wheel, the pinch and shift-drag —
+somebody who reaches for those finds them, and a line that lists every gesture
+is a line nobody finishes — and the presets, which are four labelled buttons on
+screen and do not need a sentence pointing at them.
+
+**It costs the idle chrome 33px, and that is an open decision rather than a
+settled one.** See the vertical chrome budget below, and `DECISIONS.md`.
 
 ## The wall takes almost the whole screen
 
@@ -863,6 +874,17 @@ preference.
 **≤ 60px with nothing selected**, and that is the whole of it: a **34px** header
 and a **26px** settled rail. **≤ 140px once the purchase panel is open**, which
 is the one piece of chrome that comes and goes.
+
+**THE IDLE BUDGET IS CONTESTED, AND THE DOCUMENT SAYS SO RATHER THAN PICKING.**
+The one-line instruction that replaced the interaction legend docks where the
+purchase panel docks, and a dock is a third band: measured, the idle chrome is
+**93px** at every desktop width (34 header + 33 line + 26 register) and **70px**
+at 390 (34 + 36). `scripts/board-share.mts` still holds 60 and therefore fails,
+deliberately, rather than being edited to admit the thing it was written to
+catch. **The board's own rectangle is identical to the pixel in both states at
+every viewport** — the line floats, exactly as the panel does — so what is at
+stake is how much chrome may be on screen while a reader is only looking, not
+how big the wall is. `DECISIONS.md` carries both outcomes.
 
 **With the side rails on the budget is 34px, and it is the header alone.** That
 is the whole of the vertical chrome there: the settled register and the

@@ -626,6 +626,38 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
         />
 
         {/*
+          HOW TO START, IN ONE LINE, AND ONLY UNTIL SOMEBODY HAS STARTED.
+
+          A drag on a canvas is not discoverable and nothing else on this page
+          is: the presets are buttons, the zoom is buttons, and the board itself
+          announces its keys to a screen reader the moment focus lands on it.
+          What had no home at all — since the batch that floated the panel
+          deleted the interaction legend's last caller — was the sentence that
+          says a pointer can draw here. DESIGN.md recorded that as an open gap;
+          this is it closed.
+
+          THE WHEEL AND SHIFT-DRAG ARE DELIBERATELY ABSENT. A line that lists
+          every gesture is a line nobody finishes, and both of those are things
+          a reader reaches for rather than things they have to be told exist.
+          The presets are absent for a different reason: they are four labelled
+          buttons on screen, and a sentence pointing at a button is a sentence
+          about the interface rather than about the wall. The keyboard's own
+          three keys stay where they already were, on the canvas's
+          `aria-describedby`, read to the people who need them and nobody else.
+
+          IT IS ONE LINE AT EVERY WIDTH, and that is what picked the wording:
+          at 390 the sheet is 366px wide and this sets at about 250, so it never
+          becomes the two-line block the legend was.
+
+          It docks exactly where the purchase panel docks, and the two are never
+          both on screen: this is what that corner says before there is a
+          rectangle, and the panel is what it says after.
+        */}
+        {selection === null && (
+          <p className="board-hint">Drag on the wall to choose your pixels</p>
+        )}
+
+        {/*
           THE PANEL IS PRESENT ONLY WHILE THERE IS SOMETHING TO BUY.
 
           `hidden` rather than unmounting, so the wallet's connection and every
