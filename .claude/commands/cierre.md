@@ -33,10 +33,30 @@ cheapest bug you will ever catch.
 Run all three, in this order, and paste each one's full output.
 
 ```bash
-npm test
+npm test > /tmp/suite.log 2>&1; echo "exit: $?"; tail -40 /tmp/suite.log
 npm run lint
 npm run build
 ```
+
+**The suite's output goes to a FILE, always.** Piping it through `tail` loses
+the failures and keeps the summary, which is the wrong half: a run on this
+project once reported 45 failures across nine files and the detail was gone
+because the command ended in `| tail -7`. The re-run passed, so the cause is
+still unknown. Redirect, then read the file — the summary is at the end either
+way, and the failures are still there when they matter.
+
+**Before any stage that measures time, the machine has to be quiet.**
+`assertMachineIsQuiet` in `src/components/__tests__/machine.ts` refuses rather
+than skips, because a skipped timing test is green and green is what a loaded
+machine must not report. Where a test can be written against a BASELINE instead
+— the same function on a small input, timed in the same run — do that and skip
+the precondition: it is load-independent, and `base58.test.ts` is the worked
+example.
+
+**A server left alive on the port fails the run, by name.** `assertPortIsFree`
+names the holding process and its PID, because "port in use" with no PID sends
+the reader to `pkill`, and `pkill -f vitest` has already killed another
+project's test run on this machine.
 
 `npm test` needs `TEST_DATABASE_URL` set and the test database reachable — `vitest.setup.ts`
 compares where that URL and `DATABASE_URL` actually point rather than how they are spelled,

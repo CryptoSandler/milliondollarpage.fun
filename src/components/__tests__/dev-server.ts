@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { freePort, waitFor } from "./cdp";
+import { assertPortIsFree } from "./machine";
 
 /**
  * A real `next dev` on a free port, pointed at the test database.
@@ -58,6 +59,11 @@ export type DevServer = {
 
 export async function startDevServer(): Promise<DevServer> {
   const port = await freePort();
+  // `freePort` asks the OS for one nobody is listening on, and then a moment
+  // passes before `next dev` binds it. This closes that window and, more
+  // usefully, produces a named process instead of a confusing failure when a
+  // leftover server or another project's harness is already there.
+  assertPortIsFree(port);
   const child: ChildProcess = spawn("npx", ["next", "dev", "-p", String(port)], {
     cwd: process.cwd(),
     env: {

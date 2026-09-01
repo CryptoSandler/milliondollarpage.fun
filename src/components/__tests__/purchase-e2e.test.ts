@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { queryOne } from "../../lib/db";
 import { testWallet } from "../../lib/wallet/__tests__/keypair";
 import { findChrome, launchChrome, sleep, waitFor, type Browser } from "./cdp";
+import { assertMachineIsQuiet } from "./machine";
 import { startDevServer, type DevServer } from "./dev-server";
 import { mockWallet, type MockWallet } from "./mock-wallet";
 
@@ -103,6 +104,7 @@ async function waitForPhrase(what: string, phrase: string, timeoutMs = 30_000): 
 
 describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
   beforeAll(async () => {
+    assertMachineIsQuiet("The end-to-end suite");
     server = await startDevServer();
     browser = await launchChrome();
     wallet = mockWallet();
