@@ -425,6 +425,46 @@ export async function boardStandings(limit = 10): Promise<Standing[]> {
 }
 
 /**
+ * What the wall sold today, on the one page that is allowed to ask.
+ *
+ * WHO CALLS THIS: `src/app/stats/page.tsx`, and nothing else. It is
+ * DELIBERATELY NOT PART OF `boardStats` — the shape `/api/board` ships and the
+ * top bar renders from — for exactly the reason `soldValueBaseUnits` below is
+ * not. DESIGN.md is about the BAR: a number beside the offer is read as part of
+ * the offer, and "sold today" beside a million pixels at a dollar each is a
+ * nudge rather than a count. The board is never told the number, so the board
+ * cannot print it.
+ *
+ * `docs/marketing-fomo.md` recommended this last of five and said why: on most
+ * days it reads zero, and a scoreboard for a quiet wall is an anti-nudge. It is
+ * here anyway, because the alternative — showing it only once it flatters — is
+ * the thing DESIGN.md refuses in as many words: "a number that appears only
+ * when it is impressive is a claim rather than a count."
+ *
+ * TODAY MEANS SINCE MIDNIGHT UTC, and the page says so. Any other definition is
+ * a different number for every reader, which is not a count either.
+ */
+export type SoldToday = { blocks: number; pixels: number };
+
+export async function soldToday(): Promise<SoldToday> {
+  const rows = await query<{ blocks: string; pixels: string }>(
+    /*
+      `AT TIME ZONE 'UTC'` TWICE, AND BOTH ARE LOAD-BEARING. The first turns
+      now() into a wall clock in UTC so the truncation cuts at UTC midnight; the
+      second turns that back into an instant. Without the second, Postgres
+      compares a timestamptz against a timestamp by assuming the SESSION's zone,
+      which would quietly make "today" mean the connection's day rather than the
+      day this page names.
+    */
+    `SELECT count(*)::bigint AS blocks, coalesce(sum(w * h), 0)::bigint AS pixels
+       FROM blocks
+      WHERE status IN ('paid', 'minted')
+        AND paid_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'`,
+  );
+  return { blocks: Number(rows[0].blocks), pixels: Number(rows[0].pixels) };
+}
+
+/**
  * What the wall has taken, in base units.
  *
  * DELIBERATELY NOT PART OF `boardStats`. That shape is what `/api/board` ships

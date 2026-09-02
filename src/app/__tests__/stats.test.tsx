@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { execute } from "../../lib/db";
 import { GET } from "../api/board/route";
 import StatsPage from "../stats/page";
-import { boardStandings, soldValueBaseUnits } from "../../lib/board/blocks";
+import { boardStandings, soldToday, soldValueBaseUnits } from "../../lib/board/blocks";
 
 /**
  * What `/stats` says, and the one number that is allowed to be here and
@@ -115,5 +115,69 @@ describe("what the board is never told", () => {
     const body = JSON.parse(await (await GET()).text());
     expect(Object.keys(body)).not.toContain("soldValueBaseUnits");
     expect(Object.keys(body.stats)).toEqual(["pixelsSold", "blocksSold", "percentSold"]);
+  });
+});
+
+/**
+ * The one number this batch added, and the two ways it could be dishonest: by
+ * counting a day that is not the day it names, and by appearing on the board.
+ */
+describe("what sold today", () => {
+  it("counts rectangles and pixels settled since midnight UTC, and nothing older", async () => {
+    // Two today, one yesterday. `now()` rather than a literal, because "today"
+    // is a moving target and a fixture with a date in it stops being today.
+    await execute(
+      `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at, payment_signature)
+       VALUES (0,   0, 10, 10, 'paid', $1, $2, now(), 'today-a'),
+              (20,  0, 20, 20, 'paid', $1, $3, date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC', 'today-b'),
+              (60,  0, 30, 30, 'paid', $1, $4, now() - interval '2 days', 'older')`,
+      [PER_PIXEL, 100 * PER_PIXEL, 400 * PER_PIXEL, 900 * PER_PIXEL],
+    );
+
+    expect(await soldToday()).toEqual({ blocks: 2, pixels: 500 });
+  });
+
+  it("counts a minute before midnight UTC as yesterday", async () => {
+    await execute(
+      `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at, payment_signature)
+       VALUES (0, 0, 10, 10, 'paid', $1, $2,
+               (date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') - interval '1 minute',
+               'just-missed')`,
+      [PER_PIXEL, 100 * PER_PIXEL],
+    );
+
+    expect(await soldToday()).toEqual({ blocks: 0, pixels: 0 });
+  });
+
+  it("reads zero as its own sentence rather than as a figure that flatters", async () => {
+    const html = await render();
+    expect(html).toContain("Nothing has sold today yet");
+  });
+
+  it("says the count and the window on the page", async () => {
+    await sell(0, 40, 40, new Date().toISOString());
+    const html = await render();
+
+    // The count is in its own span — a measurement is mono and the sentence
+    // around it is not — so the number and its noun are asserted as the markup
+    // actually renders them rather than as they read.
+    expect(html).toContain(">1</span> rectangle");
+    expect(html).toContain("sold today");
+    expect(html).toContain("1,600 pixels");
+    expect(html).toContain("counting since midnight UTC");
+  });
+
+  /**
+   * DESIGN.md: "nothing on the board promises revenue […] the board is never
+   * handed the number." A count of today's sales is not revenue, and it is
+   * forecast-shaped in exactly the way that rule is about — so the mechanism is
+   * the same one `soldValueBaseUnits` uses: it is not in the payload.
+   */
+  it("never reaches the board's payload", async () => {
+    await sell(0, 40, 40, new Date().toISOString());
+    const body = await (await GET()).json();
+
+    expect(Object.keys(body.stats)).toEqual(["pixelsSold", "blocksSold", "percentSold"]);
+    expect(JSON.stringify(body)).not.toContain("soldToday");
   });
 });

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import ThemeToggle from "../../components/ThemeToggle";
-import { boardStats, boardStandings, soldValueBaseUnits } from "../../lib/board/blocks";
+import { boardStats, boardStandings, soldToday, soldValueBaseUnits } from "../../lib/board/blocks";
 import { TOTAL_PIXELS } from "../../lib/board/geometry";
 import { formatPercentSold, formatUsdc, pixelCount } from "../../lib/board/pricing";
 import { onlineNow, presenceHistory } from "../../lib/board/presence";
@@ -51,7 +51,7 @@ export const metadata: Metadata = {
 };
 
 export default async function StatsPage() {
-  const [online, history, stats, taken, perPixel, standings, settled] = await Promise.all([
+  const [online, history, stats, taken, perPixel, standings, settled, sold] = await Promise.all([
     onlineNow(),
     presenceHistory(),
     boardStats(),
@@ -59,6 +59,7 @@ export default async function StatsPage() {
     pricePerPixelBaseUnits(),
     boardStandings(),
     recentPurchases(),
+    soldToday(),
   ]);
 
   const ceiling = TOTAL_PIXELS * perPixel;
@@ -111,6 +112,36 @@ export default async function StatsPage() {
             note={`of ${formatUsdc(ceiling)}, which is what the whole wall costs`}
           />
         </dl>
+
+        {/*
+          A FIFTH NUMBER AND NOT A FIFTH FIGURE. DESIGN.md says "four figures,
+          and every one of them is a count", and those four are what the wall
+          IS: who is on it, who came today, how much is sold, how much has been
+          taken. This is a RATE — a thing that happened during a window it has
+          to name — so it does not belong in a row of standing totals, and a
+          fifth cell would leave an orphan in the two-column grid a phone gets
+          as well.
+
+          IT SAYS ZERO OUT LOUD. Most days it will. Hiding it until it flatters
+          is the thing DESIGN.md refuses — "a number that appears only when it
+          is impressive is a claim rather than a count" — and this is the
+          weakest of the five recommendations in `docs/marketing-fomo.md`
+          precisely because the honest version of a nudge is often an anti-nudge.
+        */}
+        <p className="mt-4 text-[15px] leading-relaxed text-body">
+          {sold.blocks === 0 ? (
+            "Nothing has sold today yet, counting since midnight UTC."
+          ) : (
+            <>
+              <strong className="font-bold text-ink">
+                <span className="tabular">{sold.blocks.toLocaleString("en-US")}</span>{" "}
+                {sold.blocks === 1 ? "rectangle" : "rectangles"}
+              </strong>{" "}
+              sold today — <span className="tabular">{pixelCount(sold.pixels)}</span>, counting
+              since midnight UTC.
+            </>
+          )}
+        </p>
 
         <section className="mt-12">
           <h2 className="font-display text-[22px] font-semibold tracking-tight">

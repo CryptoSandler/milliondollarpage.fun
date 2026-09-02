@@ -26,6 +26,49 @@ rather than to forbid all owner change.
 
 ---
 
+## Settled: the moment this wall tells somebody about is the first 1,000 pixels
+
+**Status: settled 2026-09-02 by the owner.** The number is chosen; nothing is
+built and nothing is scheduled, because the deliverable of this decision is the
+number rather than a job that runs.
+
+`docs/marketing-fomo.md` went looking for the mechanic that sold the 2005
+original and found that it was not a mechanic. Sales were flat for two weeks and
+came from friends and family. At $1,000 taken, a press release — paid for out of
+that first thousand — was picked up by the BBC, and the curve turns there and
+never comes back down. Every on-page device the genre credits that page with was
+already on it during the two flat weeks.
+
+**The threshold is 1,000 pixels sold**, which is parity with the original: a
+million pixels at a dollar, and a thousandth of the wall gone is exactly where
+Tew was when he sent his. It is early enough to actually arrive, and it is a
+real threshold rather than a flattering one.
+
+**It is counted in PIXELS, not in dollars**, and that is not decoration.
+DESIGN.md: "nothing on the board promises revenue. Not a million dollars raised,
+not a total, not an implied one." A press release is not the board, but "we have
+taken $1,000" is a sentence that ends up quoted beside the offer. "The first
+thousand pixels are sold" is the same instant, said as a count.
+
+**The two doors, kept open and written out**, because the number is the owner's
+and may move:
+
+- **A smaller number** — the first sale, the first hundred pixels — is the story
+  told to an emptier room, and it spends the one moment a stranger writes about
+  you on a figure they can dismiss. What it buys is days instead of weeks.
+- **A larger number** — a tenth of the wall, half the wall — is a louder story
+  and a longer wait, and it risks the case where the wall never gets there
+  because nobody has heard of it. The original did not wait: it announced at a
+  thousandth and let the coverage do the selling.
+
+**What this changes in the code: nothing.** `/stats` already prints pixels sold
+against the million. A threshold is a thing a person watches. If it should ever
+notify rather than be noticed, the honest version is a line in the presence cron
+that sends once — and sending mail from this project is a separate decision
+nobody has taken.
+
+---
+
 ## Settled: the on-ramp is a link, not an integration
 
 **Status: settled 2026-08-28. Reversible on real data.**

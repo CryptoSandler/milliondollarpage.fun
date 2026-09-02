@@ -1414,6 +1414,15 @@ visitor is a salted one-way hash of an address and a minute, and there is no
 path, referrer, session or cookie in the schema that could turn it back into
 somebody.
 
+**And one number that is not a figure: what sold today.** It is a rate rather
+than a standing total, so it reads as a sentence under the four rather than as a
+fifth cell in their row — and it names its own window, *since midnight UTC*,
+because "today" without one is a different number for every reader. **It says
+zero out loud**, which on most days is what it will say: hiding it until it
+flatters is the same mistake "X online shows from one" already refuses. It is on
+`/stats` and nowhere else, by the mechanism the money total uses — `boardStats`
+is not told it, so the board cannot print it.
+
 **"X online" shows from one.** The obvious rule is to hide it until the number
 flatters, and it is wrong twice: a number that appears only when it is
 impressive is a claim rather than a count, and the first person on a wall

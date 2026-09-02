@@ -1,6 +1,8 @@
 import { config } from "dotenv";
 import { Client } from "pg";
+import { assertNoForeignSuite } from "./src/components/__tests__/machine";
 import { RUN_LOCK_NAME, directEndpoint, lockKey } from "./src/lib/run-lock";
+import { takeSuiteLock, type SuiteLock } from "./suite-lock";
 
 /**
  * Serialises whole suite runs against the shared test database.
@@ -39,9 +41,32 @@ import { RUN_LOCK_NAME, directEndpoint, lockKey } from "./src/lib/run-lock";
 const WAIT_TIMEOUT_MS = 20 * 60 * 1000;
 
 let client: Client | undefined;
+let suiteLock: SuiteLock | undefined;
 
 export async function setup(): Promise<void> {
   config({ path: ".env.local" });
+
+  /*
+    THREE LOCKS, IN THIS ORDER, EACH ANSWERING A DIFFERENT QUESTION.
+
+    1. The MACHINE lock: is any other measuring suite running anywhere on this
+       machine? It WAITS rather than refusing, because queueing costs the same
+       wall clock as a manual re-run and needs nobody. This is what stops a
+       worker waiting for CPU past Postgres's idle timeout and coming back to a
+       closed connection — the failure that read as nine database bugs on
+       2026-09-02. `suite-lock.ts` has the numbers.
+
+    2. `assertNoForeignSuite`: the net for the one thing the lock cannot see —
+       a browser-driving run in another repository, which competes for the same
+       cores without ever running vitest. It refuses rather than waits, because
+       the browser harness has its own lock and its own queue.
+
+    3. The DATABASE lock below: is another run of THIS suite using THIS
+       database? A file lock cannot answer that from a second machine, which is
+       why it is still here and still last.
+  */
+  suiteLock = await takeSuiteLock();
+  assertNoForeignSuite();
 
   const url = process.env.TEST_DATABASE_URL?.trim();
   // Never interpolate the value into the message: this string reaches logs.
@@ -94,4 +119,8 @@ export async function teardown(): Promise<void> {
   // rather than exiting cleanly.
   await client?.end().catch(() => {});
   client = undefined;
+  // Same property, one layer out: closing the descriptor releases the machine
+  // lock, and so does the process dying.
+  suiteLock?.release();
+  suiteLock = undefined;
 }

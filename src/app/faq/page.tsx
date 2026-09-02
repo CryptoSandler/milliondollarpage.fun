@@ -334,6 +334,34 @@ export default function AboutPage() {
           display anything — which is true about what a pixel can SHOW, and was never a reason to
           refuse to sell one.
         </p>
+        {/*
+          THE GENRE'S FAILURE, NAMED ON OUR OWN PAGE, and it is the most useful
+          fact in `docs/marketing-fomo.md`: the buyer's real fear here is that
+          this is a 2005 page whose links stopped working. Saying it first is
+          worth more than any claim we could make instead.
+
+          WHAT FOLLOWS IT IS THE INVARIANT AND NOTHING MORE. `DECISIONS.md`
+          holds whether a rectangle can ever change hands OPEN, and "not to be
+          answered by anything shipped" — and a reassuring paragraph about
+          permanence is the likeliest sentence on this site to answer it by
+          accident, in either direction. `copy-doors.test.tsx` is the guard.
+        */}
+        <p className="mt-3 text-[16px] leading-relaxed text-body">
+          <strong className="font-semibold text-ink">
+            And twenty years on, a lot of that page does not go anywhere any more.
+          </strong>{" "}
+          A study in 2017 counted 547 of its 2,816 links dead and another 489 pointing somewhere
+          else entirely — 342,000 pixels&apos; worth, at a dollar a pixel. The BBC put the rot at
+          around 40% in 2019. The page is still up; much of what it advertised is not.
+        </p>
+        <p className="mt-3 text-[16px] leading-relaxed text-body">
+          That is the part worth being exact about here, so: your picture is stored and served from
+          this site rather than fetched from a server somebody else is paying for, which means the
+          link on your rectangle can rot the way theirs did and the picture cannot. A sold pixel
+          does not change owner or content without a signature from the wallet that bought it, and
+          it never expires. A takedown removes what is displayed and never who owns it. What none
+          of that is, is a promise about a number of years — you will not find one on this page.
+        </p>
 
         {/* -------------------------------------------------------- why solana */}
         <h2 className="mt-14 font-display text-[22px] font-semibold tracking-tight">

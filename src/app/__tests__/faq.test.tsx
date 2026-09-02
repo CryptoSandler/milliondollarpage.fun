@@ -24,18 +24,15 @@ describe("what the FAQ says about transfer", () => {
     expect(html).toContain("you will not find us ruling it out");
   });
 
-  it("never says transfer will not exist", () => {
-    expect(html.toLowerCase()).not.toContain("non-transferable");
-    expect(html.toLowerCase()).not.toContain("cannot be transferred");
-    expect(html.toLowerCase()).not.toContain("never be transferred");
-    expect(html.toLowerCase()).not.toContain("will never exist");
-  });
-
-  it("never promises it either", () => {
-    expect(html.toLowerCase()).not.toContain("will be able to sell");
-    expect(html.toLowerCase()).not.toContain("transfer is coming");
-    expect(html.toLowerCase()).not.toContain("resell");
-  });
+  /*
+    THE TWO "never says" CASES THAT WERE HERE MOVED TO `copy-doors.test.tsx`,
+    which runs the same list over every page that carries prose rather than only
+    over the one that discusses transfer on purpose. The pages most likely to
+    close that door are the ones that do NOT discuss it — where a reassuring
+    sentence about permanence answers it without anybody noticing. What stays
+    here is what is specific to this page: that it still says the question is
+    open, and that it still tells somebody not to buy for that reason.
+  */
 
   it("still tells somebody not to buy for that reason", () => {
     expect(html).toContain("If being able to move it later is the reason you are buying");

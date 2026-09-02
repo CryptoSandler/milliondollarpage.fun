@@ -3,7 +3,9 @@
  * mean anything.
  *
  * WHO CALLS THIS: `purchase-e2e.test.ts` before it starts a server or a
- * browser, and any test that measures wall time.
+ * browser, any test that measures wall time, and — for
+ * `assertNoForeignSuite` — `vitest.globalSetup.ts`, once, before the first
+ * test file loads.
  *
  * WHY IT EXISTS. A suite run on this project once reported 45 failures across
  * nine files and took twice as long as usual; an immediate re-run of the same
@@ -22,6 +24,7 @@
  * with a cap, never relaxes.*
  */
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { cpus, loadavg } from "node:os";
 
 /**
@@ -202,4 +205,166 @@ export function assertPortIsFree(port: number): void {
         "killed another project's test run on this machine.",
     );
   }
+}
+
+/**
+ * The machine-wide e2e lock, which a browser-driving run in ANY repository on
+ * this machine holds for its whole duration. Same path and same JSON as
+ * `harness-lock.ts` next door, read here rather than imported because this file
+ * must not acquire anything — it only asks whether somebody else has.
+ */
+const HARNESS_LOCK = "/tmp/claude-playwright-e2e.lock";
+
+/** Alive, without signalling it. Same test `harness-lock.ts` uses. */
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Every process on this machine, as `{ pid, ppid, command }`. */
+function processTable(): { pid: number; ppid: number; command: string }[] {
+  const out = execFileSync("ps", ["-axo", "pid=,ppid=,command="], {
+    encoding: "utf8",
+    maxBuffer: 8 * 1024 * 1024,
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  const rows: { pid: number; ppid: number; command: string }[] = [];
+  for (const line of out.split("\n")) {
+    const match = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line);
+    if (match) rows.push({ pid: Number(match[1]), ppid: Number(match[2]), command: match[3] });
+  }
+  return rows;
+}
+
+/**
+ * Refuses to start a run while another repository's suite or browser is alive.
+ *
+ * ## The failure this exists to stop reporting as a defect
+ *
+ * Measured on 2026-09-02, three runs of the same commit — one comment apart:
+ * **1269s green, 2883s with three failures, 6249s with nine.** Every failure was
+ * `Connection terminated unexpectedly` or `ECONNRESET`, in the files that use
+ * the database hardest, and none of them touched the code that had changed.
+ *
+ * The cause is a chain rather than a flake. Another project's suite takes the
+ * cores; this run's worker waits for CPU; the wait exceeds Neon's idle timeout,
+ * around five minutes, and the server closes the connection; the next query on
+ * it fails. The run then reads as a red suite, and a red suite that is nobody's
+ * defect is a run somebody repeats until it goes green — which is the exact
+ * habit `~/.claude/GATES.md` exists to refuse.
+ *
+ * ## What counts as "running", and what deliberately does not
+ *
+ * A foreign **vitest** process, and the machine-wide browser lock held by a
+ * live PID that is not in this run's tree. Those are the two shapes of "another
+ * suite is working right now".
+ *
+ * **A headless Chrome on its own is not one of them**, and that was the first
+ * draft. Run against this machine it named six — orphans with `ppid 1`,
+ * **six days old**, from another repository's harness, at **0.0% CPU and 497 MB
+ * between them**. They are a leak worth reporting and they are not contention:
+ * blocking every run in this repository on somebody else's week-old zombie is
+ * how a guard earns a reputation for crying wolf, which is how it gets deleted
+ * and takes the real check with it. A browser that somebody is DRIVING holds
+ * the lock; a browser nobody is driving holds only memory.
+ *
+ * ## Why a process check rather than the load average
+ *
+ * `waitForMachineQuiet` above reads `loadavg()[0]`, which is a decaying mean:
+ * measured in this repository, it kept reporting load 125 seconds after the
+ * load had stopped. That lag is the right trade for a stage that only needs the
+ * machine quiet for the next ninety seconds. It is the wrong instrument for
+ * "is another suite RUNNING right now", where the answer is a process and the
+ * evidence is a PID.
+ *
+ * ## It refuses, and it never kills
+ *
+ * The message names each PID and its command. It does not offer to stop
+ * anything, because `pkill -f vitest` on this machine has already killed
+ * another repository's run — CLAUDE.md and `~/.claude/GATES.md` both carry the
+ * incident. Killing is the reader's decision, by PID.
+ */
+export function assertNoForeignSuite(): void {
+  const table = processTable();
+  const byPid = new Map(table.map((row) => [row.pid, row]));
+
+  /*
+    OURS IS THIS PROCESS, WHAT IT SPAWNED, AND THE CHAIN THAT SPAWNED IT — and
+    deliberately NOT the chain's other children.
+
+    The ancestors are needed because `npm test` and the `sh -c vitest run`
+    under it both carry the word this looks for, and a run that refused because
+    of its own wrapper would never start. The descendants are needed because
+    vitest's workers are this process's children.
+
+    Expanding descendants from the ANCESTORS as well is the version this had
+    first, and it was silently useless: every session on this machine shares a
+    shell somewhere up the chain, so every other repository's suite came out as
+    "ours" and the guard reported quiet on a machine with three runs on it.
+    Caught by pointing it at a decoy — a copy of `sleep` named `vitest-decoy`,
+    started from the same shell — which it declared quiet.
+  */
+  const ours = new Set<number>();
+  for (let pid: number | undefined = process.pid; pid && pid > 1; pid = byPid.get(pid)?.ppid) {
+    if (ours.has(pid)) break;
+    ours.add(pid);
+  }
+  const mine = new Set<number>([process.pid]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const row of table) {
+      if (!mine.has(row.pid) && mine.has(row.ppid)) {
+        mine.add(row.pid);
+        ours.add(row.pid);
+        grew = true;
+      }
+    }
+  }
+
+  /*
+    A FOREIGN `vitest` IS NO LONGER ONE OF THESE, and that is the whole change
+    `suite-lock.ts` made. A second suite now QUEUES on the machine lock instead
+    of racing, so a live foreign vitest is a run waiting its turn — refusing
+    because of it would refuse because somebody is politely waiting.
+
+    What is left is what the lock cannot see: a run driving a browser. Those
+    repositories take `/tmp/claude-playwright-e2e.lock` rather than the suite
+    lock, they compete for the same cores, and there is nothing in a process
+    table that reliably distinguishes a Playwright run from Playwright's
+    long-lived `test-server` — two of which were sitting on this machine at 1
+    day 5 hours and 7 hours, both at 0.0% CPU. So the lock file is the signal,
+    and the process table is not consulted for this at all.
+  */
+  const foreign: { pid: number; ppid: number; command: string }[] = [];
+
+  // A browser-driving run in another repository holds this whether or not its
+  // command line says "playwright" — it is the signal that costs nothing, names
+  // the repository as well as the PID, and cannot be confused with a server
+  // that is merely open.
+  try {
+    const held = JSON.parse(readFileSync(HARNESS_LOCK, "utf8")) as { pid: number; cwd: string };
+    if (held.pid !== process.pid && !ours.has(held.pid) && alive(held.pid)) {
+      foreign.push({ pid: held.pid, ppid: 0, command: `browser harness in ${held.cwd}` });
+    }
+  } catch {
+    // No lock file, or an unreadable one. Nothing to report either way.
+  }
+
+  if (foreign.length === 0) return;
+
+  throw new Error(
+    "Another suite or browser is running on this machine, so this run would be measuring " +
+      "the contention rather than the code:\n" +
+      foreign.map((row) => `  pid ${row.pid}  ${row.command.slice(0, 140)}`).join("\n") +
+      "\n\nMeasured here on 2026-09-02: the same commit took 1269s green, then 2883s with three " +
+      "failures, then 6249s with nine — every failure a dropped Postgres connection, from workers " +
+      "waiting on CPU for longer than Neon's idle timeout.\n" +
+      "Wait for it, or stop it BY PID. Never `pkill` by name: that has already killed another " +
+      "project's test run on this machine.",
+  );
 }
