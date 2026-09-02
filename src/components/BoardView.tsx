@@ -706,8 +706,12 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
 
         <span className="ml-3 hidden shrink-0 items-center gap-2 sm:flex">
           <ThemeToggle />
+          {/* "Questions" was the right word when the page behind it was the small
+              print. It is a landing now — what this is, how buying works, where
+              the idea came from — with the questions at the end, so the link
+              says what a reader clicking it is going to find. */}
           <Link href="/faq" className="btn-quiet shrink-0 px-2.5 py-1.5 text-[12.5px]">
-            Questions
+            What this is
           </Link>
         </span>
       </header>

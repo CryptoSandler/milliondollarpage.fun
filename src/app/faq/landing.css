@@ -1,0 +1,323 @@
+/* ============================================================================
+   THE LANDING'S OWN EFFECTS
+   ----------------------------------------------------------------------------
+   Imported by `src/app/faq/page.tsx` and by nothing else, so every byte here is
+   on that route and no byte of it is on the board's. That is the constraint the
+   owner set — "cero impacto en el peso ni el rendimiento de la pared" — and it
+   is why this is a stylesheet rather than a component.
+
+   NOT ONE LINE OF CLIENT JAVASCRIPT. Every effect below is CSS: staggered
+   `animation-delay` for anything that assembles, `animation-timeline: view()`
+   for anything that has to wait to be scrolled to, and `@supports` so a browser
+   without scroll-driven animations gets the finished state instead of nothing.
+   The page's only client component is the theme switch it shares with every
+   other page, so `/`'s bundle cannot grow by adding to this file.
+
+   ADAPTED, NOT COPIED. Each block names the vault entry whose technique it
+   borrows — MIT, <https://www.arlan.me/vault> — and `docs/references-landing.md`
+   carries the table, including the five entries deliberately not used and why.
+
+   EVERY ONE OF THEM STOPS FOR `prefers-reduced-motion`, and stops on the
+   finished frame rather than the first one: a reader who asked for no motion
+   gets the assembled wall, not an empty grid.
+   ========================================================================= */
+
+.landing {
+  --tile: 7px;
+  --tile-gap: 2px;
+}
+
+/* --------------------------------------------------------------- THE HERO
+ * Adapted from ARCADE PIXEL (/vault/arcade-pixel), which draws a word tiny and
+ * blows it up so the renderer's own artifacts become squares.
+ *
+ * OURS IS LITERAL WHERE THEIRS IS EMERGENT, and that is the one place this page
+ * should be: their squares are an accident of scaling, and these squares are
+ * the thing being sold. Each tile is a real element with a real coordinate, and
+ * the wall assembles out of them in a wave that runs on the diagonal — which is
+ * the same order `--i` gives the settled register, so the page has one idea of
+ * "next" throughout.
+ */
+.hero-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), var(--tile));
+  gap: var(--tile-gap);
+  justify-content: center;
+  padding: 4px 0;
+}
+
+/*
+ * THE RESTING STATE IS VISIBLE, AND THE ANIMATION RUNS *FROM* NOTHING.
+ *
+ * `opacity: 0` plus `forwards` is the obvious way round and it is wrong: an
+ * animation that never runs leaves every tile invisible, so the hero is a blank
+ * space in any browser that refuses it — and in a screenshot with animations
+ * frozen, which is how this was found. `backwards` gives the same entrance and
+ * keeps the finished state as the ELEMENT's own, so the failure mode is the
+ * content rather than the absence of it. Same rule this file already applies to
+ * the scroll-driven effects, applied to the one that does not scroll.
+ */
+.hero-grid__tile {
+  width: var(--tile);
+  height: var(--tile);
+  background: var(--hairline-strong);
+  /* Zero radius, because they are pixels — DESIGN.md's rule reaches this page
+     exactly as it reaches the board. Only chrome rounds. */
+  border-radius: 0;
+  opacity: 1;
+  animation: tile-lands 620ms var(--ease) backwards;
+  animation-delay: calc(var(--i) * 9ms);
+}
+
+.hero-grid__tile[data-ink="1"] {
+  background: var(--ink);
+}
+
+.hero-grid__tile[data-ink="2"] {
+  background: var(--primary);
+}
+
+@keyframes tile-lands {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ------------------------------------------------------------- THE HEADINGS
+ * Adapted from THE TYPER (/vault/typer): a wave crosses the line and each
+ * letter passes through a pill, a highlight and an outline before it lands on
+ * plain text.
+ *
+ * THREE STATES INSTEAD OF FOUR, AND NO MERGE. Adjacent letters in the same
+ * state merging into one bar is the charming part of theirs and the unreadable
+ * part at a heading's size — a section title that spends half a second as a row
+ * of lozenges is a title nobody can scan. The wave is 40ms a letter, so a six
+ * word heading finishes in under a second.
+ */
+.typer {
+  display: inline;
+}
+
+/* The break points a reader expects. See `Typer` in page.tsx for what went
+   wrong without it. */
+.typer__word {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.typer__letter {
+  display: inline-block;
+  white-space: pre;
+  border-radius: var(--radius-xs);
+  animation: typer-settles 900ms var(--ease) both;
+  animation-delay: calc(var(--i) * 40ms);
+}
+
+@keyframes typer-settles {
+  0% {
+    background: var(--ink);
+    color: transparent;
+    box-shadow: none;
+  }
+  35% {
+    background: var(--primary-soft);
+    color: var(--ink);
+  }
+  70% {
+    background: transparent;
+    color: var(--ink);
+    box-shadow: inset 0 0 0 1px var(--control-line);
+  }
+  100% {
+    background: transparent;
+    color: inherit;
+    box-shadow: none;
+  }
+}
+
+/* ---------------------------------------------------------- THE THREE STEPS
+ * Adapted from PIXEL BRUSHES (/vault/pixel-brushes): a brush is a small shape
+ * stamped over and over along a path.
+ *
+ * THE STAMP IS A 10×10 BLOCK AND THE PATH IS A DRAG, so the illustration of
+ * dragging a rectangle is made of the thing being illustrated. It runs when it
+ * is scrolled to rather than on load, because a demonstration that finished
+ * before the reader arrived has demonstrated nothing.
+ */
+.stamp {
+  display: grid;
+  grid-template-columns: repeat(10, 8px);
+  gap: 1px;
+  justify-content: center;
+}
+
+/* Visible at rest for the same reason as the hero: a stamp that never ran must
+   be a filled rectangle, not an empty box. */
+.stamp__cell {
+  width: 8px;
+  height: 8px;
+  background: var(--primary);
+  opacity: 1;
+  animation: stamp-lands 900ms steps(1, end) backwards;
+  animation-delay: calc(var(--i) * 22ms);
+}
+
+@keyframes stamp-lands {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ------------------------------------------------------------- THE 2005 WALL
+ * Adapted from GHOSTY REVEAL (/vault/ghosty-reveal): a tall feathered gradient
+ * moved across with `mask-position`, so the picture forms out of fog.
+ *
+ * IT IS OUR OWN DRAWING THAT FORMS, and that is the whole reason the effect is
+ * here rather than a screenshot. The original page is described in words on
+ * this page and reproduced nowhere on it — no embed, no capture, nothing of
+ * anybody else's. What emerges from the fog is an SVG this repository draws
+ * from its own palette.
+ */
+.ghosty {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0, 0, 0, 0.35) 18%,
+    #000 45%,
+    #000 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0, 0, 0, 0.35) 18%,
+    #000 45%,
+    #000 100%
+  );
+  -webkit-mask-size: 100% 260%;
+  mask-size: 100% 260%;
+  -webkit-mask-position: 0 100%;
+  mask-position: 0 100%;
+  animation: ghosty-forms linear both;
+}
+
+@keyframes ghosty-forms {
+  to {
+    -webkit-mask-position: 0 0;
+    mask-position: 0 0;
+  }
+}
+
+/* -------------------------------------------------------------- WHY SOLANA
+ * Adapted from CHROMATIC GLOW (/vault/chroma-glow): blurred at a few sizes and
+ * added back, then split into a warm copy and a cool copy drifting apart.
+ *
+ * ONE NUMBER, AND DELIBERATELY THE SMALLEST USE ON THE PAGE. It is the effect
+ * most likely to read as a crypto advert, so it gets the one figure that is
+ * genuinely about the chain and nothing else. No cursor-lean: theirs leans the
+ * split toward the pointer, which is lovely and is JavaScript, and this page
+ * has none.
+ */
+.glow {
+  position: relative;
+  display: inline-block;
+  color: var(--ink);
+  text-shadow:
+    0 0 12px color-mix(in oklab, var(--primary) 55%, transparent),
+    0 0 28px color-mix(in oklab, var(--primary) 30%, transparent);
+}
+
+.glow::before,
+.glow::after {
+  content: attr(data-figure);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  animation: glow-drifts 5.5s ease-in-out infinite alternate;
+}
+
+.glow::before {
+  color: color-mix(in oklab, var(--primary) 70%, #ff8a3d);
+  transform: translateX(-1px);
+}
+
+.glow::after {
+  color: color-mix(in oklab, var(--primary) 70%, #3d8aff);
+  transform: translateX(1px);
+  animation-direction: alternate-reverse;
+}
+
+@keyframes glow-drifts {
+  to {
+    transform: translateX(2px);
+  }
+}
+
+/* ---------------------------------------------------------------- SCROLLING
+ * The two effects that must wait to be seen use a scroll-driven timeline, which
+ * is CSS and not an IntersectionObserver — the whole page's claim is that it
+ * ships no client JavaScript, and one observer would end it.
+ *
+ * `@supports` IS THE POINT, NOT A COURTESY. A browser without scroll-driven
+ * animations gets the finished state: the stamp filled in, the wall out of the
+ * fog. The failure mode of a progressive enhancement has to be the CONTENT, and
+ * an animation that never runs must never be an element that never appears.
+ */
+@supports (animation-timeline: view()) {
+  .stamp__cell,
+  .ghosty {
+    animation-timeline: view();
+    animation-range: entry 10% cover 45%;
+  }
+
+  .stamp__cell {
+    animation-delay: 0s;
+    animation-duration: auto;
+  }
+}
+
+@supports not (animation-timeline: view()) {
+  .ghosty {
+    animation: none;
+    -webkit-mask-position: 0 0;
+    mask-position: 0 0;
+  }
+}
+
+/* ------------------------------------------------------------------- STILL
+ * Every effect above, off. And each one lands on its FINISHED frame rather than
+ * its first: a reader who asked for no motion gets the assembled wall, the
+ * settled heading and the stamped rectangle, not three empty boxes.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .hero-grid__tile,
+  .typer__letter,
+  .stamp__cell,
+  .ghosty,
+  .glow::before,
+  .glow::after {
+    animation: none !important;
+  }
+
+  .hero-grid__tile,
+  .stamp__cell {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* And the reveal, on its finished frame. */
+
+  .ghosty {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
