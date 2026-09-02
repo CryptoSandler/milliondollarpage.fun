@@ -1665,13 +1665,14 @@ h3 {
    2495×1484 the wall read as slipped half a rail. So both sides carry the same
    width or neither exists.
 
-   TWO PAIRS, ONE GAP, stamped as one word on the root by the boot script in
-   `layout.tsx` before the first paint:
+   ONE PAIR, ONE GAP, stamped as one word on the root by the boot script in
+   `layout.tsx` before the first paint. A RAIL ONLY EXISTS WHERE IT CAN BE READ:
+   200px is what the contents need at FULL LENGTH — `100×100` rather than `100`,
+   and a settled row on one line per item — which is a different question from
+   "does it fit", and the one the owner asked after seeing a 120px rail:
 
-     data-rails="full"   ≥180px  left: controls + purchase panel
-                                 right: the register and the standings
-     data-rails="tools"  ≥108px  left: controls
-                                 right: the register, as a vertical ticker
+     data-rails="full"   ≥200px  left: controls + purchase panel
+                                 right: the register ticking, and the standings
      data-rails="off"            the layout this stylesheet already described
 
    THE BOARD NEVER PAYS FOR EITHER. Both are sized from the gap a height-limited
@@ -1712,8 +1713,7 @@ h3 {
   display: none;
 }
 
-[data-rails="full"] .board-side,
-[data-rails="tools"] .board-side {
+[data-rails="full"] .board-side {
   position: fixed;
   top: var(--bar-top-h);
   bottom: 0;
@@ -1726,13 +1726,11 @@ h3 {
   background: var(--canvas);
 }
 
-[data-rails="full"] .board-side--left,
-[data-rails="tools"] .board-side--left {
+[data-rails="full"] .board-side--left {
   left: 0;
 }
 
-[data-rails="full"] .board-side--right,
-[data-rails="tools"] .board-side--right {
+[data-rails="full"] .board-side--right {
   right: 0;
 }
 
@@ -1743,8 +1741,7 @@ h3 {
  * controls sat centred ON the wall at 2560 and 1920 while the rails stood empty
  * beside them. Every child below assumes this has run.
  */
-[data-rails="full"] .board-tools,
-[data-rails="tools"] .board-tools {
+[data-rails="full"] .board-tools {
   position: static;
   left: auto;
   top: auto;
@@ -1760,8 +1757,7 @@ h3 {
  * the overlay is the only chrome allowed to sit on the board, and where there
  * is a column to put it in, it does not have to.
  */
-[data-rails="full"] .board-rail,
-[data-rails="tools"] .board-rail {
+[data-rails="full"] .board-rail {
   container-type: inline-size;
   flex-direction: column;
   align-items: stretch;
@@ -1782,8 +1778,7 @@ h3 {
  * rail can be. `purchase-e2e.test.ts` sweeps the rail across its whole range
  * and fails on any group whose rows are not all the same length.
  */
-[data-rails="full"] .board-rail .board-rail__presets,
-[data-rails="tools"] .board-rail .board-rail__presets {
+[data-rails="full"] .board-rail .board-rail__presets {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
@@ -1791,47 +1786,16 @@ h3 {
 
 /* Freehand is the default and the odd one out, so it takes the whole width
    rather than leaving a hole beside it. */
-[data-rails="full"] .board-rail .board-rail__presets > button:first-child,
-[data-rails="tools"] .board-rail .board-rail__presets > button:first-child {
+[data-rails="full"] .board-rail .board-rail__presets > button:first-child {
   grid-column: 1 / -1;
 }
 
-[data-rails="full"] .board-rail .board-rail__zoom,
-[data-rails="tools"] .board-rail .board-rail__zoom {
+[data-rails="full"] .board-rail .board-rail__zoom {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   /* Eight rather than ten: three cells and two gaps have to fit 98px of column
      at the narrowest rail this design produces, and 3×26 + 2×8 is 94. */
   gap: 8px;
-}
-
-/*
- * AND THE LONG LABEL GIVES WAY, which is the shed order rather than a squeeze.
- * Two columns of a 120px rail are 44px each and `100×100` sets at 52. The
- * presets are squares, so one number says what two do; the full label stays as
- * the button's accessible name and its tooltip, where it is read rather than
- * fitted. `BoardRail` renders both and this chooses.
- */
-.preset-label--short {
-  display: none;
-}
-
-@container (max-width: 190px) {
-  .preset-label--full {
-    display: none;
-  }
-
-  .preset-label--short {
-    display: inline;
-  }
-}
-
-[data-rails="full"] .board-hint,
-[data-rails="tools"] .board-hint {
-  padding: 10px 12px;
-  border-radius: var(--radius-lg);
-  box-shadow: none;
-  text-align: left;
 }
 
 /*
@@ -1917,8 +1881,7 @@ h3 {
  * `PurchaseTape`, which explains why the thumbnail is a background rather than
  * an `<img>` and why the seamless duplicate stays in a column.
  */
-[data-rails="full"] .board-side--right .board-tape,
-[data-rails="tools"] .board-side--right .board-tape {
+[data-rails="full"] .board-side--right .board-tape {
   position: static;
   left: auto;
   right: auto;
@@ -1938,52 +1901,12 @@ h3 {
 }
 
 /*
- * A NARROW RAIL DROPS THE THUMBNAIL, AND THAT IS MEASURED RATHER THAN CHOSEN.
- *
- * The tools floor of 108 was measured against the LEFT rail's contents — the
- * presets — and the right rail holds the register, whose rows are wider. At the
- * owner's 2495×1484 the gap is 120px, which leaves 98px of content, and a row
- * spends 34 on the thumbnail and 9 on its gap before a single figure: the first
- * capture came back reading `26 × 3`, `$988`, `capt…7K`, every line cut.
- *
- * The thumbnail is the widest fixed cost in the row and the only part of it
- * that is decorative — it is `aria-hidden`, and the size, the price, the age
- * and the proof are the register. So below 150px of rail it goes, and the
- * figures get its 43px. A container query rather than a media query because
- * what decides is the RAIL's width, which no viewport dimension names.
+ * THE ROW KEEPS ITS THUMBNAIL AND ITS FIGURES, because 200px is the floor that
+ * makes that true. An earlier floor of 108 dropped the thumbnail below 150 and
+ * cut the figures anyway; a rail that has to shorten what it says to fit is a
+ * rail this design would rather not have.
  */
-[data-rails="full"] .board-side--right .board-tape,
-[data-rails="tools"] .board-side--right .board-tape {
-  container-type: inline-size;
-}
-
-@container (max-width: 150px) {
-  .board-tape__thumb {
-    display: none !important;
-  }
-
-  .board-tape__row {
-    grid-template-columns: minmax(0, 1fr) !important;
-  }
-
-  .board-tape__row .board-tape__numbers {
-    grid-area: 1 / 1 / 2 / 2 !important;
-  }
-
-  .board-tape__row .board-tape__meta {
-    grid-area: 2 / 1 / 3 / 2 !important;
-  }
-
-  /* The head has the same problem one line up: LIVE and the count of who else
-     is here are 100px side by side in 98px of column. They stack. */
-  .board-tape__head {
-    flex-wrap: wrap;
-    row-gap: 4px;
-  }
-}
-
-[data-rails="full"] .board-side--right .board-tape__head,
-[data-rails="tools"] .board-side--right .board-tape__head {
+[data-rails="full"] .board-side--right .board-tape__head {
   flex: 0 0 auto;
   justify-content: space-between;
   gap: 8px;
@@ -2003,25 +1926,32 @@ h3 {
  * now and the track moves inside it; the register is READ by waiting or by
  * hovering to stop it, and `/stats` is where it is read at length.
  */
-[data-rails="full"] .board-side--right .board-tape__scroller,
-[data-rails="tools"] .board-side--right .board-tape__scroller {
+[data-rails="full"] .board-side--right .board-tape__scroller {
   flex-direction: column;
   align-items: stretch;
   overflow: hidden;
 }
 
 /*
- * THE DAY NOTHING HAS SETTLED, in a column rather than a strip. The empty line
- * is `whitespace-nowrap` and centred, which is right in a 26px strip and came
- * out running off BOTH edges of a 140px column — the first capture read
- * `…hase that does appears her`. Same words, wrapped, left-aligned, and it does
- * not move: there is nothing to tick.
+ * THE DAY NOTHING HAS SETTLED: one short line, in both orientations, and it
+ * does not move because there is nothing to tick.
+ *
+ * It was two sentences — the second explaining how the register works — which
+ * is a paragraph in a 26px strip and a five-line wrapped block in a column. The
+ * copy is three words now and the rule is `nowrap` in both: an empty state that
+ * wraps is an empty state that has been given too much to say.
  */
-[data-rails="full"] .board-side--right .board-tape__scroller > p,
-[data-rails="tools"] .board-side--right .board-tape__scroller > p {
+.board-tape__empty {
+  align-self: center;
+  padding: 0 10px;
+  font-size: 12.5px;
+  color: var(--body);
+  white-space: nowrap;
+}
+
+[data-rails="full"] .board-side--right .board-tape__empty {
   align-self: stretch;
   padding: 10px;
-  white-space: normal;
   text-align: left;
 }
 
@@ -2036,8 +1966,7 @@ h3 {
  * speed and a rail holding three at the same speed are two different speeds to
  * read. `--tape-rows` is set on the element by `PurchaseTape`.
  */
-[data-rails="full"] .board-side--right .board-tape__track,
-[data-rails="tools"] .board-side--right .board-tape__track {
+[data-rails="full"] .board-side--right .board-tape__track {
   width: auto;
   height: max-content;
   flex-direction: column;
@@ -2064,8 +1993,7 @@ h3 {
   }
 }
 
-[data-rails="full"] .board-side--right .board-tape__track > ol,
-[data-rails="tools"] .board-side--right .board-tape__track > ol {
+[data-rails="full"] .board-side--right .board-tape__track > ol {
   height: auto;
   flex-direction: column;
 }
@@ -2076,8 +2004,7 @@ h3 {
  * says that this drops is "N pixels at (x, y)" — the size is the line above it,
  * and a 108px column has to spend its width on something not said twice.
  */
-[data-rails="full"] .board-side--right .board-tape__row,
-[data-rails="tools"] .board-side--right .board-tape__row {
+[data-rails="full"] .board-side--right .board-tape__row {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);
   grid-template-rows: auto auto;
@@ -2090,8 +2017,7 @@ h3 {
   white-space: nowrap;
 }
 
-[data-rails="full"] .board-side--right .board-tape__thumb,
-[data-rails="tools"] .board-side--right .board-tape__thumb {
+[data-rails="full"] .board-side--right .board-tape__thumb {
   display: block;
   grid-area: 1 / 1 / 3 / 2;
   width: 34px;
@@ -2108,8 +2034,7 @@ h3 {
   image-rendering: pixelated;
 }
 
-[data-rails="full"] .board-side--right .board-tape__row .board-tape__numbers,
-[data-rails="tools"] .board-side--right .board-tape__row .board-tape__numbers {
+[data-rails="full"] .board-side--right .board-tape__row .board-tape__numbers {
   grid-area: 1 / 2 / 2 / 3;
   flex-direction: column;
   align-items: flex-start;
@@ -2124,8 +2049,7 @@ h3 {
  * being cut — a truncated proof is not a proof, and DESIGN.md's whole argument
  * for this rail is that no row passes without one.
  */
-[data-rails="full"] .board-side--right .board-tape__row .board-tape__meta,
-[data-rails="tools"] .board-side--right .board-tape__row .board-tape__meta {
+[data-rails="full"] .board-side--right .board-tape__row .board-tape__meta {
   grid-area: 2 / 2 / 3 / 3;
   flex-wrap: wrap;
   gap: 2px 7px;
@@ -2133,8 +2057,7 @@ h3 {
   font-size: 10.5px;
 }
 
-[data-rails="full"] .board-side--right .board-tape__where,
-[data-rails="tools"] .board-side--right .board-tape__where {
+[data-rails="full"] .board-side--right .board-tape__where {
   display: none;
 }
 
@@ -2235,13 +2158,11 @@ h3 {
   }
 }
 
-[data-rails="full"] .online-banner--bar,
-[data-rails="tools"] .online-banner--bar {
+[data-rails="full"] .online-banner--bar {
   display: none;
 }
 
-[data-rails="full"] .online-banner--rail,
-[data-rails="tools"] .online-banner--rail {
+[data-rails="full"] .online-banner--rail {
   display: flex;
 }
 /* ============================================================================
@@ -2457,10 +2378,26 @@ h3 {
 }
 
 .theme-switch__knob {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 16px;
   height: 16px;
   border-radius: var(--radius-pill);
   background: var(--ink-soft);
+  /*
+   * THE KNOB CARRIES THE FACE, which is what makes the switch say what it is a
+   * switch FOR. A track with a plain disc in it is a toggle for something; a
+   * sun and a moon are a toggle for the light. The glyph is drawn in the
+   * TRACK's own colour, so it reads as a hole punched in the knob rather than a
+   * second mark on it — `canvas-deep` on `ink-soft` measures **9.66:1** in the
+   * dark register and **8.40:1** in the light, both far past the 3:1 that
+   * 1.4.11 asks of a graphic carrying meaning, and the same pair carries the
+   * knob against its own track.
+   */
+  color: var(--canvas-deep);
+  font-size: 10px;
+  line-height: 1;
   /* The one thing on this page that slides, and it slides 18 pixels. */
   transform: translateX(0);
   transition: transform 220ms var(--ease), background-color 220ms var(--ease);

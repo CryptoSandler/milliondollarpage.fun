@@ -735,7 +735,7 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
         being checked is the LAYOUT at each of them, not which monitor produces
         it. The page is loaded once at a viewport that has a pair.
       */
-      await browser.resize(2560, 1440);
+      await browser.resize(3440, 1440);
       await browser.goto(`${server.origin}/?groups=1`);
       await waitFor("the board", async () =>
         browser.evaluate<string | null>(`document.querySelector('canvas')?.dataset.boardRect ?? null`),
@@ -744,7 +744,7 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
         await browser.evaluate<string | null>(`document.documentElement.dataset.rails`),
       ).toBe("full");
 
-      for (let railW = 108; railW <= 288; railW += 4) {
+      for (let railW = 200; railW <= 288; railW += 4) {
         await browser.evaluate(
           `document.documentElement.style.setProperty("--rail-w", "${railW}px")`,
         );
@@ -829,7 +829,16 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
         stamped: string;
       };
       expect(shape.role, "the theme control should be a switch").toBe("switch");
-      expect(shape.text, "the switch should carry no word").toBe("");
+      /*
+        NO WORD, WHICH IS NOT THE SAME AS NO CHARACTER. The knob carries a sun
+        or a moon, and the rule the owner set is that the control is a switch
+        rather than a button with a word on it — so what this refuses is a
+        letter, not a glyph.
+      */
+      expect(
+        /\p{Letter}/u.test(shape.text ?? ""),
+        `the switch is carrying a word: ${JSON.stringify(shape.text)}`,
+      ).toBe(false);
       expect(shape.saysSystem, "the word `system` is still readable on the page").toBe(false);
       expect(shape.storedSystem, "`system` is still a stored theme choice").toBe(false);
       expect(shape.optionSystem, "`system` is still offered as an option").toBe(false);
@@ -1082,8 +1091,8 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
       );
 
       for (const [width, height, where] of [
-        [2560, 1440, "the full pair"],
-        [1920, 1080, "the tools pair"],
+        [3440, 1440, "the rails"],
+        [1920, 1080, "the strip along the bottom"],
         [1440, 900, "the strip along the bottom"],
       ] as const) {
         const at = `${width}x${height}`;
@@ -1173,8 +1182,8 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
       const covered: string[] = [];
 
       for (const [width, height, why] of [
-        [2560, 1440, "the full rails"],
-        [1920, 1080, "the tools rail"],
+        [3440, 1440, "the rails"],
+        [3840, 2160, "the rails"],
         [390, 844, "a letterboxed board"],
       ] as const) {
         const at = `${width}x${height}`;
@@ -1205,8 +1214,7 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
         // And the layout really is the one this row is about: a rail that
         // silently failed to appear would pass the coverage check by putting
         // the overlay somewhere else entirely.
-        if (width === 2560) expect(reading.rails, `${at} should have the full rails`).toBe("full");
-        if (width === 1920) expect(reading.rails, `${at} should have the tools rails`).toBe("tools");
+        if (width > 3000) expect(reading.rails, `${at} should have the rails`).toBe("full");
 
         if (reading.covers) {
           covered.push(`${at} (${why}): overlay ${edges(reading.tools!)}, sale ${edges(reading.sold)}`);
@@ -1241,7 +1249,7 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
     async () => {
       for (const [width, height] of [
         [1440, 900],
-        [1280, 800],
+        [2495, 1484],
       ] as const) {
         const at = `${width}x${height}`;
         await browser.resize(width, height);
@@ -1321,7 +1329,7 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
       */
       for (const [width, height] of [
         [1440, 900],
-        [2560, 1440],
+        [3440, 1440],
         [390, 844],
       ] as const) {
         for (const theme of ["light", "dark"] as const) {
@@ -1394,7 +1402,7 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
       */
       for (const [width, height] of [
         [1440, 900],
-        [2560, 1440],
+        [3440, 1440],
         [390, 844],
       ] as const) {
         const light = grounds.get(`light at ${width}x${height}`);
@@ -1436,8 +1444,8 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
       );
 
       for (const [width, height] of [
-        [2560, 1440],
         [3440, 1440],
+        [3840, 2160],
       ] as const) {
         const at = `${width}x${height}`;
         await browser.resize(width, height);
@@ -1534,8 +1542,8 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
     "never narrows the board to make room for a side rail",
     async () => {
       for (const [width, height] of [
-        [2560, 1440],
         [3440, 1440],
+        [3840, 2160],
       ] as const) {
         const at = `${width}x${height}`;
         const settled = async () => {

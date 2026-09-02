@@ -56,18 +56,48 @@ import type { WalletState } from "./useWallet";
  * new ratio in this file is the violet's, and it is measured in both registers
  * rather than claimed in either.
  */
+/**
+ * The three wallets this page names when a reader has none, and the two ways
+ * into each.
+ *
+ * NAMING THREE IS NOT A RECOMMENDATION AND THE ORDER IS NOT A RANKING —
+ * DESIGN.md's voice section refuses a product recommendation in the checkout,
+ * and this is the smaller version of the same rule: a reader with no wallet
+ * needs somewhere to go, and "go and find one" is not somewhere. Three is
+ * enough to read as a list rather than an endorsement.
+ *
+ * `browse` is the wallet's own universal link, which opens THIS page inside its
+ * in-app browser — the only thing that works on a phone, where an extension
+ * cannot exist. **Backpack has no `browse` here** because this repository has
+ * not verified the shape of its universal link, and a deep link that is guessed
+ * is a link that fails silently on the device it was guessed for. It gets the
+ * download page on both, and the gap is named rather than papered over.
+ */
+const INSTALLS: { name: string; install: string; browse?: (url: string) => string }[] = [
+  {
+    name: "Phantom",
+    install: "https://phantom.app/download",
+    browse: (url) => `https://phantom.app/ul/browse/${encodeURIComponent(url)}?ref=${encodeURIComponent(url)}`,
+  },
+  {
+    name: "Solflare",
+    install: "https://solflare.com/download",
+    browse: (url) => `https://solflare.com/ul/v1/browse/${encodeURIComponent(url)}?ref=${encodeURIComponent(url)}`,
+  },
+  { name: "Backpack", install: "https://backpack.app/download" },
+];
+
 export default function WalletConnect({
   wallets,
   connected,
   connecting,
   notice,
-  ready,
   disabled,
   needed,
   onConnect,
   onDisconnect,
   ref,
-}: Pick<WalletState, "wallets" | "connected" | "connecting" | "notice" | "ready"> & {
+}: Pick<WalletState, "wallets" | "connected" | "connecting" | "notice"> & {
   /**
    * True while a purchase dialog is open.
    *
@@ -132,15 +162,63 @@ export default function WalletConnect({
             </button>
           </div>
         </details>
-      ) : !ready ? (
-        // The registry answers on the first commit, so this is one frame. It
-        // exists because the alternative is telling somebody who has a wallet
-        // installed that they have not.
-        <p className="text-[12.5px] text-body">Looking for a wallet…</p>
       ) : wallets.length === 0 ? (
-        // Plainly, once, and with nothing to install named. Which wallet
-        // somebody uses is their decision and this page has no stake in it.
-        <p className="max-w-[13rem] text-[12.5px] text-body">No Solana wallet in this browser.</p>
+        /*
+          THE BUTTON IS ALWAYS THERE, WHETHER OR NOT THERE IS A WALLET.
+
+          It used to become a sentence — "No Solana wallet in this browser" —
+          which put prose in a bar this design keeps to one terse row and left
+          nothing to press for the reader most likely to need pressing
+          something: the one who has not got a wallet yet. The button is the
+          same violet in both cases, and what changes is what opens under it.
+
+          `!ready` falls in here too, on purpose. The registry answers on the
+          first commit, so it is one frame — and a frame of the install sheet
+          is a frame of the right shape, where a frame of "Looking for a
+          wallet…" was a frame of a sentence that then vanished.
+        */
+        <details className="wallet-connect__menu">
+          <summary className="wallet-connect__button">
+            <span aria-hidden>◈</span>
+            <span className="wallet-connect__label" aria-hidden>
+              Connect wallet
+            </span>
+            <span className="sr-only">Connect wallet. You will need a Solana wallet first.</span>
+          </summary>
+          <div className="wallet-connect__sheet">
+            <p className="mb-2 text-[12.5px] leading-snug text-body">
+              Buying is signed, so it needs a Solana wallet. These three work here:
+            </p>
+            {INSTALLS.map((install) => (
+              <a
+                key={install.name}
+                href={install.install}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="btn-quiet mb-1 block w-full px-2 py-1.5 text-left text-[12.5px] last:mb-0"
+                /*
+                  A PHONE GETS THE WALLET'S OWN BROWSER, a desktop gets the
+                  download page, and the choice is made on the press rather than
+                  on the render — a render that asked the pointer would be a
+                  render the server cannot reproduce, which is a hydration
+                  mismatch for the sake of one attribute.
+
+                  The deep link carries THIS page's own URL, read from
+                  `location` rather than from anything a caller supplied, so
+                  there is no parameter here anybody could point somewhere else.
+                */
+                onClick={(event) => {
+                  if (!install.browse) return;
+                  if (!window.matchMedia("(pointer: coarse)").matches) return;
+                  event.preventDefault();
+                  window.location.href = install.browse(window.location.href);
+                }}
+              >
+                {install.name}
+              </a>
+            ))}
+          </div>
+        </details>
       ) : wallets.length === 1 ? (
         // One wallet is the common case, and a list of one is a menu nobody
         // needs: the button connects it.

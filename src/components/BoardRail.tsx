@@ -79,16 +79,7 @@ export default function BoardRail({
             )}`}
             className="btn-quiet tabular shrink-0 px-2.5 py-1.5 text-[12.5px]"
           >
-            {/*
-              TWO SPELLINGS OF ONE SIZE, and the stylesheet chooses by the RAIL's
-              width rather than the window's. Two columns of a 120px rail are
-              44px each and `100×100` sets at 52; the presets are squares, so one
-              number says what two do. Exactly one is ever displayed, so a screen
-              reader meets the size once — and it meets the long one, because
-              `aria-label` below is the accessible name either way.
-            */}
-            <span className="preset-label--full">{preset.label}</span>
-            <span className="preset-label--short">{preset.size}</span>
+            {preset.label}
           </button>
         ))}
       </div>

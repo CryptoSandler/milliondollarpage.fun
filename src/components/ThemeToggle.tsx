@@ -127,7 +127,14 @@ export default function ThemeToggle() {
           the switch's state is `aria-checked`, and a screen reader being told
           about a circle would be told the same thing twice, once uselessly. */}
       <span aria-hidden className="theme-switch__track">
-        <span className="theme-switch__knob" />
+        {/*
+          A SUN OR A MOON IN THE KNOB, so the switch says what it switches. A
+          track with a plain disc is a toggle for something; this is a toggle for
+          the light. Both are aria-hidden — `aria-checked` on the button is the
+          state, and a screen reader being told about a glyph would meet the
+          same fact twice, once uselessly.
+        */}
+        <span className="theme-switch__knob">{dark ? "☾" : "☀"}</span>
       </span>
     </button>
   );

@@ -4,8 +4,6 @@ import {
   BOARD_INSET,
   SIDE_RAIL_MAX,
   SIDE_RAIL_MIN,
-  TOOLS_RAIL_MAX,
-  TOOLS_RAIL_MIN,
 } from "./viewport";
 
 /**
@@ -49,14 +47,13 @@ import {
 export const RAILS_BOOT =
   `(function(){var d=document.documentElement;function s(){` +
   `var off=location.search.indexOf("rails=off")>=0;` +
-  // ONE gap for both pairs: the letterbox a board fitted under the header alone
-  // leaves. In both layouts the settled register has left the bottom of the
-  // window for the right-hand rail, so the board being measured is the same.
+  // The letterbox a board fitted under the header alone leaves — the register
+  // goes into the right-hand rail, so that is the board being measured.
   `var g=off?-1:(innerWidth-${2 * BOARD_INSET}-${BOARD_WIDTH / BOARD_HEIGHT}*(innerHeight-${
     BAR_TOP_PX + 2 * BOARD_INSET
   }))/2;` +
-  `var k=g>=${SIDE_RAIL_MIN}?"full":g>=${TOOLS_RAIL_MIN}?"tools":"off";` +
-  `var w=k==="full"?Math.min(g,${SIDE_RAIL_MAX}):k==="tools"?Math.min(g,${TOOLS_RAIL_MAX}):0;` +
+  `var k=g>=${SIDE_RAIL_MIN}?"full":"off";` +
+  `var w=k==="full"?Math.min(g,${SIDE_RAIL_MAX}):0;` +
   `d.setAttribute("data-rails",k);` +
   `d.style.setProperty("--rail-w",w+"px")}` +
   `s();addEventListener("resize",s)})()`;

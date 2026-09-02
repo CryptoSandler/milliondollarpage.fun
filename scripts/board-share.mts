@@ -122,7 +122,7 @@ type Reading = {
   parts: Part[];
   vw: number;
   vh: number;
-  /** "full", "tools" or "off" — the word the boot script stamped. */
+  /** "full" or "off" — the word the boot script stamped. */
   rails: string;
 };
 
@@ -241,27 +241,18 @@ async function main(): Promise<void> {
         }
         const chrome = chromeHeight(overTheBoard(reading.parts, reading.board));
         /*
-          THREE LAYOUTS, AND THE PANEL IS WHAT DECIDES BETWEEN TWO OF THEM.
-
-          Idle, a pair of rails costs the header alone — 34px — because the
-          register has left the bottom of the window. Once something is
-          selected, only the FULL pair keeps that: it docks the purchase panel
-          at the foot of the left rail, where the panel costs no height at all.
-          The tools pair cannot — 180px is what the Buy button measured and its
-          rail is 108 to 160 — so there the panel floats exactly as it does with
-          no rails, and it is allowed exactly what a floating panel has always
-          been allowed. That is the 140px line, and it clears it at 114.
+          A PAIR OF RAILS COSTS THE HEADER AND NOTHING ELSE, idle or not: the
+          register has left the bottom of the window and the purchase panel is
+          docked at the foot of the left rail, where it costs no height at all.
+          Without them it is the 60/140 this document has always set.
         */
         const budget =
           reading.rails === "full"
             ? BUDGET_RAILED
-            : reading.rails === "tools"
-              ? selected
-                ? BUDGET_SELECTED
-                : BUDGET_RAILED
-              : selected
-                ? BUDGET_SELECTED
-                : BUDGET_IDLE;
+            : selected
+              ? BUDGET_SELECTED
+              : BUDGET_IDLE;
+
         const [, , bw, bh] = (reading.board ?? "0,0,0,0").split(",").map(Number);
         const share = ((bw * bh) / (reading.vw * reading.vh)) * 100;
         const over = chrome > budget;

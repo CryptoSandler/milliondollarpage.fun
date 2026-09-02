@@ -649,24 +649,6 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           />
           milliondollarpage.fun
         </h1>
-        {/*
-          THE WALLET CONTROL, IMMEDIATELY AFTER THE WORDMARK, at every width.
-          It used to sit in the middle of the purchase panel, which put the one
-          control a buyer needs BEFORE choosing anything behind having chosen
-          it. See `WalletConnect` for the violet and why it is not the accent.
-        */}
-        <WalletConnect
-          ref={walletRef}
-          wallets={wallet.wallets}
-          connected={wallet.connected}
-          connecting={wallet.connecting}
-          notice={wallet.notice}
-          ready={wallet.ready}
-          disabled={purchaseSelection !== null}
-          needed={walletNeeded}
-          onConnect={wallet.connect}
-          onDisconnect={wallet.disconnect}
-        />
 
         <div className="ml-auto min-w-0">
           <BoardCounters stats={board.stats} />
@@ -692,6 +674,27 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
         */}
         {/* Beside the questions link, because both are things a reader
             reaches for rather than things the board is about. */}
+        {/*
+          THE WALLET CONTROL AND THE SWITCH, TOGETHER ON THE RIGHT.
+
+          It sat after the wordmark for one deploy and the owner saw it at 2495:
+          the left of this bar is the product's name and nothing else, and the
+          things a reader reaches FOR belong together at the end of the row. It
+          is OUTSIDE the `sm:flex` span beside it on purpose — the switch and the
+          questions give way on a phone and this does not.
+        */}
+        <WalletConnect
+        ref={walletRef}
+        wallets={wallet.wallets}
+        connected={wallet.connected}
+        connecting={wallet.connecting}
+        notice={wallet.notice}
+        disabled={purchaseSelection !== null}
+        needed={walletNeeded}
+        onConnect={wallet.connect}
+        onDisconnect={wallet.disconnect}
+        />
+
         <span className="ml-3 hidden shrink-0 items-center gap-2 sm:flex">
           <ThemeToggle />
           <Link href="/faq" className="btn-quiet shrink-0 px-2.5 py-1.5 text-[12.5px]">

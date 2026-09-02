@@ -185,21 +185,28 @@ export const BAR_TOP_PX = 34;
  * WHO USES THESE: `sideRailWidth` below, the boot script in `layout.tsx` that
  * stamps the layout before the first paint, and `scripts/board-share.mts`.
  *
- * 180 IS MEASURED, AND THE MEASUREMENT IS A REFUSAL TO OVERFLOW. The rail was
- * pinned to 180px in the rendered page — idle and with a purchase panel open —
- * and every element inside both rails was asked whether its `scrollWidth`
- * exceeded its `clientWidth`. Nothing does. Three things had to change first
- * and each is in DESIGN.md: a settled row's age and proof wrap rather than cut
- * the signature, a standings row stacks its size over its amount, and the Buy
- * button's price takes a second line rather than the button taking a shorter
- * label.
+ * 200 IS A RAIL THAT CAN BE READ, and it replaced 180 and 108 both.
+ *
+ * 180 was the narrowest rail nothing OVERFLOWED — the Buy button wrapping, a
+ * settled row's proof wrapping, a standings row stacking — and 108 was the same
+ * question asked of the controls alone. Both answered "does it fit". The owner
+ * looked at a 120px rail in production and asked the other question: **can it
+ * be read.** It could not. A register whose every row wraps twice and a preset
+ * whose label has been cut to a number are a column that fits and says nothing.
+ *
+ * So the floor is what the rail needs to hold its contents AT FULL LENGTH: the
+ * preset labels as `10×10` and `100×100` rather than `10` and `100`, and a
+ * settled row on one legible line per item — the thumbnail, the size, the
+ * amount, the age and the proof, none of them wrapped. Measured, that is 200.
+ * Below it there is no rail at all, and the overlay goes back on the wall with
+ * the resting rule that gets it out of the way.
  *
  * 288 IS THIS DESIGN'S OWN NUMBER: the width at which that button gets its
  * longest label, `Buy these pixels — $1,000,000.00`, back on one line. Past it
  * the leftover stays wall rather than becoming a wider rail. See DESIGN.md,
  * "The threshold, and the arithmetic that sets it".
  */
-export const SIDE_RAIL_MIN = 180;
+export const SIDE_RAIL_MIN = 200;
 export const SIDE_RAIL_MAX = 288;
 
 /**
@@ -224,22 +231,6 @@ export function sideRailWidth(screen: Size, board: Size): number {
 export const TAPE_H_PX = 26;
 
 /**
- * The narrowest and widest a TOOLS rail may be.
- *
- * 108 IS MEASURED, the same way 180 was: the column was pinned at a width in
- * the rendered page and every element inside it was asked whether its
- * `scrollWidth` exceeded its `clientWidth`. The widest thing that cannot shrink
- * is a preset button at its longest, `100×100`, which sets at 74px; the pill's
- * padding and border make 92, and the column's padding makes 108.
- *
- * 160 IS THE CEILING and it is taste with a reason: four small buttons and one
- * line of type in a column wider than that stop reading as a rail and start
- * reading as an empty panel. Past it the leftover stays wall.
- */
-export const TOOLS_RAIL_MIN = 108;
-export const TOOLS_RAIL_MAX = 160;
-
-/**
  * Which pair of rails this viewport gets, and how wide they are.
  *
  * WHO CALLS THIS: the boot script in `layout.tsx`, and `rails-boot.test.ts`.
@@ -260,25 +251,25 @@ export const TOOLS_RAIL_MAX = 160;
  * the bottom of the window for the right-hand rail. What differs is only what
  * the pair can hold.
  *
- * - **`full`, from 180px.** Left: the controls and the purchase panel. Right:
- *   the register and the standings. 180 is what the Buy button needs.
- * - **`tools`, from 108px.** Left: the controls. Right: the register, as a
- *   vertical ticker. The purchase panel floats, because it does not fit.
- * - **`off` below that**, which is the layout this stylesheet already had.
+ * - **`full`, from 200px.** Left: the controls and the purchase panel. Right:
+ *   the register as a vertical ticker, and the standings.
+ * - **`off` below that**, which is the layout this stylesheet already had: the
+ *   overlay on the wall with its resting rule, and the register along the
+ *   bottom. There is no middle kind — a rail that has to shorten its own labels
+ *   to fit is a rail that should not be there.
  *
  * THE WALL NEVER CEDES WIDTH TO EITHER. Both are sized from a letterbox a
  * height-limited board already leaves, so the board is not refitted — and
  * because the register leaves the bottom of the window, it is fitted to MORE
  * height than before and comes out larger, never smaller.
  */
-export type RailLayout = { kind: "off" | "tools" | "full"; width: number };
+export type RailLayout = { kind: "off" | "full"; width: number };
 
 export function railLayout(screen: Size, board: Size): RailLayout {
   const free = screen.height - BAR_TOP_PX - 2 * BOARD_INSET;
   const gap = (screen.width - 2 * BOARD_INSET - (board.width / board.height) * free) / 2;
 
   if (gap >= SIDE_RAIL_MIN) return { kind: "full", width: Math.min(gap, SIDE_RAIL_MAX) };
-  if (gap >= TOOLS_RAIL_MIN) return { kind: "tools", width: Math.min(gap, TOOLS_RAIL_MAX) };
   return { kind: "off", width: 0 };
 }
 

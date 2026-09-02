@@ -6,8 +6,6 @@ import {
   SIDE_RAIL_MAX,
   SIDE_RAIL_MIN,
   TAPE_H_PX,
-  TOOLS_RAIL_MAX,
-  TOOLS_RAIL_MIN,
   railLayout,
   sideRailWidth,
 } from "../viewport";
@@ -65,6 +63,7 @@ describe("the boot script and railLayout", () => {
     [1440, 900],
     [1600, 900],
     [1920, 1080],
+    [2024, 1080],
     [2400, 1440],
     [2495, 1484],
     [2540, 1440],
@@ -99,27 +98,16 @@ describe("the boot script and railLayout", () => {
     }
   });
 
-  it("stamps nothing wider than either ceiling, however wide the window", () => {
+  it("stamps nothing wider than the ceiling, however wide the window", () => {
     expect(boot(7680, 1440).railW).toBe(`${SIDE_RAIL_MAX}px`);
-    /*
-      And the tools pair's own ceiling, which needs a viewport wide enough to
-      reach it: at 1920×1080 the gap is 148.4px and the rail takes ALL of it,
-      which is the pair's whole point — the leftover is what threw the board off
-      centre. The ceiling needs a gap between 160 and 180, which is a narrow
-      band: 1963×1080 leaves 169.9px and is clamped to 160.
-    */
-    expect(boot(1920, 1080).rails).toBe("tools");
-    expect(boot(1963, 1080).rails).toBe("tools");
-    expect(boot(1963, 1080).railW).toBe(`${TOOLS_RAIL_MAX}px`);
   });
 
-  it("never stamps a rail narrower than the floor of the kind it stamped", () => {
-    for (let width = 1200; width <= 3000; width += 7) {
+  it("never stamps a rail narrower than the floor", () => {
+    for (let width = 1200; width <= 3600; width += 7) {
       const { rails, railW } = boot(width, 1440);
       const w = Number(railW.replace("px", ""));
       if (rails === "off") expect(w, `${width}×1440`).toBe(0);
-      if (rails === "tools") expect(w, `${width}×1440`).toBeGreaterThanOrEqual(TOOLS_RAIL_MIN);
-      if (rails === "full") expect(w, `${width}×1440`).toBeGreaterThanOrEqual(SIDE_RAIL_MIN);
+      else expect(w, `${width}×1440`).toBeGreaterThanOrEqual(SIDE_RAIL_MIN);
     }
   });
 
@@ -131,7 +119,6 @@ describe("the boot script and railLayout", () => {
     expect(boot(3440, 1440).rails).toBe("full");
     expect(boot(3440, 1440, "?rails=off").rails).toBe("off");
     expect(boot(3440, 1440, "?capture=1&rails=off").railW).toBe("0px");
-    expect(boot(1920, 1080).rails).toBe("tools");
     expect(boot(1920, 1080, "?rails=off").rails).toBe("off");
   });
 });
@@ -188,7 +175,6 @@ describe("railLayout", () => {
    */
   it("gives each viewport exactly one kind", () => {
     for (const [width, height] of [
-      [2560, 1440],
       [3440, 1440],
       [3840, 2160],
       [5120, 1440],
@@ -203,17 +189,31 @@ describe("railLayout", () => {
    * not: 1920 and the owner's own 2495×1484 get the overlay off the wall, 1440
    * and 1280 cannot.
    */
-  it("reaches 1920 and 2495×1484 with tools, and does not reach 1440 or 1280", () => {
-    const at1920 = railLayout({ width: 1920, height: 1080 }, BOARD);
-    expect(at1920.kind).toBe("tools");
-    // The whole gap, because it is under the ceiling — 148.4px, not 160.
-    expect(at1920.width).toBeCloseTo(148.4375, 4);
-    expect(at1920.width).toBeGreaterThanOrEqual(TOOLS_RAIL_MIN);
-    expect(at1920.width).toBeLessThanOrEqual(TOOLS_RAIL_MAX);
-    expect(railLayout({ width: 2495, height: 1484 }, BOARD).kind).toBe("tools");
-    expect(railLayout({ width: 1440, height: 900 }, BOARD).kind).toBe("off");
-    expect(railLayout({ width: 1280, height: 800 }, BOARD).kind).toBe("off");
-    expect(railLayout({ width: 390, height: 844 }, BOARD).kind).toBe("off");
+  /**
+   * A RAIL ONLY EXISTS WHERE IT CAN BE READ, which is the owner's correction
+   * after looking at a 120px one in production. None of the four viewports this
+   * design is looked at on reaches 200px of gap; the ultrawides and the 4K
+   * panels do. That is a narrower door than the one before it, deliberately.
+   */
+  it("reaches no ordinary desktop, and reaches the wide ones", () => {
+    for (const [width, height] of [
+      [1280, 800],
+      [1440, 900],
+      [1920, 1080],
+      [2495, 1484],
+      [2560, 1440],
+      [390, 844],
+    ] as const) {
+      expect(railLayout({ width, height }, BOARD).kind, `${width}×${height}`).toBe("off");
+    }
+    for (const [width, height] of [
+      [3440, 1440],
+      [3840, 2160],
+      [2560, 1080],
+      [5120, 1440],
+    ] as const) {
+      expect(railLayout({ width, height }, BOARD).kind, `${width}×${height}`).toBe("full");
+    }
   });
 
   /**
@@ -256,10 +256,9 @@ describe("railLayout", () => {
    */
   it("leaves the board centred in the window wherever there is a pair", () => {
     for (const [width, height] of [
-      [1920, 1080],
-      [2495, 1484],
-      [2560, 1440],
       [3440, 1440],
+      [3840, 2160],
+      [5120, 1440],
     ] as const) {
       const { kind, width: rail } = railLayout({ width, height }, BOARD);
       expect(kind, `${width}×${height} should have a pair`).not.toBe("off");

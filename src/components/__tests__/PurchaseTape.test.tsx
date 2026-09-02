@@ -98,13 +98,20 @@ describe("the settled-purchase rail", () => {
     expect(html).toContain("unsigned");
   });
 
-  it("says what an empty rail is waiting for, rather than being empty", () => {
+  it("says an empty rail is empty in one short line, and nothing more", () => {
     const html = renderToStaticMarkup(<PurchaseTape rows={[]} asOf={AS_OF} />);
 
-    expect(html).toContain("Nothing has settled yet");
-    // The rail's second line moved into its tooltip when the rail went to one
-    // 26px strip — two lines of type there clipped the lower one at the bottom
-    // of the window. Same words, somewhere with room for them.
+    /*
+      THREE WORDS. It was two sentences — the second explaining how the register
+      works — which is a paragraph in a 26px strip and a five-line wrapped block
+      in a column, which is what the owner saw at 2495. What the empty state has
+      to say is that the register is empty; how it works is a thing to read once
+      and not a thing to read while waiting.
+    */
+    expect(html).toContain("Nothing sold yet");
+    expect(html).not.toContain("Every purchase that does appears here");
+    // The rail's second line is still its tooltip, which is where a sentence
+    // that long belongs and where it has room.
     expect(html).toContain("The first one lands here");
   });
 

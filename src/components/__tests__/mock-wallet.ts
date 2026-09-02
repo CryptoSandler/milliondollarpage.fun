@@ -121,6 +121,15 @@ export function mockWallet(name = "Mock Wallet"): MockWallet {
   // announcement in case it is not. This page's hook only listens after
   // hydration, so it is the second that fires — and the first is here so the
   // test is driving the shape a wallet actually ships rather than half of it.
+  /*
+    A PAGE CAN ASK FOR NO WALLET AT ALL. "?nowallet" makes this script do
+    nothing, which is the only way a suite that injects a wallet into every
+    navigation can also test the page a visitor without one sees. It is a hook
+    in the TEST's own wallet, not in the product: nothing under src/app or
+    src/components knows this parameter exists.
+  */
+  if (location.search.indexOf("nowallet") >= 0) return;
+
   const announce = (api) => api.register(wallet);
   window.dispatchEvent(new CustomEvent("wallet-standard:register-wallet", { detail: announce }));
   window.addEventListener("wallet-standard:app-ready", (event) => announce(event.detail));

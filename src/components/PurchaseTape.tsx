@@ -189,10 +189,15 @@ export default function PurchaseTape({
         className="board-tape__scroller scrollbar-none"
       >
         {rows.length === 0 ? (
-          <p className="self-center whitespace-nowrap px-1 text-[13px] text-body">
-            Nothing has settled yet. Every purchase that does appears here, with
-            the signature that settled it.
-          </p>
+          /*
+            ONE SHORT LINE, NEVER PROSE. It was two sentences, which is a
+            paragraph in a 26px strip and a wrapped block five lines deep in a
+            column — the owner saw the second at 2495. What the empty state has
+            to say is that the register is empty; what it used to say as well
+            was how the register works, which is a thing to read once and not a
+            thing to read while waiting.
+          */
+          <p className="board-tape__empty">Nothing sold yet</p>
         ) : (
           /*
             THE TICKER'S SPEED IS PER ROW, NOT PER RAIL. A column holding twenty
