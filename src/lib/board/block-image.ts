@@ -131,3 +131,18 @@ export function publishesTextSql(statusesParam: number): string {
 export function blockImageUrl(id: string): string {
   return `/api/blocks/${id}/image`;
 }
+
+/**
+ * Where a block's share card lives.
+ *
+ * Here rather than in `share-card.ts` for one reason: that module imports
+ * `sharp`, and a URL is a string. Anything that only needs to POINT at a card —
+ * the receipt in `PurchaseDialog`, the `og:image` on `src/app/b/[id]/page.tsx` —
+ * would otherwise drag an image pipeline in behind a template literal.
+ *
+ * Same escaping argument as above: `id` is a uuid out of a `uuid` column, and
+ * the route 404s anything that is not one before it touches the database.
+ */
+export function shareCardUrl(id: string): string {
+  return `/api/blocks/${id}/card`;
+}

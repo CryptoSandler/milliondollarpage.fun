@@ -1,0 +1,267 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import ThemeToggle from "../../../components/ThemeToggle";
+import { blockImageUrl, shareCardUrl } from "../../../lib/board/block-image";
+import { blockPageUrl } from "../../../lib/board/block-details";
+import { getBlockPage, type BlockPage } from "../../../lib/board/blocks";
+import { formatUsdc, pixelCount } from "../../../lib/board/pricing";
+import { isUuid } from "../../../lib/http";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * One rectangle, on a page of its own.
+ *
+ * WHO ARRIVES HERE: a buyer, from the receipt in `PurchaseDialog`, which offers
+ * this URL the moment their purchase settles; and anybody they hand it to.
+ * Nothing on the board links here — the board is a wall, and a wall does not
+ * need a page per brick.
+ *
+ * ## Why it exists at all
+ *
+ * A buyer owned a rectangle and had nothing to link to. There was
+ * `/api/blocks/<id>` for machines, the hover card for somebody already on the
+ * wall, `/api/blocks/<id>/card` for an image with no page under it, and
+ * `/go/<id>` for the way out. There was no page whose subject is one rectangle,
+ * which meant the one thing the 2005 original actually had — a thousand buyers
+ * with a reason to tell somebody — had nowhere to point.
+ * `docs/marketing-fomo.md` has the round that argued it.
+ *
+ * ## It names nobody, and that is the same rule the standings keep
+ *
+ * DESIGN.md: "No holder is named, on the ranking or anywhere else — the page
+ * prints that sentence rather than leaving it to be noticed." A page about a
+ * rectangle is the most forwarded surface this product has, so it is the last
+ * place to relax it. What is here is four numbers, an amount, a date, eight
+ * characters of the signature that settled it, and the buyer's own caption and
+ * link — every one of them a fact about the RECTANGLE.
+ *
+ * ## The card is not rendered here
+ *
+ * `og:image` points at `/api/blocks/<id>/card`, which already existed and
+ * already composes a 1200×630 card out of bytes on disk. This page adds the
+ * `<head>` that makes it unfurl and the page it unfurls into. Nothing new draws
+ * an image; see `share-card.ts` for why one is never stored.
+ *
+ * ## Still noindex, and deliberately
+ *
+ * The root layout's `robots: { index: false, follow: false }` is inherited by
+ * every page including this one, so a card shared today unfurls for a person
+ * and is refused by a crawler. That is the correct order: the three locks come
+ * off together when the owner launches, and this page is built closed.
+ */
+
+/**
+ * A page for a rectangle, or 404.
+ *
+ * The one lookup both this and `generateMetadata` need. Next renders the two in
+ * the same request, and `dynamic = "force-dynamic"` means neither is cached, so
+ * this is two round trips for one page load. Left as two on purpose: React's
+ * `cache()` would make it one and would put a memoisation boundary around a
+ * query that costs a primary-key lookup, and `docs/` has no measurement saying
+ * it matters. If it ever does, wrapping this function is the whole change.
+ *
+ * ponytail: two queries per page load, `cache()` it if a profile ever says so.
+ */
+async function pageFor(id: string): Promise<BlockPage | null> {
+  // The same ladder every `[id]` route walks: a non-uuid answers exactly what
+  // an absent id answers, rather than reaching Postgres and raising 22P02.
+  if (!isUuid(id)) return null;
+  return getBlockPage(id);
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const block = await pageFor(id);
+
+  if (!block) {
+    return { title: "There is nothing on those pixels · milliondollarpage.fun" };
+  }
+
+  const title = `${block.w} × ${block.h} at (${block.x}, ${block.y}) · milliondollarpage.fun`;
+
+  return {
+    title,
+    /*
+      THE INVARIANT, IN THE WORDS `DECISIONS.md` ALREADY USES, and no more than
+      that: "a sold pixel does not change owner or content without its owner's
+      signature, and it never expires." Whether a block can ever change hands is
+      OPEN there and "not to be answered by anything shipped", so this sentence
+      says neither "non-transferable" nor its opposite. A description is copy
+      that travels further than any other on this site; it is exactly where that
+      door gets walked through by accident.
+    */
+    description: `${pixelCount(block.pixels)} on the wall, bought for ${formatUsdc(
+      block.totalBaseUnits,
+    )}. These pixels do not change owner or content without their owner's signature, and they never expire.`,
+    alternates: { canonical: blockPageUrl(block.id) },
+    openGraph: {
+      title,
+      url: blockPageUrl(block.id),
+      // The card that already exists. No width or height: every crawler that
+      // renders one fetches the image anyway, and a pair of numbers repeated
+      // here is a pair of numbers that can disagree with `share-card.ts`.
+      images: [{ url: shareCardUrl(block.id), alt: `${block.w} × ${block.h} on milliondollarpage.fun` }],
+    },
+    twitter: { card: "summary_large_image" },
+  };
+}
+
+export default async function BlockPageRoute({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const block = await pageFor(id);
+  if (!block) notFound();
+
+  return (
+    <main className="prose-page">
+      <div className="mx-auto max-w-[52rem] px-5 pb-24 pt-6">
+        <nav className="flex items-center justify-between gap-4 border-b border-hairline-strong pb-4">
+          <Link
+            href="/"
+            className="flex items-center gap-2 font-display text-[17px] font-bold text-ink"
+          >
+            <span aria-hidden className="size-2.5 rounded-full bg-ink" />
+            milliondollarpage.fun
+          </Link>
+          <span className="flex items-center gap-2">
+            <ThemeToggle />
+            <Link href="/" className="btn-quiet px-3 py-1.5 text-[13px]">
+              Back to the board
+            </Link>
+          </span>
+        </nav>
+
+        <h1 className="tabular mt-8 font-display text-[34px] font-bold leading-tight tracking-tight">
+          {block.w} × {block.h}
+        </h1>
+        <p className="mt-3 text-[16px] leading-relaxed text-body">
+          {pixelCount(block.pixels)} on the wall at ({block.x}, {block.y}). These pixels do not
+          change owner or content without their owner&apos;s signature, and they never expire.
+        </p>
+
+        {/*
+          A BACKGROUND RATHER THAN AN `<img>`, which is the choice `BlockCard`
+          already made and gives its reasons for: the bytes are an API route's,
+          `next/image` can neither optimise nor honestly smooth them, and
+          `image-rendering: pixelated` reaches a background exactly as it
+          reaches an element.
+
+          The box is the RECTANGLE's shape, capped so a 1×800 purchase does not
+          make a page nobody can scroll: width is the smaller of the column and
+          what 60vh of height allows at this rectangle's own ratio.
+        */}
+        <div
+          className="block-art mt-8"
+          style={{
+            aspectRatio: `${block.w} / ${block.h}`,
+            maxWidth: `min(100%, calc(60vh * ${block.w} / ${block.h}))`,
+            backgroundImage: `url("${blockImageUrl(block.id)}")`,
+          }}
+          role="img"
+          aria-label={`The artwork on this ${block.w} by ${block.h} rectangle`}
+        />
+
+        <dl className="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-hairline-strong bg-hairline-strong md:grid-cols-4">
+          <Figure term="Pixels" value={block.pixels.toLocaleString("en-US")} note="one dollar each" />
+          <Figure term="Paid" value={formatUsdc(block.totalBaseUnits)} note="USDC, on Solana" />
+          <Figure
+            term="Settled"
+            value={block.paidAt.slice(0, 10)}
+            note={block.signature ? `signature ${block.signature}` : "before the money path existed"}
+          />
+          <Figure
+            term="Clicks"
+            value={block.clicks.toLocaleString("en-US")}
+            note={
+              block.link === null
+                ? "there is no link on this one"
+                : block.clicks === 0
+                  ? "nobody has followed it yet"
+                  : "times the link has been followed"
+            }
+          />
+        </dl>
+
+        {(block.caption || block.link) && (
+          <section className="mt-10">
+            <h2 className="font-display text-[22px] font-semibold tracking-tight">
+              What the buyer put on it
+            </h2>
+            {block.caption && (
+              <p className="mt-3 text-[16px] leading-relaxed text-ink">{block.caption}</p>
+            )}
+            {block.link && (
+              <p className="mt-3 text-[15px] leading-relaxed text-body">
+                {/*
+                  THROUGH `/go/<id>`, NEVER THE ADDRESS ITSELF — the same
+                  indirection `BlockCard` uses, and the whole reason a click is
+                  countable. The text says where it goes; the href says how it
+                  is counted. `nofollow` because this page vouches for nothing
+                  it did not write.
+                */}
+                <a
+                  href={`/go/${block.id}`}
+                  target="_blank"
+                  rel="nofollow noreferrer"
+                  className="font-semibold text-ink underline underline-offset-2"
+                >
+                  {hostOf(block.link)}
+                </a>
+              </p>
+            )}
+          </section>
+        )}
+
+        <section className="mt-10">
+          <h2 className="font-display text-[22px] font-semibold tracking-tight">Share it</h2>
+          <p className="mt-2 text-[15px] leading-relaxed text-body">
+            This page unfurls as a card carrying the rectangle, the amount and the signature that
+            settled it. It names nobody — no address, no wallet, no holder — here or anywhere else
+            on this site.
+          </p>
+          <a
+            href={shareCardUrl(block.id)}
+            target="_blank"
+            rel="noreferrer"
+            className="btn-quiet mt-4 inline-block px-3 py-2 text-[14px]"
+          >
+            Open the card
+          </a>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+/**
+ * The host a link goes to, as text.
+ *
+ * The address is shown rather than the caption's own words so a reader can see
+ * where they are about to be sent, and `new URL` rather than a regular
+ * expression because a hand-rolled parser is how a lookalike host gets printed
+ * as the real one. `checkLink` already refused anything that is not https at
+ * purchase time; this is the second reader of the same string and it does not
+ * assume that held.
+ */
+function hostOf(link: string): string {
+  try {
+    return new URL(link).host;
+  } catch {
+    return "a link";
+  }
+}
+
+function Figure({ term, value, note }: { term: string; value: string; note: string }) {
+  return (
+    <div className="flex flex-col gap-1 bg-card px-4 py-4">
+      <dt className="label-caps">{term}</dt>
+      <dd className="tabular font-display text-[26px] font-bold leading-none text-ink">{value}</dd>
+      <p className="text-[12.5px] leading-tight text-body">{note}</p>
+    </div>
+  );
+}

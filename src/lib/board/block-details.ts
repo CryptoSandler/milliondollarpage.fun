@@ -33,6 +33,23 @@ export function blockDetailsUrl(id: string): string {
 }
 
 /**
+ * Where one rectangle's own page lives.
+ *
+ * Called by `PurchaseDialog`, which offers it on the receipt, and by
+ * `src/app/b/[id]/page.tsx` for its own canonical URL. One definition rather
+ * than a template literal in each, for the reason `blockImageUrl` already gives
+ * next door: two places that build the same URL are two places that can come to
+ * disagree about it, and this one is about to be pasted into other people's
+ * pages.
+ *
+ * `/b/` and not `/blocks/` because it is the URL a buyer copies. Nothing is
+ * escaped because `id` is a uuid, and the page 404s anything that is not one.
+ */
+export function blockPageUrl(id: string): string {
+  return `/b/${id}`;
+}
+
+/**
  * One rectangle's words, or null.
  *
  * Null covers every reason together — a 404, a network failure, a body that

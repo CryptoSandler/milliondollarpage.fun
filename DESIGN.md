@@ -1437,6 +1437,38 @@ bought and a "hot right now" sort would be the first dishonest thing here. And
 **no rank can be taken by paying**, which is the whole inversion: a leaderboard
 of positions that cannot be lost, rather than one that can.
 
+## The page one rectangle gets
+
+**`/b/<id>`, and it is the only surface here built to be forwarded.** A buyer
+owned a rectangle and had nothing to link to: an API route for machines, a
+hover card for somebody already on the wall, a card image with no page under
+it, and a redirect out. This is the page whose subject is one rectangle, and
+`docs/marketing-fomo.md` carries the round that argued for it against
+seventeen alternatives.
+
+**Nothing on the board links to it.** The board is a wall, and a wall does not
+need a page per brick. The receipt offers it the moment a purchase settles,
+which is the one minute the buyer is looking for something to post.
+
+**It is four numbers, an amount, a date, eight characters of signature, and the
+buyer's own words.** Every one of them a fact about the rectangle. The rule the
+standings keep reaches here unchanged and matters more: **no holder is named**,
+on the most forwarded page this site has.
+
+**The link is reached through `/go/<id>`, never as its own address** — the same
+indirection the hover card uses, and what makes the click count on this page a
+real number rather than a decoration.
+
+**The card it unfurls into is the one that already existed.** `og:image` points
+at `/api/blocks/<id>/card`; nothing new draws an image and nothing is stored.
+
+**A takedown removes this page and never the sale.** It publishes exactly what
+the card publishes, so a hold has no page and neither has a rectangle whose
+content is gone — a page whose card is a permanent 404 is a link that unfurls
+blank forever. The register still carries the settlement and the standings
+still count the pixels, because those are about the sale and this is about the
+artwork.
+
 ## States
 
 | State | How it reads |

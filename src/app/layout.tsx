@@ -54,6 +54,22 @@ const mono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
+  /*
+   * WHAT A RELATIVE URL IN METADATA IS RESOLVED AGAINST.
+   *
+   * Only one page needs it — `src/app/b/[id]/page.tsx`, whose `og:image` points
+   * at `/api/blocks/<id>/card` — and it needs it absolutely: a crawler
+   * unfurling a shared link cannot resolve a path against nothing, and Next
+   * without this falls back to `http://localhost:3000`, which is a card that
+   * works on a laptop and is blank everywhere else.
+   *
+   * Hard-coded rather than read from an environment variable. This site has one
+   * production origin, it is in the repository's name, and a variable that is
+   * missing in one environment produces exactly the localhost failure above,
+   * silently. Preview deployments therefore advertise the production card,
+   * which is right: a preview's card is not a thing anybody should be sharing.
+   */
+  metadataBase: new URL("https://milliondollarpage.fun"),
   title: "milliondollarpage.fun",
   // A dollar a pixel is both the strapline and the offer now: the pixel is
   // the unit, so this sentence and the one beside the Buy button finally say

@@ -2,6 +2,7 @@ import type { PoolClient } from "pg";
 import { execute, query, queryOne } from "../db";
 import { IMAGE_BEARING_STATUSES, hasPublicImageSql, publishesTextSql } from "./block-image";
 import { TOTAL_PIXELS } from "./geometry";
+import { SIGNATURE_KEPT } from "./tape";
 
 /**
  * Reading the board.
@@ -184,6 +185,109 @@ export async function getBlockDetails(id: string): Promise<BlockDetails | null> 
       WHERE id = $1 AND ${LIVE}`,
     [id, [...IMAGE_BEARING_STATUSES]],
   );
+}
+
+/**
+ * One sold rectangle, as its own page says it.
+ *
+ * Fetched by `src/app/b/[id]/page.tsx` and by nothing else. It is
+ * `getBlockDetails` plus the three facts a hover card has no room for — what
+ * was paid, when it settled, and the proof that it did — and minus the one it
+ * needs that a page does not, `fit`, which exists only for the zoom-detail
+ * draw.
+ *
+ * A SEPARATE FUNCTION RATHER THAN A WIDER `getBlockDetails`. That one is
+ * fetched per rectangle somebody rests on, tens of times in a session; this one
+ * is fetched once, for a page whose whole subject is a single rectangle.
+ * Widening the hover query to carry a price and a signature nobody looks at
+ * would put the cost on the common path to save a query on the rare one.
+ */
+export type BlockPage = {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  pixels: number;
+  totalBaseUnits: number;
+  /** How many times this rectangle's link has been followed through `/go/<id>`. */
+  clicks: number;
+  caption: string | null;
+  link: string | null;
+  /** `5Kq2…7Rp1`, cut in SQL — see `tape.ts` for why a whole one never leaves Postgres. */
+  signature: string | null;
+  /** ISO 8601. */
+  paidAt: string;
+};
+
+/**
+ * The page for one sold rectangle, or null when there is no page to give.
+ *
+ * Null is EXACTLY what `/api/blocks/[id]/card` refuses, and that is deliberate:
+ * a page and its share card publish the same rectangle, so a page that exists
+ * where the card 404s would be a link whose preview is permanently broken. So
+ * `publishesTextSql` decides both — a hold has no page (a reservation is
+ * thirty free minutes and this would make them thirty free minutes of a page on
+ * our domain carrying a stranger's link), and neither has a rectangle whose
+ * content has been taken down.
+ *
+ * **A takedown removes the page and never the sale.** The rectangle is still
+ * its owner's, the register still carries the settlement, and the standings
+ * still count the pixels. What goes is the surface built to be forwarded, which
+ * is the surface a takedown is about.
+ */
+export async function getBlockPage(id: string): Promise<BlockPage | null> {
+  const row = await queryOne<{
+    id: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    total_usdc: string;
+    clicks: number;
+    caption: string | null;
+    link: string | null;
+    signature: string | null;
+    paid_at: Date;
+  }>(
+    // No alias on `blocks`, for the reason `getBlockDetails` gives above:
+    // `publishesTextSql` is written against bare column names and is shared
+    // with four other queries. `block_clicks` names none of them.
+    `SELECT id, x, y, w, h, total_usdc, caption, link, paid_at,
+            coalesce(block_clicks.clicks, 0)::int AS clicks,
+            CASE
+              WHEN payment_signature IS NULL THEN NULL
+              WHEN length(payment_signature) <= $3 * 2 THEN payment_signature
+              ELSE left(payment_signature, $3) || '…' || right(payment_signature, $3)
+            END AS signature
+       FROM blocks
+       LEFT JOIN block_clicks ON block_clicks.block_id = blocks.id
+      WHERE id = $1
+        AND ${publishesTextSql(2)}
+        -- A sale with no settled instant has nothing to date, and every row
+        -- this predicate lets through has one. Belt and braces for the rows
+        -- the stub payment path wrote before paid_at was required.
+        AND paid_at IS NOT NULL`,
+    [id, [...IMAGE_BEARING_STATUSES], SIGNATURE_KEPT],
+  );
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    x: row.x,
+    y: row.y,
+    w: row.w,
+    h: row.h,
+    pixels: row.w * row.h,
+    // bigint comes back from `pg` as a string, which is right for a column that
+    // could exceed 2^53 and wrong for arithmetic done by accident.
+    totalBaseUnits: Number(row.total_usdc),
+    clicks: row.clicks,
+    caption: row.caption,
+    link: row.link,
+    signature: row.signature,
+    paidAt: row.paid_at.toISOString(),
+  };
 }
 
 export type BlockImage = { bytes: Buffer; mime: string };

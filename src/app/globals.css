@@ -1342,6 +1342,31 @@ h3 {
   }
 
   /*
+   * The artwork on one rectangle's own page, at that rectangle's own shape.
+   *
+   * `src/app/b/[id]/page.tsx` sets the ratio and the cap inline, because both
+   * are the block's own numbers and a stylesheet cannot know them. Everything
+   * that is the same for every rectangle is here.
+   *
+   * NEAREST NEIGHBOUR, like the wall and like the card. A purchase is pixel art
+   * more often than it is a photograph, and a smoothed enlargement makes
+   * somebody's block look worse on the page advertising it than it looks on the
+   * board. `--sold-fallback` shows through where a rectangle has no bytes to
+   * serve, which is the tone the wall paints there too.
+   */
+  .block-art {
+    display: block;
+    width: 100%;
+    margin-inline: auto;
+    border: 1px solid var(--hairline-strong);
+    background-color: var(--sold-fallback);
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: contain;
+    image-rendering: pixelated;
+  }
+
+  /*
    * A page that is prose rather than a board.
    *
    * The document still never scrolls — `overflow: hidden` on html and body is

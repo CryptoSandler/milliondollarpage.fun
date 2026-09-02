@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { RefObject } from "react";
+import { blockPageUrl } from "../lib/board/block-details";
 import type { PreparedImage } from "../lib/board/image-encode";
 import { formatUsdc, pixelCount } from "../lib/board/pricing";
 import {
@@ -796,7 +797,14 @@ export default function PurchaseDialog({
             */}
             <a
               // An order's id IS the block's id — one row in `blocks` is both.
-              href={`/api/blocks/${order.id}/card`}
+              //
+              // IT OPENS THE PAGE, NOT THE PNG. It used to link straight at
+              // `/api/blocks/<id>/card`, which handed the buyer an image and
+              // nothing to put it on. The page carries the same card as its
+              // `og:image`, so what unfurls in a post is unchanged, and what
+              // the buyer now has is a URL with the rectangle, the amount, the
+              // settlement and the click count on it.
+              href={blockPageUrl(order.id)}
               target="_blank"
               rel="noreferrer"
               className="btn-quiet self-start px-3 py-2 text-[14px]"
