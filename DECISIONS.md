@@ -76,6 +76,42 @@ the board's rectangle is unchanged to the pixel at every width.
 
 ---
 
+## Settled: two themes, a white receipt, and a violet this design did not choose
+
+**Status: settled 2026-09-02 by the owner. Three decisions, two of which are
+exceptions to rules this document already carries.**
+
+**The theme is two states and "system" is gone.** A stored choice still rules;
+a reader who has never chosen gets **dark**. The control is a switch rather than
+a button with a word on it, the knob crosses 18px and the chrome cross-fades,
+both in 220ms, and nothing animates the wall. What it costs is written into
+DESIGN.md rather than hidden: a reader who chose light on a dark machine has no
+way back to *follow the machine*, and with JavaScript off the media query still
+decides.
+
+**The purchase panel is white in both registers, because it is the receipt.** It
+re-declares the light palette on itself rather than overriding a colour, so
+every child becomes light through the tokens it already used. Measured: `ink` at
+15.31 on the panel, the panel at **19.46:1 against the dark wall** — and 1.17
+against the cream one, where its `control-line` border carries the boundary
+instead, at 4.23 and 3.62. `--primary` is not re-declared, so Buy stays the
+register's accent.
+
+**The wallet control leaves the panel for the header, in a violet that is not
+the accent.** The accent means money moving now and a Connect control is the
+thing that happens before anything moves. The violet is the wallet convention —
+wallet-adapter's `#512da8` in light at 7.86 against the bar, Phantom's `#ab9ff2`
+in dark at 8.31 — themed because the light one measures 2.01 against cream and
+fails 1.4.11. **Buy is enabled without a wallet** and opens the connector rather
+than refusing, which is what took the sentence *Connect a wallet to buy* out of
+the panel's middle.
+
+**The doors:** the two violets are one token pair; the receipt is one block of
+re-declarations; and `THEME_FADE_MS` is 220. Inverting the stylesheet so bare
+`:root` is dark would close the no-JS gap and re-open every measured ratio.
+
+---
+
 ## Settled: rails come in pairs, and the register ticks in both
 
 **Status: settled 2026-09-02 by the owner, on three reports from production.**

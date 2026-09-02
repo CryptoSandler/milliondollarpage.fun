@@ -8,59 +8,52 @@ import { useSyncExternalStore } from "react";
  * WHO CALLS THIS: `BoardView`'s top bar, and the nav on `/faq` and `/stats`.
  * The three of them are every page this product has.
  *
- * ## Three states, not two
+ * ## TWO STATES, AND "SYSTEM" IS GONE
  *
- * `light` and `dark` are choices. `system` is the absence of one, and it is the
- * default — a reader who has not decided follows `prefers-color-scheme`, which
- * is the decision their operating system already made for every other
- * application they use. The toggle cycles through all three rather than
- * flipping between two, because a reader who chose light on a dark machine
- * needs a way back to "whatever the machine says" and a two-way switch does not
- * have one.
+ * It cycled through three — light, dark, and the absence of a choice, which
+ * followed `prefers-color-scheme`. The owner retired the third. What survives
+ * of it is the part that mattered: **a stored choice still rules**, and a
+ * reader who has never chosen gets **dark**, which is this design's own
+ * register rather than whatever their machine decided for their mail client.
+ *
+ * The cost is stated rather than hidden: somebody who has chosen light here and
+ * runs a dark system no longer has a control that says "go back to following
+ * the machine". They have a switch with two positions and one of them is the
+ * machine's. A three-position control existed to answer a question nobody was
+ * asking, and it cost the page a text button where a switch belongs.
+ *
+ * ## Why a switch and not a button with a word on it
+ *
+ * A button labelled `Dark` is ambiguous in the way every theme toggle is
+ * ambiguous: it is either telling you where you are or where pressing it takes
+ * you, and no label fixes that. A switch is not ambiguous — `role="switch"`
+ * with `aria-checked` says *dark is on* or *dark is off*, which is a state, and
+ * the knob is where the state is. It is the one control on this page that
+ * animates, and it animates for 220ms.
  *
  * ## Why `useSyncExternalStore` and not an effect
  *
  * The choice lives on `<html>`, which is outside React and is written before
- * React exists by the boot script below. That is the exact shape
+ * React exists by the boot script in `layout.tsx`. That is the exact shape
  * `useSyncExternalStore` is for: a value the server cannot know, read from an
  * external system, with a server snapshot for the render that has no browser.
- * The obvious alternative — `useState("system")` corrected by an effect — is a
- * setState in an effect body, which is a cascading render the linter is right
- * to refuse and which would render one frame with the wrong word on the button.
- *
- * ## Why the stored value is read before React runs
- *
- * `THEME_BOOT` in `layout.tsx` is a blocking inline script that stamps
- * `data-theme` on `<html>` before the first paint. Without it there is a flash
- * of the wrong register on every load for anybody whose choice disagrees with
- * their system — the page would paint from `prefers-color-scheme`, hydrate, and
- * then swap. This component only has to agree with what that script already
- * did, which is why it reads the attribute rather than storage.
+ * The obvious alternative — `useState` corrected by an effect — is a setState
+ * in an effect body, which the linter is right to refuse and which would render
+ * one frame with the knob on the wrong side.
  */
 
-export type ThemeChoice = "light" | "dark" | "system";
+export type ThemeChoice = "light" | "dark";
 
 /** The key the boot script writes and this reads. One name, two readers. */
 export const THEME_KEY = "mdp-theme";
 
-const ORDER: ThemeChoice[] = ["system", "light", "dark"];
-
-const LABEL: Record<ThemeChoice, string> = {
-  system: "System",
-  light: "Light",
-  dark: "Dark",
-};
-
 /**
- * What each choice is called out loud, which is not what it is called on the
- * button: the button says the current state and a screen reader needs to be
- * told what pressing it does.
+ * WHAT A READER WHO HAS NEVER CHOSEN GETS. Dark, because that is the register
+ * this design is, and because "follow the machine" stopped being one of the
+ * answers. `THEME_BOOT` in `layout.tsx` stamps the same default before the
+ * first paint, so nobody sees a frame of the other one.
  */
-const NEXT_LABEL: Record<ThemeChoice, string> = {
-  system: "Switch to the light register",
-  light: "Switch to the dark register",
-  dark: "Follow the system setting",
-};
+export const DEFAULT_THEME: ThemeChoice = "dark";
 
 /*
   The listeners `useSyncExternalStore` subscribes with. A module-level set,
@@ -75,23 +68,36 @@ function subscribe(listener: () => void): () => void {
 }
 
 function currentChoice(): ThemeChoice {
-  const stamped = document.documentElement.getAttribute("data-theme");
-  return stamped === "light" || stamped === "dark" ? stamped : "system";
+  return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
 }
 
-/** The server has no reader and therefore no choice. */
+/** The server has no reader, and the default is what it renders. */
 function serverChoice(): ThemeChoice {
-  return "system";
+  return DEFAULT_THEME;
 }
 
 function apply(choice: ThemeChoice): void {
   const root = document.documentElement;
-  if (choice === "system") root.removeAttribute("data-theme");
-  else root.setAttribute("data-theme", choice);
+  /*
+    THE ATTRIBUTE IS ALWAYS PRESENT NOW. It used to be removed for "system",
+    which is what let `prefers-color-scheme` through; with two states there is
+    nothing to fall through to and an absent attribute would mean the same as a
+    dark one, which is a second way to say one thing.
+  */
+  root.setAttribute("data-theme", choice);
+
+  /*
+    THE CROSSFADE IS OPT-IN, PER SWITCH, and it is a class rather than a
+    standing transition. A page whose every surface transitions its colour is a
+    page that fades on first paint and on every hover that touches a background;
+    this turns the fade on for exactly as long as it lasts and then takes it off
+    again. `prefers-reduced-motion` removes it in the stylesheet.
+  */
+  root.classList.add("theme-turning");
+  window.setTimeout(() => root.classList.remove("theme-turning"), THEME_FADE_MS);
 
   try {
-    if (choice === "system") localStorage.removeItem(THEME_KEY);
-    else localStorage.setItem(THEME_KEY, choice);
+    localStorage.setItem(THEME_KEY, choice);
   } catch {
     // A browser refusing storage is a browser that does not remember the
     // choice, which is a smaller problem than a page that throws over it.
@@ -100,27 +106,29 @@ function apply(choice: ThemeChoice): void {
   for (const listener of listeners) listener();
 }
 
+/** How long the ground takes to change, and the knob to cross. */
+export const THEME_FADE_MS = 220;
+
 export default function ThemeToggle() {
-  /*
-    `system` on the server and on the first client render, whatever the reader
-    actually chose — the server cannot know it. What differs after hydration is
-    the WORD on a button, never the colour of the page: the boot script stamped
-    the attribute before the first paint, so the register is already right.
-  */
   const choice = useSyncExternalStore(subscribe, currentChoice, serverChoice);
+  const dark = choice === "dark";
 
   return (
     <button
       type="button"
-      className="btn-quiet theme-toggle shrink-0 px-2.5 py-1.5 text-[12.5px]"
-      aria-label={NEXT_LABEL[choice]}
-      title={NEXT_LABEL[choice]}
-      onClick={() => {
-        const at = ORDER.indexOf(choice);
-        apply(ORDER[(at + 1) % ORDER.length]);
-      }}
+      role="switch"
+      aria-checked={dark}
+      className="theme-switch"
+      aria-label="Dark register"
+      title={dark ? "Switch to the light register" : "Switch to the dark register"}
+      onClick={() => apply(dark ? "light" : "dark")}
     >
-      {LABEL[choice]}
+      {/* The track and the knob are the whole control. Both are aria-hidden:
+          the switch's state is `aria-checked`, and a screen reader being told
+          about a circle would be told the same thing twice, once uselessly. */}
+      <span aria-hidden className="theme-switch__track">
+        <span className="theme-switch__knob" />
+      </span>
     </button>
   );
 }

@@ -1,11 +1,15 @@
 "use client";
 
-import type { ReactNode } from "react";
 import type { Selection } from "../lib/board/selection";
 import { formatUsdc, pixelCount, unitOfSale } from "../lib/board/pricing";
 
 /**
  * What you are selecting, what it costs, and the one button that buys it.
+ *
+ * TWO THINGS AND NOTHING IN THE MIDDLE. The wallet control used to sit between
+ * them; it is in the top bar now — see `WalletConnect` — which leaves this
+ * panel the shape it always described itself as having: the selection on the
+ * left, the button on the right. There is no third thing to shed.
  *
  * This has to work in both of the layouts .board-controls chooses between: one
  * fixed-height row across the bottom, all the way down to a phone width, and a
@@ -39,7 +43,6 @@ export default function SelectionPanel({
   hint,
   hintTone,
   onBuy,
-  children,
 }: {
   selection: Selection | null;
   perPixel: number;
@@ -49,13 +52,6 @@ export default function SelectionPanel({
   /** "refused" paints the hint in danger; the board has painted the offending blocks to match. */
   hintTone: "info" | "refused";
   onBuy: () => void;
-  /**
-   * Whatever else the controls carry — the legend, the wallet control —
-   * rendered between the readout and the Buy button. DESIGN.md puts the
-   * primary action last, so nothing sits to the right of it in the bar or
-   * below it in the panel.
-   */
-  children?: ReactNode;
 }) {
   return (
     <section className="selection-panel flex min-w-0 flex-1 items-center gap-x-4">
@@ -101,8 +97,6 @@ export default function SelectionPanel({
           </>
         )}
       </div>
-
-      {children}
 
       <div className="selection-buy flex shrink-0 flex-col items-end gap-1">
         <button

@@ -153,6 +153,16 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
    * lets the measurement below carry one branch instead of a media query.
    */
   const leftRailRef = useRef<HTMLDivElement>(null);
+  /**
+   * The wallet control in the bar, so Buy can open it.
+   *
+   * Buy is enabled with no wallet connected now: a disabled button with a
+   * sentence beside it is an explanation asking to be read, and a button that
+   * does the next thing is the next thing. What "opens it" means is focus —
+   * the control is a `<details>` or a button, and focus is what a keyboard and
+   * a pointer both understand.
+   */
+  const walletRef = useRef<HTMLDivElement>(null);
   const rightRailRef = useRef<HTMLDivElement>(null);
   /**
    * The board canvas, held here rather than inside BoardCanvas.
@@ -333,10 +343,17 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
       };
     }
 
+    /*
+      NO WALLET IS NOT A REFUSAL ANY MORE. Buy stays on and opens the connector
+      in the bar — the panel is the selection and the button, and a sentence
+      saying "connect a wallet to buy" was taking the width the price is in.
+      What it costs is one extra press for somebody who has not connected, and
+      what it buys is a panel with two things in it.
+    */
     if (walletMissing) {
       return {
-        canBuy: false,
-        hint: "Connect a wallet to buy. Nothing is held until you do.",
+        canBuy: true,
+        hint: "Buying is signed — this opens your wallet first. Nothing is held until it does.",
         tone: "info",
       };
     }
@@ -353,8 +370,23 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
   // part that does not depend on a z-index.
   const handleBuy = useCallback(() => {
     if (!selection || !buyState.canBuy || purchaseSelection !== null) return;
+    /*
+      NO WALLET: OPEN THE ONE IN THE BAR RATHER THAN START A PURCHASE. Every
+      step of a purchase is signed, so a hold started without a key is a hold
+      nobody can finish — the old panel refused with a sentence, and this does
+      the thing the sentence was asking for.
+    */
+    if (walletMissing) {
+      const control = walletRef.current;
+      const opener = control?.querySelector<HTMLElement>("summary, button");
+      if (opener) {
+        opener.focus();
+        opener.click();
+        return;
+      }
+    }
     setPurchaseSelection(selection);
-  }, [selection, buyState.canBuy, purchaseSelection]);
+  }, [selection, buyState.canBuy, purchaseSelection, walletMissing]);
 
   // Reservation holds sweep expired rows as a side effect of being created,
   // and a purchase turns a block from reserved to paid — either way the
@@ -617,6 +649,25 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           />
           milliondollarpage.fun
         </h1>
+        {/*
+          THE WALLET CONTROL, IMMEDIATELY AFTER THE WORDMARK, at every width.
+          It used to sit in the middle of the purchase panel, which put the one
+          control a buyer needs BEFORE choosing anything behind having chosen
+          it. See `WalletConnect` for the violet and why it is not the accent.
+        */}
+        <WalletConnect
+          ref={walletRef}
+          wallets={wallet.wallets}
+          connected={wallet.connected}
+          connecting={wallet.connecting}
+          notice={wallet.notice}
+          ready={wallet.ready}
+          disabled={purchaseSelection !== null}
+          needed={walletNeeded}
+          onConnect={wallet.connect}
+          onDisconnect={wallet.disconnect}
+        />
+
         <div className="ml-auto min-w-0">
           <BoardCounters stats={board.stats} />
         </div>
@@ -761,23 +812,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
             hint={buyState.hint}
             hintTone={buyState.tone}
             onBuy={handleBuy}
-          >
-            {/* The wallet lives exactly where the address field lived — same
-                slot, same `.wallet-field` hook — so the panel and the bar place
-                it without either layout knowing it changed. See WalletConnect
-                for why the typed field is gone rather than kept alongside. */}
-            <WalletConnect
-              wallets={wallet.wallets}
-              connected={wallet.connected}
-              connecting={wallet.connecting}
-              notice={wallet.notice}
-              ready={wallet.ready}
-              disabled={purchaseSelection !== null}
-              needed={walletNeeded}
-              onConnect={wallet.connect}
-              onDisconnect={wallet.disconnect}
-            />
-          </SelectionPanel>
+          />
         </div>
       </div>
 

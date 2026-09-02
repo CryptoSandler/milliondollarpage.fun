@@ -194,6 +194,17 @@
   --sold-edge: #2b241c;
 
   /*
+   * THE WALLET'S OWN VIOLET, and it is deliberately not this design's accent.
+   * See DESIGN.md, "The second exception, and the colour we did not choose":
+   * the accent means money moving now and nothing else, and a Connect control
+   * is not that — it is the convention every Solana wallet already wears, so
+   * the page borrows it rather than inventing a third meaning for green.
+   * wallet-adapter's own purple here, 7.86:1 against the cream bar.
+   */
+  --wallet: #512da8;
+  --on-wallet: #ffffff;
+
+  /*
    * The 45-degree hatch over a hold — the load-bearing half of that treatment,
    * because the tint alone is 1.63:1 against this theme's paper. It is the INK
    * here and the PAPER in dark: whichever way up the board is, the hatch has to
@@ -365,6 +376,9 @@
     --hold: #5a6779;
     --sold-fallback: #2e3642;
     --sold-edge: #586a89;
+    /* Phantom's own purple in the dark register, 8.31:1 against the bar. */
+    --wallet: #ab9ff2;
+    --on-wallet: #150c2e;
     --hold-hatch: rgba(7, 10, 14, 0.62);
     --font-display-theme: var(--font-display-family);
     --font-ui-theme: var(--font-display-family);
@@ -397,6 +411,9 @@
     --hold: #5a6779;
     --sold-fallback: #2e3642;
     --sold-edge: #586a89;
+    /* Phantom's own purple in the dark register, 8.31:1 against the bar. */
+    --wallet: #ab9ff2;
+    --on-wallet: #150c2e;
     --hold-hatch: rgba(7, 10, 14, 0.62);
     --font-display-theme: var(--font-display-family);
     --font-ui-theme: var(--font-display-family);
@@ -1745,6 +1762,7 @@ h3 {
  */
 [data-rails="full"] .board-rail,
 [data-rails="tools"] .board-rail {
+  container-type: inline-size;
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
@@ -1754,19 +1772,58 @@ h3 {
 }
 
 /*
- * AND THE ROWS INSIDE IT WRAP. Without this the presets are one 369px row in a
- * 98px column: they do not clip — nothing here hides overflow — they paint
- * straight across the wall, which is the exemption's condition broken by a
- * missing line. An overflow probe found it; the sold-pixel guard did not,
- * because it measured the overlay's own box and the box was the right size.
- * The guard checks for overflow now too.
+ * IN A RAIL THE CONTROLS ARE A GRID, NOT A WRAP.
+ *
+ * Wrapping fills rows until it runs out, so a column narrow enough gives the
+ * zoom trio as two-and-one — `−` and `Fit`, then `+` alone underneath — which
+ * is a group that has visibly broken rather than one that has been laid out.
+ * A grid cannot do that: the presets are two fixed columns with Freehand across
+ * the top, and the trio is three cells that stay three cells at every width a
+ * rail can be. `purchase-e2e.test.ts` sweeps the rail across its whole range
+ * and fails on any group whose rows are not all the same length.
  */
 [data-rails="full"] .board-rail .board-rail__presets,
-[data-rails="tools"] .board-rail .board-rail__presets,
+[data-rails="tools"] .board-rail .board-rail__presets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+/* Freehand is the default and the odd one out, so it takes the whole width
+   rather than leaving a hole beside it. */
+[data-rails="full"] .board-rail .board-rail__presets > button:first-child,
+[data-rails="tools"] .board-rail .board-rail__presets > button:first-child {
+  grid-column: 1 / -1;
+}
+
 [data-rails="full"] .board-rail .board-rail__zoom,
 [data-rails="tools"] .board-rail .board-rail__zoom {
-  flex-wrap: wrap;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* Eight rather than ten: three cells and two gaps have to fit 98px of column
+     at the narrowest rail this design produces, and 3×26 + 2×8 is 94. */
+  gap: 8px;
+}
+
+/*
+ * AND THE LONG LABEL GIVES WAY, which is the shed order rather than a squeeze.
+ * Two columns of a 120px rail are 44px each and `100×100` sets at 52. The
+ * presets are squares, so one number says what two do; the full label stays as
+ * the button's accessible name and its tooltip, where it is read rather than
+ * fitted. `BoardRail` renders both and this chooses.
+ */
+.preset-label--short {
+  display: none;
+}
+
+@container (max-width: 190px) {
+  .preset-label--full {
+    display: none;
+  }
+
+  .preset-label--short {
+    display: inline;
+  }
 }
 
 [data-rails="full"] .board-hint,
@@ -2357,5 +2414,255 @@ h3 {
 
   .board-tape__track > [aria-hidden="true"] {
     display: none;
+  }
+}
+
+/* ============================================================================
+   THE THEME SWITCH, AND THE 220ms IT TAKES
+   ----------------------------------------------------------------------------
+   Two states now. "System" is gone, a stored choice still rules, and a reader
+   who has never chosen gets dark — see `ThemeToggle` and `THEME_BOOT`.
+
+   The control is a switch rather than a button with a word on it: a label like
+   `Dark` is either where you are or where pressing it takes you, and no
+   wording fixes that. `role="switch"` and `aria-checked` say it once, and the
+   knob is where the state is.
+
+   NOTHING HERE ANIMATES THE WALL. The transition reaches the chrome's own
+   surfaces by name — the ground, the bars, the rails, the pills — and the board
+   is a canvas whose pixels are painted by a draw call no stylesheet can fade.
+   That is not an accident of the selector list; it is why the list is a list.
+   ========================================================================= */
+
+.theme-switch {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 2px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.theme-switch__track {
+  display: inline-flex;
+  align-items: center;
+  width: 40px;
+  height: 22px;
+  padding: 2px;
+  border: 1px solid var(--control-line);
+  border-radius: var(--radius-pill);
+  background: var(--canvas-deep);
+  transition: background-color 220ms var(--ease);
+}
+
+.theme-switch__knob {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-pill);
+  background: var(--ink-soft);
+  /* The one thing on this page that slides, and it slides 18 pixels. */
+  transform: translateX(0);
+  transition: transform 220ms var(--ease), background-color 220ms var(--ease);
+}
+
+/* Checked is DARK, which is the register the knob sits on the right for. */
+.theme-switch[aria-checked="true"] .theme-switch__knob {
+  transform: translateX(18px);
+}
+
+/*
+ * THE CROSSFADE, and it is on for 220ms rather than standing.
+ *
+ * `ThemeToggle` adds `.theme-turning` to the root for exactly the length of the
+ * fade. A standing transition on these properties would fade the page on its
+ * first paint and on every hover that touches a background; this way the only
+ * thing that ever crosses is the thing the reader just asked for.
+ */
+.theme-turning body,
+.theme-turning .board-shell,
+.theme-turning .board-bar,
+.theme-turning .board-side,
+.theme-turning .board-rail,
+.theme-turning .board-hint,
+.theme-turning .board-tape,
+.theme-turning .board-tape__row,
+.theme-turning .board-standings,
+.theme-turning .btn-quiet,
+.theme-turning .floating-card,
+.theme-turning .theme-switch__track {
+  transition:
+    background-color 220ms var(--ease),
+    border-color 220ms var(--ease),
+    color 220ms var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-switch__knob,
+  .theme-switch__track,
+  .theme-turning body,
+  .theme-turning .board-shell,
+  .theme-turning .board-bar,
+  .theme-turning .board-side,
+  .theme-turning .board-rail,
+  .theme-turning .board-hint,
+  .theme-turning .board-tape,
+  .theme-turning .board-tape__row,
+  .theme-turning .board-standings,
+  .theme-turning .btn-quiet,
+  .theme-turning .floating-card,
+  .theme-turning .theme-switch__track {
+    transition: none;
+  }
+}
+
+/* ============================================================================
+   THE PURCHASE PANEL IS WHITE IN BOTH REGISTERS, BECAUSE IT IS THE RECEIPT
+   ----------------------------------------------------------------------------
+   DESIGN.md, "The first exception, and why the receipt is not a colourway":
+   everything else on this page is one design in two registers, and this is the
+   one box that is the same in both. It is where a number somebody is about to
+   pay is printed, and a receipt is white.
+
+   IT IS NOT A COLOUR OVERRIDE, IT IS A PALETTE. Every child of this panel is
+   already styled through tokens, so re-declaring the LIGHT register's tokens on
+   the panel itself makes the whole island light without a single component
+   knowing: the readout, the hint, the borders, the labels. That is also what
+   keeps it honest — nothing here invents a value, every one of them is a number
+   this document has already measured.
+
+   WHAT IS DELIBERATELY NOT RE-DECLARED IS `--primary`. The accent means money
+   moving now, and the Buy button is the fifth of its five permitted places; it
+   stays the register's own accent so a green Buy in the dark register is still
+   the same claim it is everywhere else.
+
+   MEASURED, against this panel's white:
+
+     ink        #2b241c   15.31   ink-soft  #443a2c   11.13
+     body       #6b6154    6.06   mute      #827968    4.30
+     control-line #8a795c  4.23
+
+   AND THE PANEL AGAINST THE WALL IT FLOATS ON: 19.46:1 on the dark canvas,
+   19.83:1 on the dark paper — and 1.17:1 on the CREAM one, which is to say the
+   white panel is not visible against the light register's ground by tone at
+   all. Its 1px `control-line` border is what says where it is there, at 4.23:1
+   against the panel and 3.62:1 against the cream: the same argument this
+   document already makes for `hairline-strong`, that a boundary is identified
+   by a line rather than by a step.
+   ========================================================================= */
+
+.board-controls {
+  --card: #ffffff;
+  --card-lift: #f7f4ee;
+  --canvas: #ffffff;
+  --canvas-deep: #f0ece2;
+  --ink: #2b241c;
+  --ink-soft: #443a2c;
+  --body: #6b6154;
+  --mute: #827968;
+  --hairline: rgba(43, 36, 28, 0.1);
+  --hairline-strong: #c9baa0;
+  --control-line: #8a795c;
+  --danger: #a8371f;
+
+  background: #ffffff;
+  color: var(--ink);
+}
+
+/* ============================================================================
+   THE WALLET CONTROL, IN THE HEADER AND IN A VIOLET THIS DESIGN DID NOT CHOOSE
+   ----------------------------------------------------------------------------
+   DESIGN.md, "The second exception": the accent means money moving now and
+   nothing else, and a Connect control is not that. What it is instead is a
+   convention — every Solana wallet, and `wallet-adapter` itself, wears this
+   violet — and a reader looking for the thing they already know looks for the
+   colour they already know. Borrowing it is cheaper than teaching a third
+   meaning to green.
+
+   MEASURED. `#512da8` in light is 7.86:1 against the cream bar with white on
+   it at 9.17; `#ab9ff2` in dark is 8.31:1 against the near-black bar with
+   `#150c2e` on it at 7.98. Both clear AA for the label and 1.4.11 for the
+   control's own boundary — which the dark violet does NOT do against the cream,
+   at 2.01:1, and is why the token is themed rather than one value used twice.
+   ========================================================================= */
+
+.wallet-connect {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.wallet-connect__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--wallet);
+  color: var(--on-wallet);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.wallet-connect__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* The connected state is a menu: the address, and one thing inside it. */
+.wallet-connect__menu {
+  position: relative;
+}
+
+.wallet-connect__menu > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.wallet-connect__menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.wallet-connect__sheet {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  min-width: 12rem;
+  padding: 8px;
+  border: 1px solid var(--control-line);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+}
+
+/*
+ * A PHONE KEEPS THE CONTROL AND DROPS ITS WORD. The header is one row at one
+ * fixed height and the wordmark, the count and the switch are already in it;
+ * what a Connect button has to be at 390 is reachable, not labelled. The violet
+ * and the wallet glyph carry it, and the accessible name is unchanged — see
+ * `WalletConnect`, where the label is `sr-only` rather than absent.
+ */
+@media (max-width: 640px) {
+  .wallet-connect__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .wallet-connect__button {
+    padding: 0 7px;
   }
 }

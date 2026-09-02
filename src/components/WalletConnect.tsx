@@ -1,16 +1,39 @@
 "use client";
 
+import type { Ref } from "react";
 import { shortAddress, type UsableWallet } from "../lib/wallet/standard";
 import type { WalletState } from "./useWallet";
 
 /**
  * The control that replaced the wallet address field.
  *
- * WHO CALLS THIS: `BoardView` (src/components/BoardView.tsx), which renders it
- * into the one block of controls SelectionPanel takes as children — the same
- * `.wallet-field` slot the text input used, so every layout rule in
- * globals.css that places the wallet between the readout and the Buy button
- * keeps working in both the bottom bar and the side panel.
+ * WHO CALLS THIS: `BoardView`, which renders it in the TOP BAR, immediately
+ * after the wordmark, at every width including a phone.
+ *
+ * ## Why it left the purchase panel
+ *
+ * It sat between the readout and the Buy button, which put the one control a
+ * buyer needs BEFORE they have chosen anything behind having chosen it — and
+ * spent the middle of the panel on it, plus a sentence saying *Connect a wallet
+ * to buy* where the price belonged. In the header it is where every other
+ * product on this chain puts it, it is reachable from the first second of the
+ * first visit, and the panel is two things again: what you are buying, and the
+ * button that buys it.
+ *
+ * **Buy is enabled without a wallet now.** Pressing it opens this control
+ * rather than refusing — see `BoardView`. A disabled button with an explanation
+ * beside it is a sentence asking to be read; a button that does the next thing
+ * is the next thing.
+ *
+ * ## The violet, which is the second exception in DESIGN.md
+ *
+ * The accent means money moving now and appears in five places. This is not
+ * one of them, and it is not the accent: it is the colour every Solana wallet
+ * and `wallet-adapter` itself already wears, borrowed rather than invented,
+ * because a reader looking for the thing they know looks for the colour they
+ * know. It is themed — `#512da8` on the cream bar, `#ab9ff2` on the near-black
+ * one — because one violet cannot clear 1.4.11 against both grounds, and the
+ * numbers are in the stylesheet and in DESIGN.md.
  *
  * **Why the typed field is gone rather than kept alongside.** It took an
  * address somebody pasted in, and DESIGN.md's "What has to be signed" says
@@ -29,29 +52,10 @@ import type { WalletState } from "./useWallet";
  * that is usually one item long. Every button here is in the tab order from
  * the moment it renders, and takes the page's one measured focus ring.
  *
- * No colour is introduced anywhere in this file. Every class is one the
- * stylesheet already defines and DESIGN.md has already measured — `btn-quiet`,
- * `label-caps`, `text-body`, `text-ink` — so there is no new ratio here to
- * claim or to fail to measure.
+ * Every class is one the stylesheet defines and DESIGN.md has measured. The one
+ * new ratio in this file is the violet's, and it is measured in both registers
+ * rather than claimed in either.
  */
-/**
- * The row the wallet buttons sit in, and the four pixels that make its focus
- * ring visible.
- *
- * `overflow-x: auto` is what keeps a bar of three wallets from widening a bar
- * DESIGN.md fixes at one row — and it CLIPS AT THE PADDING BOX, so without the
- * `p-1` the page's 2px ring at its 2px offset is cut off on every side of every
- * button in here. The `-m-1` hands those four pixels back to the layout, so
- * nothing moves.
- *
- * That was not reasoned out from the stylesheet, which said `outline: 2px solid
- * var(--primary)` the whole time. It was sampled out of a screenshot of this
- * control, where three of the four sides came back `#fbf5e8` — the panel's own
- * cream — and it is pinned by "the focus ring survives both layouts" in
- * `purchase-e2e.test.ts`, which reads the same pixels back.
- */
-const WALLET_ROW = "scrollbar-none -m-1 flex min-w-0 items-center gap-1.5 overflow-x-auto p-1";
-
 export default function WalletConnect({
   wallets,
   connected,
@@ -62,6 +66,7 @@ export default function WalletConnect({
   needed,
   onConnect,
   onDisconnect,
+  ref,
 }: Pick<WalletState, "wallets" | "connected" | "connecting" | "notice" | "ready"> & {
   /**
    * True while a purchase dialog is open.
@@ -69,103 +74,115 @@ export default function WalletConnect({
    * The hold inside that dialog belongs to the address it was created with, and
    * all three of its signed steps are checked against it. Letting the buyer
    * swap wallets underneath it would produce a dialog whose every button
-   * answers 403. The text field this replaced was disabled for exactly the same
-   * reason and in exactly the same condition.
+   * answers 403.
    */
   disabled: boolean;
   /** A buyable rectangle is selected and there is no wallet — the one moment this control is the thing in the way. */
   needed: boolean;
   onConnect: (wallet: UsableWallet) => void;
   onDisconnect: () => void;
+  /**
+   * `BoardView` needs to reach this control: pressing Buy with no wallet opens
+   * it rather than refusing, and "opens it" means putting focus on the first
+   * thing in it. React 19 passes `ref` as an ordinary prop.
+   */
+  ref?: Ref<HTMLDivElement>;
 }) {
   return (
-    <div className="wallet-field flex min-w-0 shrink-0 flex-col justify-center gap-1">
-      <span className="label-caps hidden items-center gap-1.5 sm:flex">
-        Wallet
-        {needed && <span className="font-bold text-primary-pressed">needed</span>}
-      </span>
-
+    <div ref={ref} className="wallet-connect" data-needed={needed ? "yes" : "no"}>
       {/*
-        Every outcome of a connect, said once, politely.
-
-        Polite because it confirms what the buyer just set out to do —
-        DESIGN.md reserves assertive for a refusal that invalidates what
-        somebody is in the middle of, and choosing a wallet is not that.
-
-        It is `sr-only` in the bottom bar and printed in the side panel, which
-        is not two behaviours but the shed order DESIGN.md already sets out:
-        the bar "runs out of width" and gives things up that the panel, which
-        has the height, keeps. What a sighted buyer sees in the bar is the
-        control itself changing — the address appears, or the buttons are still
-        there — and what everybody hears is this.
+        Every outcome of a connect, said once, politely. Polite because it
+        confirms what the buyer just set out to do — DESIGN.md reserves
+        assertive for a refusal that invalidates what somebody is in the middle
+        of, and choosing a wallet is not that.
       */}
       <p className="wallet-notice sr-only" role="status" aria-live="polite">
         {notice ?? ""}
       </p>
 
       {connected ? (
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className="tabular min-w-0 truncate text-[12.5px] font-semibold text-ink">
+        /*
+          THE CONNECTED STATE IS A MENU, and it is a `<details>` because that is
+          the laziest thing that is actually a menu: the platform gives it the
+          expanded state, the keyboard, the escape and the toggle for free. A
+          popover built by hand needs a focus trap, a click-outside and an
+          `aria-expanded` to hide one item.
+        */
+        <details className="wallet-connect__menu">
+          <summary className="wallet-connect__button" title={`Connected with ${connected.name}`}>
+            <span aria-hidden>◈</span>
             {/* The ends are what a person checks an address by, and they are
                 what the extension itself shows. Nothing is hidden: the whole
                 address is beside it for anything that reads rather than looks. */}
-            <span aria-hidden>{shortAddress(connected.address)}</span>
-            <span className="sr-only">{`Connected with ${connected.name}, address ${connected.address}`}</span>
-          </span>
-          <button
-            type="button"
-            onClick={onDisconnect}
-            disabled={disabled}
-            title={disabled ? "Finish or close the purchase first." : `Disconnect ${connected.name}`}
-            className="btn-quiet shrink-0 px-2 py-1.5 text-[12.5px]"
-          >
-            Disconnect
-          </button>
-        </div>
+            <span className="tabular" aria-hidden>
+              {shortAddress(connected.address)}
+            </span>
+            <span className="sr-only">{`Wallet menu. Connected with ${connected.name}, address ${connected.address}`}</span>
+          </summary>
+          <div className="wallet-connect__sheet">
+            <p className="tabular mb-2 break-all text-[11.5px] text-body">{connected.address}</p>
+            <button
+              type="button"
+              onClick={onDisconnect}
+              disabled={disabled}
+              title={disabled ? "Finish or close the purchase first." : `Disconnect ${connected.name}`}
+              className="btn-quiet w-full px-2 py-1.5 text-[12.5px]"
+            >
+              Disconnect
+            </button>
+          </div>
+        </details>
       ) : !ready ? (
         // The registry answers on the first commit, so this is one frame. It
         // exists because the alternative is telling somebody who has a wallet
-        // installed that they have not, which is a false sentence however
-        // briefly it is on screen.
+        // installed that they have not.
         <p className="text-[12.5px] text-body">Looking for a wallet…</p>
       ) : wallets.length === 0 ? (
         // Plainly, once, and with nothing to install named. Which wallet
-        // somebody uses is their decision and this page has no stake in it —
-        // DESIGN.md's voice is "plain, warm, specific", and a product
-        // recommendation here would be an advert in the checkout.
-        <p className="max-w-[13rem] text-[12.5px] text-body">
-          No Solana wallet in this browser. Buying is signed, so there is nothing to connect to yet.
-        </p>
+        // somebody uses is their decision and this page has no stake in it.
+        <p className="max-w-[13rem] text-[12.5px] text-body">No Solana wallet in this browser.</p>
+      ) : wallets.length === 1 ? (
+        // One wallet is the common case, and a list of one is a menu nobody
+        // needs: the button connects it.
+        <button
+          type="button"
+          className="wallet-connect__button"
+          disabled={disabled || connecting !== null}
+          onClick={() => onConnect(wallets[0])}
+          /* The accessible name NAMES THE WALLET, which the visible label
+             cannot at 390 and does not need to anywhere else. It is also what
+             `purchase-e2e.test.ts` reaches for, and what a screen reader is
+             told instead of the glyph. */
+          aria-label={`Connect ${wallets[0].name}`}
+          title={`Connect ${wallets[0].name}`}
+        >
+          <span aria-hidden>◈</span>
+          <span className="wallet-connect__label" aria-hidden>
+            {connecting ? "Connecting…" : "Connect wallet"}
+          </span>
+        </button>
       ) : (
-        <div className={WALLET_ROW}>
-          {wallets.map((wallet) => (
-            <button
-              key={wallet.name}
-              type="button"
-              onClick={() => onConnect(wallet)}
-              // Disabled while any connect is in flight, not only its own: two
-              // wallet prompts open at once is a race whose loser silently
-              // replaces the winner.
-              disabled={disabled || connecting !== null}
-              aria-label={`Connect ${wallet.name}`}
-              title={`Connect ${wallet.name}`}
-              // The terracotta border is the "needed" marker for a screen too
-              // narrow to show either the label beside it or the hint under
-              // Buy — the text field this replaced carried exactly this class
-              // in exactly this condition, and dropping it would have left a
-              // phone with no sign at all of what is in the way.
-              className={`btn-quiet flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 text-[12.5px] ${
-                needed ? "border-primary" : ""
-              }`}
-            >
-              {wallet.icon && (
-                // eslint-disable-next-line @next/next/no-img-element -- a data: URI from the extension, not something next/image can optimize.
-                <img src={wallet.icon} alt="" aria-hidden className="size-4 shrink-0 rounded-xs" />
-              )}
-              {connecting === wallet.name ? "Connecting…" : wallet.name}
-            </button>
-          ))}
-        </div>
+        <details className="wallet-connect__menu">
+          <summary className="wallet-connect__button">
+            <span aria-hidden>◈</span>
+            <span className="wallet-connect__label">Connect wallet</span>
+            <span className="sr-only">Choose a wallet to connect</span>
+          </summary>
+          <div className="wallet-connect__sheet">
+            {wallets.map((wallet) => (
+              <button
+                key={wallet.name}
+                type="button"
+                onClick={() => onConnect(wallet)}
+                disabled={disabled || connecting !== null}
+                aria-label={`Connect ${wallet.name}`}
+                className="btn-quiet mb-1 w-full px-2 py-1.5 text-left text-[12.5px] last:mb-0"
+              >
+                {wallet.name}
+              </button>
+            ))}
+          </div>
+        </details>
       )}
     </div>
   );

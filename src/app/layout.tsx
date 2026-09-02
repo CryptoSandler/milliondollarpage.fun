@@ -80,11 +80,24 @@ export const metadata: Metadata = {
  * a flash of the opposite colourway is the most obviously broken thing a
  * two-theme page can do.
  *
- * It is ten lines and it touches one attribute. `ThemeToggle` reads the
+ * It is two lines and it touches one attribute. `ThemeToggle` reads the
  * attribute back rather than reading storage again, so there is one parser for
  * the stored value and it is this one.
+ *
+ * TWO STATES NOW, AND IT ALWAYS STAMPS. "System" is gone: a stored choice still
+ * rules and a reader who has never chosen gets **dark**, which is this design's
+ * own register. The attribute is therefore never absent, which is what stops
+ * `prefers-color-scheme` deciding anything for a reader who has JavaScript.
+ *
+ * THE ONE HONEST GAP: with JavaScript off nothing stamps, and the stylesheet's
+ * media query answers instead — so a no-JS reader on a light machine gets the
+ * light register rather than the default. Inverting the stylesheet so bare
+ * `:root` is dark would close it and is a change to every measured ratio in
+ * DESIGN.md's two tables; it is written down rather than done.
  */
-const THEME_BOOT = `try{var t=localStorage.getItem("mdp-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}`;
+const THEME_BOOT =
+  `var t="dark";try{var v=localStorage.getItem("mdp-theme");if(v==="light")t="light"}catch(e){}` +
+  `document.documentElement.setAttribute("data-theme",t)`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

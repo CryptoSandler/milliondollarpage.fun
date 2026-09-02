@@ -28,6 +28,8 @@ colors:
   hold-hatch: "rgba(43,36,28,0.62)"
   sold-fallback: "#443a2c"
   sold-edge: "#2b241c"
+  wallet: "#512da8"
+  on-wallet: "#ffffff"
 colors-dark:
   primary: "#2ce08a"
   primary-pressed: "#14b86c"
@@ -54,6 +56,8 @@ colors-dark:
   hold-hatch: "rgba(7,10,14,0.62)"
   sold-fallback: "#2e3642"
   sold-edge: "#586a89"
+  wallet: "#ab9ff2"
+  on-wallet: "#150c2e"
 typography-light:
   display-lg: { fontFamily: "Bricolage Grotesque", fontSize: 34px, fontWeight: 700, lineHeight: 1.05, letterSpacing: -0.8px }
   display:    { fontFamily: "Bricolage Grotesque", fontSize: 22px, fontWeight: 600, lineHeight: 1.15, letterSpacing: -0.4px }
@@ -317,17 +321,97 @@ other: each was designed and measured on its own, and both tables below were
 computed from this document's own frontmatter and confirmed against pixels
 sampled out of a rendered screenshot. A ratio nobody computed is not a ratio.
 
-**A reader who has not chosen follows `prefers-color-scheme`.** A reader who has
-chosen gets what they chose, remembered, and can go back to following the
-system — three states, not two, because a two-way switch has no way back to
-"whatever the machine says". The choice is stamped on the root element by a
-blocking script before the first paint, so no reader ever sees a frame of the
-wrong register.
+**TWO STATES, AND THE DEFAULT IS DARK.** A stored choice rules; a reader who has
+never chosen gets the dark register, which is this design's own rather than
+whatever their machine decided for their mail client. The choice is stamped on
+the root element by a blocking script before the first paint, so no reader ever
+sees a frame of the wrong register.
+
+**"System" is retired**, and what it cost is stated rather than hidden: somebody
+who has chosen light here and runs a dark machine no longer has a control that
+says *go back to following the machine*. A three-position control existed to
+answer a question nobody was asking, and it cost the page a text button where a
+switch belongs.
+
+**The control is a switch.** A button labelled `Dark` is either telling you
+where you are or where pressing it takes you, and no wording fixes that;
+`role="switch"` with `aria-checked` says *dark is on* and the knob is where the
+state is. It is the one control on this page that animates: the knob crosses
+18px and the chrome's own surfaces cross-fade, both in **220ms**, and the fade
+is a class the toggle adds for exactly that long rather than a standing
+transition that would fade the page on its first paint. **Nothing animates the
+wall** — the selector list names the bars, the rails and the pills, and the
+board is a canvas no stylesheet can fade. `prefers-reduced-motion` removes both.
+
+**One honest gap:** with JavaScript off nothing is stamped and the stylesheet's
+media query answers instead, so a no-JS reader on a light machine gets the light
+register rather than the default. Closing it means inverting the stylesheet so
+bare `:root` is dark, which is a change to every ratio in the two tables below;
+it is written down rather than done.
 
 **What is themed is only colour and the two typefaces.** The layout, the type
 scale, the motion and every mechanic are one page: the settled rail, the marked
 newest sale, the counter's flash and the hover price belong to both registers.
 A theme is a colourway, not a second design.
+
+### Two exceptions, and both are named rather than tolerated
+
+**One box is the same in both registers, and one colour is not ours.** Every
+other rule in this section is about a page that is one design in two colourways.
+These two are not, and each is here with its reason and its measurement rather
+than as a place the rules happen not to reach.
+
+#### The purchase panel is white in both registers, because it is the receipt
+
+It is where a number somebody is about to pay is printed, and a receipt is
+white. Not a colour override but a **palette**: the panel re-declares the light
+register's tokens on itself, so every child — the readout, the price, the
+borders, the hint — becomes light without one component knowing, and nothing
+here invents a value this document has not already measured.
+
+**Against the panel's own white**, computed the same way as every other table:
+
+| | ratio |
+|---|---|
+| `ink` `#2b241c` | **15.31** |
+| `ink-soft` `#443a2c` | **11.13** |
+| `body` `#6b6154` | **6.06** |
+| `mute` `#827968` | 4.30 |
+| `control-line` `#8a795c` | **4.23** |
+
+**And the panel against the wall it floats on: 19.46:1** on the dark canvas and
+19.83:1 on the dark paper — which is what the owner asked to see measured, and
+it is the whole argument for the exception. In the CREAM register it is
+**1.17:1**, which is to say the white panel is not told from the ground by tone
+at all; its 1px `control-line` border is what says where it is there, at 4.23
+against the panel and 3.62 against the cream. That is this document's own
+`hairline-strong` argument applied one level up: a boundary is identified by a
+line, not by a step.
+
+**`--primary` is deliberately NOT re-declared.** The Buy button is the fifth of
+the accent's five permitted places, so a green Buy on a white panel in the dark
+register is exactly the claim it is everywhere else.
+
+#### The wallet control is violet, and the violet is not ours
+
+The accent means money moving now. A Connect control is not that — it is the
+thing that has to happen before anything can move — and giving it the accent
+would teach green a third meaning. What it wears instead is the convention:
+`wallet-adapter`'s own purple and Phantom's, which every reader who has a Solana
+wallet already recognises. **Borrowed, not invented, and that is the exception.**
+
+**It is themed, because one violet cannot carry both grounds:**
+
+| | against its bar | label on it |
+|---|---|---|
+| light, `#512da8` | **7.86** | white at **9.17** |
+| dark, `#ab9ff2` | **8.31** | `#150c2e` at **7.98** |
+
+Phantom's light violet measures **2.01:1** against the cream bar, which fails
+1.4.11 for a control's own boundary — so the light register takes the darker
+purple rather than the same value twice. `purchase-e2e.test.ts` samples the
+rendered control and compares it with this document's frontmatter, in both
+registers.
 
 ### The accent means one thing in both: MONEY MOVING NOW
 

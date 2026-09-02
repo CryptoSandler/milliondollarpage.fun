@@ -314,12 +314,25 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
       //    wallet's own — this is the registry read, the connect call and the
       //    account choice, all in one assertion.
       await browser.evaluate(`document.querySelector('[aria-label="Connect Mock Wallet"]').click()`);
+      /*
+        THE ADDRESS IS ON SCREEN; DISCONNECT IS ONE PRESS AWAY. The connected
+        control is a menu now — the truncated address is the summary and
+        Disconnect is inside it — so this waits for the address, opens the menu,
+        and then asks for the thing the menu holds. It used to wait for both at
+        once, which was right when they were both in the panel side by side.
+      */
       await waitFor("the connected wallet's address", () =>
         browser.evaluate<boolean>(
-          `document.body.innerText.includes(${JSON.stringify(wallet.address.slice(0, 4))}) &&
-           document.body.innerText.includes("Disconnect")`,
+          `document.body.innerText.includes(${JSON.stringify(wallet.address.slice(0, 4))})`,
         ),
       );
+      await browser.evaluate(
+        `document.querySelector(".wallet-connect__menu").setAttribute("open", "")`,
+      );
+      expect(
+        await browser.evaluate<boolean>(`document.body.innerText.includes("Disconnect")`),
+        "the wallet menu does not hold a way to disconnect",
+      ).toBe(true);
 
       // 2. HOLD IT. The rectangle is already selected — see above — and Enter
       //    is the Buy button (BoardCanvas).
@@ -678,6 +691,267 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
             drift,
             `the ${side} of the frame at ${at} sampled rgb(${sampled.join(",")}), which is not the board's frame`,
           ).toBeLessThanOrEqual(12);
+        }
+      }
+    },
+    240_000,
+  );
+
+  /**
+   * NO CONTROL GROUP BREAKS TWO-AND-ONE, at any width a rail can be.
+   *
+   * Wrapping fills rows until it runs out, so a column narrow enough gives the
+   * zoom trio as `−` and `Fit` with `+` alone underneath — a group that has
+   * visibly broken rather than one that has been laid out. The rails are grids
+   * now, and a grid cannot do that; this sweeps the rail across its whole range
+   * and fails on any group whose rows are not all the same length except for
+   * the last, and never on a last row of one where the row above it holds more
+   * than two.
+   */
+  it(
+    "never breaks a group of rail controls into a short last row", 
+    async () => {
+      const ROWS = `(() => {
+        const out = {};
+        for (const group of [".board-rail__presets", ".board-rail__zoom"]) {
+          const el = document.querySelector(group);
+          if (!el) continue;
+          const rows = new Map();
+          for (const b of el.querySelectorAll("button")) {
+            const r = b.getBoundingClientRect();
+            const key = Math.round(r.y);
+            rows.set(key, (rows.get(key) ?? 0) + 1);
+          }
+          out[group] = [...rows.entries()].sort((a, b) => a[0] - b[0]).map((e) => e[1]);
+        }
+        out.railW = getComputedStyle(document.documentElement).getPropertyValue("--rail-w");
+        out.kind = document.documentElement.dataset.rails;
+        return JSON.stringify(out);
+      })()`;
+
+      /*
+        Every width a rail can be, driven by pinning `--rail-w` rather than by
+        hunting viewports: the floor is 108 and the ceiling 288, and what is
+        being checked is the LAYOUT at each of them, not which monitor produces
+        it. The page is loaded once at a viewport that has a pair.
+      */
+      await browser.resize(2560, 1440);
+      await browser.goto(`${server.origin}/?groups=1`);
+      await waitFor("the board", async () =>
+        browser.evaluate<string | null>(`document.querySelector('canvas')?.dataset.boardRect ?? null`),
+      );
+      expect(
+        await browser.evaluate<string | null>(`document.documentElement.dataset.rails`),
+      ).toBe("full");
+
+      for (let railW = 108; railW <= 288; railW += 4) {
+        await browser.evaluate(
+          `document.documentElement.style.setProperty("--rail-w", "${railW}px")`,
+        );
+        await sleep(60);
+        const reading = JSON.parse(await browser.evaluate<string>(ROWS)) as Record<
+          string,
+          number[] | string
+        >;
+
+        for (const group of [".board-rail__presets", ".board-rail__zoom"]) {
+          const rows = reading[group] as number[];
+          expect(rows?.length, `${group} has no rows at a ${railW}px rail`).toBeGreaterThan(0);
+          /*
+            THE FAILURE THIS NAMES is a last row shorter than the row above it
+            by more than nothing while the group is more than one row — which is
+            exactly `[2, 1]`. A group laid out in a grid is either one row, or
+            rows of equal length, or equal rows with a deliberate full-width
+            first cell, which reads as `[1, 2, 2]`.
+          */
+          const full = rows.slice(0, -1);
+          const last = rows[rows.length - 1];
+          const widest = Math.max(...rows);
+          expect(
+            rows.length === 1 || last === widest || full.every((n) => n === widest),
+            `${group} is laid out as [${rows.join(", ")}] at a ${railW}px rail`,
+          ).toBe(true);
+          // And the zoom trio is one row at every width, which is the specific
+          // shape the owner asked for.
+          if (group === ".board-rail__zoom") {
+            expect(rows, `the zoom trio at a ${railW}px rail`).toEqual([3]);
+          }
+        }
+      }
+    },
+    240_000,
+  );
+
+  /**
+   * THE THEME IS TWO STATES, THE SWITCH REMEMBERS, AND THE PANEL IS WHITE IN
+   * BOTH.
+   *
+   * Three claims, one page load each, because they are three different things
+   * that can each be true while the others are not: `system` really gone from
+   * the DOM rather than merely unreachable, the choice surviving a reload, and
+   * the purchase panel measuring white against a near-black wall.
+   */
+  it(
+    "offers two themes, remembers the one chosen, and keeps the panel white in both",
+    async () => {
+      await browser.resize(1440, 900);
+      await browser.goto(`${server.origin}/?theme=1`);
+      await waitFor("the board", async () =>
+        browser.evaluate<string | null>(`document.querySelector('canvas')?.dataset.boardRect ?? null`),
+      );
+
+      // 1. NO "SYSTEM" ANYWHERE IN THE DOM, in any casing, and the control is a
+      //    switch rather than a button with a word on it.
+      const shape = JSON.parse(await browser.evaluate<string>(`(() => {
+        const sw = document.querySelector(".theme-switch");
+        return JSON.stringify({
+          role: sw && sw.getAttribute("role"),
+          checked: sw && sw.getAttribute("aria-checked"),
+          text: sw ? sw.textContent.trim() : null,
+          // Visible TEXT, not markup: the first version read innerHTML and
+          // matched "system-ui" inside a font stack in the Next dev overlay's
+          // own payload. What the rule is about is a theme called "system"
+          // being offered to a reader, and offered means readable.
+          saysSystem: /\bsystem\b/i.test(document.body.innerText),
+          // And nothing anywhere still stores or names it as a choice.
+          storedSystem: (() => { try { return localStorage.getItem("mdp-theme") === "system"; }
+            catch (e) { return false; } })(),
+          optionSystem: !!document.querySelector('[value="system"], [data-theme-choice="system"]'),
+          stamped: document.documentElement.dataset.theme,
+        });
+      })()`)) as {
+        role: string | null;
+        checked: string | null;
+        text: string | null;
+        saysSystem: boolean;
+        storedSystem: boolean;
+        optionSystem: boolean;
+        stamped: string;
+      };
+      expect(shape.role, "the theme control should be a switch").toBe("switch");
+      expect(shape.text, "the switch should carry no word").toBe("");
+      expect(shape.saysSystem, "the word `system` is still readable on the page").toBe(false);
+      expect(shape.storedSystem, "`system` is still a stored theme choice").toBe(false);
+      expect(shape.optionSystem, "`system` is still offered as an option").toBe(false);
+      // A reader who has never chosen gets dark, and the attribute is stamped
+      // rather than absent — an absent one would let prefers-color-scheme in.
+      expect(shape.stamped, "the default register").toBe("dark");
+      expect(shape.checked, "the switch should read as on for dark").toBe("true");
+
+      // 2. IT PERSISTS. Flip it, reload, and it is still where it was put.
+      await browser.evaluate(`document.querySelector(".theme-switch").click()`);
+      await sleep(300);
+      expect(await browser.evaluate<string>(`document.documentElement.dataset.theme`)).toBe("light");
+      await browser.goto(`${server.origin}/?theme=2`);
+      await waitFor("the board again", async () =>
+        browser.evaluate<string | null>(`document.querySelector('canvas')?.dataset.boardRect ?? null`),
+      );
+      expect(
+        await browser.evaluate<string>(`document.documentElement.dataset.theme`),
+        "the chosen register did not survive a reload",
+      ).toBe("light");
+      expect(
+        await browser.evaluate<string>(`document.querySelector(".theme-switch").getAttribute("aria-checked")`),
+      ).toBe("false");
+
+      // 3. THE PANEL IS THE RECEIPT, and a receipt is white in both registers.
+      for (const theme of ["light", "dark"] as const) {
+        await browser.goto(`${server.origin}/?theme=panel-${theme}`);
+        await browser.evaluate(
+          `document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+        );
+        await waitFor(`the board in ${theme}`, async () =>
+          browser.evaluate<string | null>(`document.querySelector('canvas')?.dataset.boardRect ?? null`),
+        );
+        await selectARectangle(browser);
+
+        const panel = JSON.parse(await browser.evaluate<string>(`(() => {
+          const el = document.querySelector(".board-controls:not([hidden])");
+          const s = getComputedStyle(el);
+          return JSON.stringify({ background: s.backgroundColor, colour: s.color,
+            ground: getComputedStyle(document.body).backgroundColor });
+        })()`)) as { background: string; colour: string; ground: string };
+
+        expect(panel.background, `the purchase panel in ${theme}`).toBe("rgb(255, 255, 255)");
+        // And its ink is the light register's, not the surrounding one's: a
+        // white panel with near-white text is the failure this would miss.
+        expect(panel.colour, `the panel's ink in ${theme}`).toBe("rgb(43, 36, 28)");
+      }
+    },
+    240_000,
+  );
+
+  /**
+   * THE WALLET CONTROL IS IN THE HEADER, IN BOTH REGISTERS AND ON A PHONE, AND
+   * IT IS NOT IN THE PANEL.
+   *
+   * Three places it has to be and one it must not, plus the ratio the second
+   * colour exception in DESIGN.md rests on: the violet against the bar it sits
+   * on, sampled rather than believed.
+   */
+  it(
+    "puts the wallet control in the header in both themes and at 390, and never in the panel",
+    async () => {
+      for (const [theme, width, height] of [
+        ["dark", 1440, 900],
+        ["light", 1440, 900],
+        ["dark", 390, 844],
+      ] as const) {
+        const at = `${theme} at ${width}x${height}`;
+        await browser.resize(width, height);
+        await browser.goto(`${server.origin}/?wallet=${theme}-${width}`);
+        await browser.evaluate(
+          `document.documentElement.setAttribute("data-theme", ${JSON.stringify(theme)})`,
+        );
+        await waitFor(`the board, ${at}`, async () =>
+          browser.evaluate<string | null>(`document.querySelector('canvas')?.dataset.boardRect ?? null`),
+        );
+
+        const where = JSON.parse(await browser.evaluate<string>(`(() => {
+          const el = document.querySelector(".wallet-connect");
+          if (!el) return JSON.stringify({ present: false });
+          const b = el.getBoundingClientRect();
+          const bar = document.querySelector("header.board-bar").getBoundingClientRect();
+          const control = el.querySelector(".wallet-connect__button");
+          const s = control && getComputedStyle(control);
+          return JSON.stringify({
+            present: true,
+            inHeader: !!el.closest("header.board-bar"),
+            inPanel: !!el.closest(".board-controls"),
+            visible: b.width > 0 && b.height > 0,
+            // After the wordmark: its left edge is past the wordmark's right.
+            afterWordmark: b.left >= document.querySelector("header.board-bar h1").getBoundingClientRect().right,
+            insideBar: b.top >= bar.top - 1 && b.bottom <= bar.bottom + 1,
+            violet: s ? s.backgroundColor : null,
+            ink: s ? s.color : null,
+          });
+        })()`)) as Record<string, unknown>;
+
+        expect(where.present, `no wallet control at all, ${at}`).toBe(true);
+        expect(where.inHeader, `the wallet control is not in the header, ${at}`).toBe(true);
+        expect(where.inPanel, `the wallet control is inside the purchase panel, ${at}`).toBe(false);
+        expect(where.visible, `the wallet control has no box, ${at}`).toBe(true);
+        expect(where.afterWordmark, `the wallet control is before the wordmark, ${at}`).toBe(true);
+        expect(where.insideBar, `the wallet control is outside the bar's own row, ${at}`).toBe(true);
+
+        // THE VIOLET IS THE ONE THIS DOCUMENT DECIDED, read from the rendered
+        // control rather than from the stylesheet — document, stylesheet,
+        // pixel, the same loop every other colour assertion here closes.
+        const expected = token("wallet", theme);
+        expect(
+          where.violet,
+          `the wallet control's violet, ${at}`,
+        ).toBe(`rgb(${expected.join(", ")})`);
+
+        // And the panel, once there is one, contains no wallet control.
+        if (width > 640) {
+          await selectARectangle(browser);
+          expect(
+            await browser.evaluate<boolean>(
+              `!!document.querySelector(".board-controls:not([hidden]) .wallet-connect")`,
+            ),
+            `the purchase panel is carrying a wallet control, ${at}`,
+          ).toBe(false);
         }
       }
     },
