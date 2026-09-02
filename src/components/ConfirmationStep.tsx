@@ -98,6 +98,10 @@ export default function ConfirmationStep({
         <div className="min-w-[13rem] flex-1">
           <div className="floating-card p-3">
             <BlockCard
+            id={order.id}
+            /* The rectangle being confirmed. Its link is not live yet — the
+               card renders it as a preview — so `/go/<id>` is a URL nobody
+               follows from here, and there is nothing to have clicked. */
               imageSrc={rendered}
               caption={draft.caption.trim() === "" ? null : draft.caption}
               link={draft.link}

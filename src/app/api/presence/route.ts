@@ -1,4 +1,5 @@
-import { recordHeartbeat, rollUpPresence } from "../../../lib/board/presence";
+import { rollUpVisits } from "../../../lib/board/audience";
+import { RAW_RETENTION_HOURS, recordHeartbeat, rollUpPresence } from "../../../lib/board/presence";
 import { NO_STORE, identify, json, problem } from "../../../lib/http";
 
 /**
@@ -62,7 +63,21 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  if (Math.random() < ROLLUP_ODDS) await rollUpPresence();
+  if (Math.random() < ROLLUP_ODDS) {
+    /*
+      VISITS FIRST, AND THAT ORDER IS THE WHOLE OF IT. `rollUpPresence` deletes
+      raw minutes once it has counted them, and a visit is a session START in
+      those same minutes — counted after the delete, a day's visits would be a
+      day's visits missing. The cutoff is the same one presence uses for its own
+      raw retention, so nothing is counted that is about to disappear and
+      nothing disappears that has not been counted.
+
+      Both are idempotent, so a heartbeat that loses the race with another one
+      adds nothing twice.
+    */
+    await rollUpVisits(new Date(Date.now() - RAW_RETENTION_HOURS * 60 * 60 * 1000));
+    await rollUpPresence();
+  }
 
   // 204: there is nothing to say. A body here would be a body every open board
   // downloads once a minute for no reason.

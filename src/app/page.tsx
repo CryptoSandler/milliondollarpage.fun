@@ -3,6 +3,7 @@ import { boardStandings, boardStats, listBoardRects, STANDINGS_ON_WALL } from ".
 import { ensureWall } from "../lib/board/composite";
 import { pricePerPixelBaseUnits } from "../lib/board/settings";
 import { recentPurchases } from "../lib/board/tape";
+import { visitsTotal } from "../lib/board/audience";
 import { onlineNow } from "../lib/board/presence";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ export const dynamic = "force-dynamic";
  * bitmap from the HTML rather than after a round trip.
  */
 export default async function Page() {
-  const [rects, wall, stats, perPixel, tape, online, standings] = await Promise.all([
+  const [rects, wall, stats, perPixel, tape, online, standings, views] = await Promise.all([
     listBoardRects(),
     ensureWall(),
     boardStats(),
@@ -21,6 +22,7 @@ export default async function Page() {
     recentPurchases(),
     onlineNow(),
     boardStandings(STANDINGS_ON_WALL),
+    visitsTotal(),
   ]);
 
   return (
@@ -32,6 +34,7 @@ export default async function Page() {
         pricePerPixelBaseUnits: perPixel,
         tape,
         online,
+        views,
         standings,
         asOf: new Date().toISOString(),
       }}

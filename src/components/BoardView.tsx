@@ -46,6 +46,15 @@ type BoardPayload = {
   /** How many people are on the wall right now. See `OnlineBanner`. */
   online: number;
   /**
+   * How many visits the wall has ever had, cumulative.
+   *
+   * A visit is a new presence session — the anonymous heartbeat that already
+   * exists, counted rather than collected again. See `lib/board/audience.ts`,
+   * which explains why the table holding it has two columns and neither is
+   * text.
+   */
+  views: number;
+  /**
    * The five biggest rectangles, for the foot of the right rail. Empty until
    * something is sold, and never a total — see `BoardStandings`.
    */
@@ -660,7 +669,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           also the only thing in the bar that is about people rather than
           pixels, which is why it carries a dot and not a number alone.
         */}
-        <OnlineBanner online={board.online} className="online-banner--bar" />
+        <OnlineBanner online={board.online} views={board.views} className="online-banner--bar" />
         {/*
           The way to the answers, in the bar rather than buried in the
           checkout. What losing a key costs and what a takedown does are things
@@ -737,7 +746,12 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
             not beat: exactly one copy on the page tells the server this browser
             is here, and it is the one in the bar. See `OnlineBanner`.
           */}
-          <OnlineBanner online={board.online} beat={false} className="online-banner--rail" />
+          <OnlineBanner
+            online={board.online}
+            views={board.views}
+            beat={false}
+            className="online-banner--rail"
+          />
         </PurchaseTape>
         <BoardStandings rows={board.standings} />
       </div>
@@ -847,9 +861,11 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
             to disagree about how a rectangle looks.
           */}
           <BlockCard
+            id={hovered.rect.id}
             imageSrc={hovered.rect.status === "reserved" ? null : blockImageUrl(hovered.rect.id)}
             caption={details.get(hovered.rect.id)?.caption ?? null}
             link={details.get(hovered.rect.id)?.link ?? null}
+            clicks={details.get(hovered.rect.id)?.clicks}
             rect={hovered.rect}
             state={
               hovered.rect.status === "reserved"

@@ -30,7 +30,7 @@ function block(
  * this function, and it is why every assertion below passes one.
  */
 function words(rect: BoardRect, caption: string | null): Map<string, BlockDetails> {
-  return new Map([[rect.id, { ...rect, caption, link: null, fit: null }]]);
+  return new Map([[rect.id, { ...rect, caption, link: null, fit: null, clicks: 0 }]]);
 }
 
 const NO_WORDS = new Map<string, BlockDetails>();

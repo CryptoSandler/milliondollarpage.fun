@@ -42,6 +42,7 @@ describe("GET /api/blocks/{id}", () => {
       w: 30,
       h: 40,
       status: "paid",
+      clicks: 0,
       caption: "My shop",
       link: "https://example.com/shop",
       // Not words, and here for the zoom-detail draw: above the ruling's zoom
@@ -58,6 +59,7 @@ describe("GET /api/blocks/{id}", () => {
     expect(raw).not.toContain("example.com");
     expect(JSON.parse(raw)).toMatchObject({
       status: "reserved",
+      clicks: 0,
       caption: null,
       link: null,
       // A hold publishes no bitmap, so it publishes nothing about how one
@@ -73,6 +75,7 @@ describe("GET /api/blocks/{id}", () => {
     expect(raw).not.toContain("My shop");
     expect(JSON.parse(raw)).toMatchObject({
       status: "paid",
+      clicks: 0,
       w: 30,
       caption: null,
       link: null,

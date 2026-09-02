@@ -67,6 +67,14 @@ export type BoardRect = {
  */
 export type BlockDetails = {
   id: string;
+  /**
+   * How many times this rectangle's link has been followed through `/go/<id>`.
+   *
+   * Public on purpose: it is the buyer's own number and the only evidence this
+   * wall can give that a rectangle was worth buying. Zero for anything that
+   * does not publish a link at all — see the query.
+   */
+  clicks: number;
   x: number;
   y: number;
   w: number;
@@ -151,11 +159,28 @@ export async function listBoardRects(): Promise<BoardRect[]> {
  */
 export async function getBlockDetails(id: string): Promise<BlockDetails | null> {
   return queryOne<BlockDetails>(
+    /*
+      NO ALIAS ON `blocks`, deliberately: `LIVE` and `publishesTextSql` are
+      written against bare column names and are shared with three other queries.
+      Aliasing here would mean rewriting their text, and a predicate rewritten
+      by `replaceAll` at the call site is a predicate that will one day be
+      rewritten wrongly. `block_clicks` has no column either of them names, so
+      every bare name below still resolves to exactly one table.
+    */
     `SELECT id, x, y, w, h, status,
             CASE WHEN ${publishesTextSql(2)} THEN caption END AS caption,
             CASE WHEN ${publishesTextSql(2)} THEN link END AS link,
-            CASE WHEN ${publishesTextSql(2)} THEN image_fit END AS fit
+            CASE WHEN ${publishesTextSql(2)} THEN image_fit END AS fit,
+            -- The count rides along with the words, under the same predicate
+            -- and in the same round trip. Under the predicate because a click
+            -- count is a fact about a link, and a link a hold has not paid for
+            -- is not published; publishing its popularity instead would be the
+            -- same leak wearing a number. Zero rather than null for a rectangle
+            -- nobody has clicked: block_clicks has no row until the first one.
+            CASE WHEN ${publishesTextSql(2)}
+                 THEN coalesce(block_clicks.clicks, 0) ELSE 0 END::int AS clicks
        FROM blocks
+       LEFT JOIN block_clicks ON block_clicks.block_id = blocks.id
       WHERE id = $1 AND ${LIVE}`,
     [id, [...IMAGE_BEARING_STATUSES]],
   );

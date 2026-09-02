@@ -39,13 +39,23 @@ export type BlockCardState =
 const THUMB_REM = 2.75;
 
 export default function BlockCard({
+  id,
   imageSrc,
   caption,
   link,
+  clicks,
   rect,
   perPixel,
   state,
 }: {
+  /** The rectangle's own id, which is what `/go/<id>` is built from. */
+  id: string;
+  /**
+   * How many times this rectangle's link has been followed, or undefined where
+   * the caller does not know yet — the checkout renders this card before there
+   * is anything to have clicked.
+   */
+  clicks?: number;
   /**
    * Where the rectangle's own bitmap lives, or null when there is none to
    * show — a hold, which publishes nothing, or a block that has been taken
@@ -82,11 +92,36 @@ export default function BlockCard({
             {caption ?? emptyCaption(state)}
           </p>
           {link && (
-            <p className="truncate text-[12.5px] font-semibold text-primary-pressed">{link}</p>
+            /*
+              THE LINK GOES THROUGH `/go/<id>`, WHICH IS WHAT MAKES IT COUNTABLE.
+              What is SHOWN is still the buyer's own address — a reader has to be
+              able to see where a link goes before following it, and a card that
+              displayed our redirector would be hiding that. What is followed is
+              the redirector, which reads the destination from the block rather
+              than from anything in the URL. See `src/app/go/[id]/route.ts`.
+            */
+            <a
+              href={`/go/${id}`}
+              rel="noreferrer noopener nofollow"
+              target="_blank"
+              className="block truncate text-[12.5px] font-semibold text-primary-pressed underline-offset-2 hover:underline"
+            >
+              {link}
+            </a>
           )}
           <p className="tabular mt-1 text-[11px] text-body">
             {rect.w} × {rect.h} at ({rect.x}, {rect.y}) ·{" "}
             {(rect.w * rect.h).toLocaleString("en-US")} px
+            {clicks !== undefined && clicks > 0 && (
+              <>
+                {" · "}
+                {/* The buyer's own number, and the only evidence this wall can
+                    give that a rectangle was worth buying. Absent rather than
+                    zero when nobody has clicked: a fresh purchase advertising
+                    "0 clicks" is the wall talking a buyer out of it. */}
+                {clicks.toLocaleString("en-US")} {clicks === 1 ? "click" : "clicks"}
+              </>
+            )}
           </p>
           {/*
             The price, in the accent. One of the five places it is allowed: a

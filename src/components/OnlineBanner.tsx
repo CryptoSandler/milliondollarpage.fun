@@ -45,12 +45,39 @@ import { HEARTBEAT_MS } from "../lib/board/presence-window";
  * path, no referrer, no user agent. See `migrations/013_presence.sql` — the
  * anonymity is a property of the columns, not a promise in a comment.
  */
+/**
+ * A count, shortened the way a reader reads it rather than the way it is
+ * stored. `12.4k` at four figures and up, exact below — a wall with 312 visits
+ * has a number worth printing exactly, and one with 12,437 has a number nobody
+ * reads to the digit.
+ *
+ * Exported for its test.
+ */
+export function shortCount(n: number): string {
+  if (n < 1_000) return n.toLocaleString("en-US");
+  if (n < 1_000_000) {
+    const thousands = n / 1_000;
+    // One decimal until a hundred thousand, none above: 1.2k, 12.4k, 124k. The
+    // decimal is what makes the number look counted rather than rounded, and it
+    // stops mattering once the integer part is three digits.
+    return `${thousands < 100 ? thousands.toFixed(1) : Math.round(thousands)}k`;
+  }
+  return `${(n / 1_000_000).toFixed(1)}m`;
+}
+
 export default function OnlineBanner({
   online,
+  views,
   beat = true,
   className = "",
 }: {
   online: number;
+  /**
+   * Every visit the wall has ever had. Absent rather than zero on a wall
+   * nobody has been to: a counter reading `0 views` beside `1 online` is the
+   * page contradicting itself in the same row.
+   */
+  views?: number;
   /** Exactly one copy on the page sends it. See "Why twice" above. */
   beat?: boolean;
   /** Which of the two placements this copy is, so globals.css can hide it. */
@@ -88,6 +115,17 @@ export default function OnlineBanner({
       {/* "online" does not inflect, so unlike every pixel count on this page
           there is nothing here to agree with the number. */}
       online
+      {views !== undefined && views > 0 && (
+        <>
+          {/* The cumulative half of the same sentence: how many have ever been
+              here, beside how many are here now. One is the wall's history and
+              the other is its present, and a reader weighing a rectangle wants
+              both. See `lib/board/audience.ts` for what a visit is. */}
+          <span aria-hidden className="text-hairline-strong">·</span>
+          <span className="font-semibold text-ink">{shortCount(views)}</span>
+          views
+        </>
+      )}
     </p>
   );
 }

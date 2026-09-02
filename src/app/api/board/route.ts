@@ -7,6 +7,7 @@ import {
 import { ensureWall } from "../../../lib/board/composite";
 import { pricePerPixelBaseUnits } from "../../../lib/board/settings";
 import { recentPurchases } from "../../../lib/board/tape";
+import { visitsTotal } from "../../../lib/board/audience";
 import { onlineNow } from "../../../lib/board/presence";
 import { NO_STORE, json } from "../../../lib/http";
 
@@ -50,7 +51,7 @@ import { NO_STORE, json } from "../../../lib/http";
  * it points at is cached hard, which is the whole point of versioning it.
  */
 export async function GET(): Promise<Response> {
-  const [rects, wall, stats, price, tape, online, standings] = await Promise.all([
+  const [rects, wall, stats, price, tape, online, standings, views] = await Promise.all([
     listBoardRects(),
     ensureWall(),
     boardStats(),
@@ -58,6 +59,7 @@ export async function GET(): Promise<Response> {
     recentPurchases(),
     onlineNow(),
     boardStandings(STANDINGS_ON_WALL),
+    visitsTotal(),
   ]);
 
   return json(
@@ -68,6 +70,7 @@ export async function GET(): Promise<Response> {
       pricePerPixelBaseUnits: price,
       tape,
       online,
+      views,
       standings,
       asOf: new Date().toISOString(),
     },
