@@ -286,17 +286,13 @@
   --panel-w: 288px;
 
   /*
-   * The side rails' width, and 0 is the answer at every viewport that does not
-   * have room for them. The boot script in `layout.tsx` overwrites it on the
+   * The rails' width, and 0 is the answer at every viewport that does not have
+   * room for a pair of them. The boot script in `layout.tsx` overwrites it on the
    * root element before the first paint and on every resize; this is what the
    * page is if that script never runs, which is the layout without rails —
    * the one every rule in this file already describes.
    */
   --rail-w: 0px;
-  /* The tools-only rail's width, and 0 wherever it is not on. Same boot script,
-     same fallback: what the page is if that script never runs is the layout
-     with the overlay on the board. */
-  --tools-w: 0px;
 }
 
 @media (max-width: 640px) {
@@ -1639,49 +1635,49 @@ h3 {
 }
 
 /* ============================================================================
-   THE SIDE RAILS
+   THE RAILS, WHICH COME IN PAIRS OR DO NOT COME
    ----------------------------------------------------------------------------
    The chrome moves into the width the board cannot use, and only where there is
-   enough of it. DESIGN.md, "The amendment: the letterbox is not the wall":
-   the board is contained rather than covered, so in a window wider than its own
-   1.5625:1 it is fitted by HEIGHT and the width beside it is width no scale
-   could reach. That leftover is the ground the sheet hangs on, and the chrome
-   is allowed to stand in it. THE BOARD NEVER PAYS FOR IT: the rail is sized to
-   the gap a height-limited board leaves, so the board is still height-limited
-   with the rails there, and the height it is fitted to is LARGER than before —
-   the settled register has left the bottom of the window.
+   enough of it on BOTH sides. DESIGN.md, "The amendment: the letterbox is not
+   the wall": the board is contained rather than covered, so in a window wider
+   than its own 1.5625:1 it is fitted by HEIGHT and the width beside it is width
+   no scale could reach.
 
-   `data-rails` and `--rail-w` are stamped on the root by the boot script in
-   `layout.tsx`, before the first paint and again on every resize, so there is
-   no frame of the wrong layout and nothing here has to ask a media query a
-   question it cannot answer: the condition is arithmetic on both dimensions at
-   once, which `@media` has no way to express.
+   A RAIL DOWN ONE SIDE IS A BOARD OFF CENTRE. The first build of the tools rail
+   put a column on the left and left an identical empty gap on the right, and at
+   2495×1484 the wall read as slipped half a rail. So both sides carry the same
+   width or neither exists.
 
-   EVERY RULE IN HERE IS KEYED OFF THAT ATTRIBUTE AND CHANGES NOTHING WITHOUT
-   IT. The layout below the threshold is the one this stylesheet already
-   described, down to the pixel — which is what makes the amendment reversible
-   and what makes the guard in `board-share.mts` able to measure both.
+   TWO PAIRS, ONE GAP, stamped as one word on the root by the boot script in
+   `layout.tsx` before the first paint:
 
-   UNLAYERED, AND THAT IS THE THIRD TIME THIS FILE HAS HAD TO CHOOSE A LAYER.
+     data-rails="full"   ≥180px  left: controls + purchase panel
+                                 right: the register and the standings
+     data-rails="tools"  ≥108px  left: controls
+                                 right: the register, as a vertical ticker
+     data-rails="off"            the layout this stylesheet already described
 
-   The layout block above is in `@layer utilities` because a component-layer
-   rule loses to every Tailwind utility in the markup. That is not enough here.
-   The blocks appended by the direction-D branch — the rail's roll, its pip, the
-   empty wall — are UNLAYERED, and an unlayered rule beats every layered one
+   THE BOARD NEVER PAYS FOR EITHER. Both are sized from the gap a height-limited
+   board leaves, so the board is still height-limited with them there — and it
+   is fitted to MORE height than before, because the register has left the
+   bottom of the window.
+
+   UNLAYERED, and that is the third time this file has had to choose a layer.
+   The blocks appended by the direction-D branch — the register's roll, its pip,
+   the empty wall — are unlayered, and an unlayered rule beats every layered one
    whatever its specificity. The first build of this put the rail styles in
    `utilities` and `width: max-content` on the register's track won: the column
-   sized itself to its widest row and clipped twelve pixels of it inside a
-   165px scroller. So these are unlayered too, which puts them in the same
-   cascade as the rules they have to override, where specificity and order
-   decide — and every selector below carries `[data-rails="on"]`, so nothing
-   here reaches the layout that does not have rails.
+   sized itself to its widest row and clipped twelve pixels of it. So these are
+   unlayered too, and every selector carries a `[data-rails]` value, so nothing
+   here reaches the layout that has no rails.
    ========================================================================= */
+
 /*
  * NO BOX AT ALL WITHOUT RAILS. `display: contents` leaves every child with
- * exactly the fixed position it has always had, so this element adds nothing
- * to the layout it is not wanted in — and `getBoundingClientRect()` on it
- * comes back a row of zeros, which is how `BoardView` tells the two layouts
- * apart without a second opinion about the viewport.
+ * exactly the fixed position it has always had, so this element adds nothing to
+ * the layout it is not wanted in — and `getBoundingClientRect()` on it comes
+ * back a row of zeros, which is how `BoardView` tells the layouts apart without
+ * a second opinion about the viewport.
  */
 .board-side {
   display: contents;
@@ -1689,18 +1685,18 @@ h3 {
 
 /*
  * The thumbnail belongs to the column and to nothing else. `display: none` is
- * the default rather than an override, because it is what keeps the strip
- * along the bottom — and `/stats`, which renders the same rows — from making
- * one image request per row for a picture it never shows. An undisplayed
- * element generates no box, and a background image on no box is never
- * fetched; that is the whole reason this is a background rather than an
- * `<img>`, which WOULD be fetched.
+ * the default rather than an override, because it is what keeps the strip along
+ * the bottom — and `/stats`, which renders the same rows — from making one image
+ * request per row for a picture it never shows. An undisplayed element generates
+ * no box, and a background image on no box is never fetched; that is the whole
+ * reason this is a background rather than an `<img>`, which WOULD be fetched.
  */
 .board-tape__thumb {
   display: none;
 }
 
-[data-rails="on"] .board-side {
+[data-rails="full"] .board-side,
+[data-rails="tools"] .board-side {
   position: fixed;
   top: var(--bar-top-h);
   bottom: 0;
@@ -1713,26 +1709,42 @@ h3 {
   background: var(--canvas);
 }
 
-[data-rails="on"] .board-side--left {
+[data-rails="full"] .board-side--left,
+[data-rails="tools"] .board-side--left {
   left: 0;
 }
 
-[data-rails="on"] .board-side--right {
+[data-rails="full"] .board-side--right,
+[data-rails="tools"] .board-side--right {
   right: 0;
 }
 
-/* ---------------------------------------------------------------- left rail
- * The presets and the zoom stop floating over the artwork and become the
- * head of a column. This is the one thing the amendment gives back to the
- * wall for free: the rail was the only piece of chrome allowed to sit on the
- * board, and where there is a column to put it in, it does not have to.
+/*
+ * THE OVERLAY STOPS BEING AN OVERLAY. This is the rule the first build of the
+ * pair forgot, and the sold-pixel guard caught it: without it `.board-tools`
+ * keeps the `position: fixed; left: 50%` it wears over the board, so the
+ * controls sat centred ON the wall at 2560 and 1920 while the rails stood empty
+ * beside them. Every child below assumes this has run.
  */
-[data-rails="on"] .board-rail {
+[data-rails="full"] .board-tools,
+[data-rails="tools"] .board-tools {
   position: static;
   left: auto;
   top: auto;
   transform: none;
+  width: 100%;
   max-width: none;
+  align-items: stretch;
+}
+
+/* ------------------------------------------------------------------ left rail
+ * The presets and the zoom stop floating over the artwork and become the head
+ * of a column. This is the one thing the rails give back to the wall for free:
+ * the overlay is the only chrome allowed to sit on the board, and where there
+ * is a column to put it in, it does not have to.
+ */
+[data-rails="full"] .board-rail,
+[data-rails="tools"] .board-rail {
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
@@ -1741,28 +1753,43 @@ h3 {
   box-shadow: none;
 }
 
-[data-rails="on"] .board-rail .board-rail__presets {
+/*
+ * AND THE ROWS INSIDE IT WRAP. Without this the presets are one 369px row in a
+ * 98px column: they do not clip — nothing here hides overflow — they paint
+ * straight across the wall, which is the exemption's condition broken by a
+ * missing line. An overflow probe found it; the sold-pixel guard did not,
+ * because it measured the overlay's own box and the box was the right size.
+ * The guard checks for overflow now too.
+ */
+[data-rails="full"] .board-rail .board-rail__presets,
+[data-rails="tools"] .board-rail .board-rail__presets,
+[data-rails="full"] .board-rail .board-rail__zoom,
+[data-rails="tools"] .board-rail .board-rail__zoom {
   flex-wrap: wrap;
   justify-content: center;
 }
 
-[data-rails="on"] .board-rail .board-rail__zoom {
-  justify-content: center;
+[data-rails="full"] .board-hint,
+[data-rails="tools"] .board-hint {
+  padding: 10px 12px;
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+  text-align: left;
 }
 
 /*
- * THE PURCHASE PANEL, AT THE FOOT OF THE COLUMN. `margin-top: auto` is what
- * puts it there — it is the last child that has a box, and the presets are
- * the first, so the two ends of the rail are the two things a purchase starts
- * and finishes with.
+ * THE PURCHASE PANEL, AT THE FOOT OF THE FULL RAIL AND NOWHERE ELSE.
+ * `margin-top: auto` is what puts it there. The tools pair does not dock it:
+ * 180px is what the Buy button measured, and a 108px column cannot hold it, so
+ * it floats there exactly as it does with no rails at all.
  *
- * `:not([hidden])` is load-bearing. The retracted panel is `display: none`
- * from a components-layer rule, and every rule in this block is unlayered and
+ * `:not([hidden])` is load-bearing. The retracted panel is `display: none` from
+ * a components-layer rule, and every rule in this block is unlayered and
  * therefore beats that layer whatever its specificity — so without it, simply
- * opening this file would put a purchase panel on screen for a purchase
- * nobody has started.
+ * opening this file would put a purchase panel on screen for a purchase nobody
+ * has started.
  */
-[data-rails="on"] .board-controls:not([hidden]) {
+[data-rails="full"] .board-controls:not([hidden]) {
   position: static;
   left: auto;
   bottom: auto;
@@ -1781,89 +1808,60 @@ h3 {
   overflow: visible;
 }
 
-/*
- * And in a rail the overlay is simply the head of the column: the pill, then
- * the line under it, exactly the order they stand in over the board. Nothing
- * about the pair changes between the two layouts, which is the point of their
- * being one element.
- */
-[data-rails="on"] .board-tools {
-  position: static;
-  left: auto;
-  top: auto;
-  transform: none;
-  width: 100%;
-  max-width: none;
-  align-items: stretch;
-}
-
-[data-rails="on"] .board-hint {
-  padding: 10px 12px;
-  border-radius: var(--radius-lg);
-  box-shadow: none;
-  text-align: left;
-}
-
-[data-rails="on"] .board-controls .selection-panel {
+[data-rails="full"] .board-controls .selection-panel {
   flex-direction: column;
   align-items: stretch;
   gap: 10px;
 }
 
-[data-rails="on"] .board-controls .selection-readout {
+[data-rails="full"] .board-controls .selection-readout {
   flex: 0 0 auto;
 }
 
-/*
- * THE READOUT WRAPS INSTEAD OF TRUNCATING, and that is DESIGN.md's shed order
- * arriving in a column.
- *
- * `truncate` is right in a horizontal bar, where a readout that grew would
- * push the Buy button off the end — the document says the headline "truncates
- * by design" there. In a rail nothing is to the right of it to push, and the
- * first build of this came back reading `100 pixels  $…`: the TOTAL PRICE
- * cut, which is one of the three things the shed order says never gives way,
- * alongside the pixel count and the Buy button. Two lines cost the rail
- * fourteen pixels of a column that has thirteen hundred.
- */
-[data-rails="on"] .board-controls .selection-readout p {
-  overflow: visible;
-  text-overflow: clip;
-  white-space: normal;
-}
-
-[data-rails="on"] .board-controls .selection-buy {
+[data-rails="full"] .board-controls .selection-buy {
   align-items: stretch;
   width: 100%;
 }
 
 /*
+ * THE READOUT WRAPS INSTEAD OF TRUNCATING, and that is DESIGN.md's shed order
+ * arriving in a column. `truncate` is right in a horizontal bar, where a readout
+ * that grew would push the Buy button off the end. In a rail nothing is to the
+ * right of it to push, and the first build of this came back reading
+ * `100 pixels  $…`: the TOTAL PRICE cut, which is one of the three things the
+ * shed order never reaches.
+ */
+[data-rails="full"] .board-controls .selection-readout p {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+/*
  * THE BUY BUTTON WRAPS HERE, AND THAT IS NOT IT GIVING WAY.
- *
  * `Buy these pixels — $1,000,000.00` renders at 255px on one line, and that
  * measurement is what sets the 288px ceiling on a rail's width — above it the
  * label fits as it always has. Below it the price takes a second line rather
- * than the button taking a smaller label, because DESIGN.md's shed order
- * never reaches the Buy button: what it says is not allowed to change, only
- * how many lines it says it on.
+ * than the button taking a smaller label.
  */
-[data-rails="on"] .board-controls .selection-buy button {
+[data-rails="full"] .board-controls .selection-buy button {
   white-space: normal;
   padding-left: 12px;
   padding-right: 12px;
 }
 
-[data-rails="on"] .board-controls .selection-buy p {
+[data-rails="full"] .board-controls .selection-buy p {
   max-width: none;
   text-align: left;
 }
 
-/* --------------------------------------------------------------- right rail
+/* ----------------------------------------------------------------- right rail
  * The settled register stands up. Same component, same rows, same DOM — see
- * `PurchaseTape`, which explains why the thumbnail is a background rather
- * than an `<img>` and why the seamless duplicate goes away here.
+ * `PurchaseTape`, which explains why the thumbnail is a background rather than
+ * an `<img>` and why the seamless duplicate stays in a column.
  */
-[data-rails="on"] .board-side--right .board-tape {
+[data-rails="full"] .board-side--right .board-tape,
+[data-rails="tools"] .board-side--right .board-tape {
   position: static;
   left: auto;
   right: auto;
@@ -1882,7 +1880,53 @@ h3 {
   overflow: hidden;
 }
 
-[data-rails="on"] .board-side--right .board-tape__head {
+/*
+ * A NARROW RAIL DROPS THE THUMBNAIL, AND THAT IS MEASURED RATHER THAN CHOSEN.
+ *
+ * The tools floor of 108 was measured against the LEFT rail's contents — the
+ * presets — and the right rail holds the register, whose rows are wider. At the
+ * owner's 2495×1484 the gap is 120px, which leaves 98px of content, and a row
+ * spends 34 on the thumbnail and 9 on its gap before a single figure: the first
+ * capture came back reading `26 × 3`, `$988`, `capt…7K`, every line cut.
+ *
+ * The thumbnail is the widest fixed cost in the row and the only part of it
+ * that is decorative — it is `aria-hidden`, and the size, the price, the age
+ * and the proof are the register. So below 150px of rail it goes, and the
+ * figures get its 43px. A container query rather than a media query because
+ * what decides is the RAIL's width, which no viewport dimension names.
+ */
+[data-rails="full"] .board-side--right .board-tape,
+[data-rails="tools"] .board-side--right .board-tape {
+  container-type: inline-size;
+}
+
+@container (max-width: 150px) {
+  .board-tape__thumb {
+    display: none !important;
+  }
+
+  .board-tape__row {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .board-tape__row .board-tape__numbers {
+    grid-area: 1 / 1 / 2 / 2 !important;
+  }
+
+  .board-tape__row .board-tape__meta {
+    grid-area: 2 / 1 / 3 / 2 !important;
+  }
+
+  /* The head has the same problem one line up: LIVE and the count of who else
+     is here are 100px side by side in 98px of column. They stack. */
+  .board-tape__head {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+}
+
+[data-rails="full"] .board-side--right .board-tape__head,
+[data-rails="tools"] .board-side--right .board-tape__head {
   flex: 0 0 auto;
   justify-content: space-between;
   gap: 8px;
@@ -1893,25 +1937,31 @@ h3 {
   border-bottom: 1px solid var(--hairline-strong);
 }
 
-[data-rails="on"] .board-side--right .board-tape__scroller {
+/*
+ * THE SCROLLER IS THE TICKER'S WINDOW, and it does not scroll.
+ *
+ * It was `overflow-y: auto` while the column was a still list. A ticker that a
+ * reader can also scroll is two mechanisms fighting over one axis: the track is
+ * being translated under a box the wheel is trying to move. The box is fixed
+ * now and the track moves inside it; the register is READ by waiting or by
+ * hovering to stop it, and `/stats` is where it is read at length.
+ */
+[data-rails="full"] .board-side--right .board-tape__scroller,
+[data-rails="tools"] .board-side--right .board-tape__scroller {
   flex-direction: column;
   align-items: stretch;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 /*
- * THE DAY NOTHING HAS SETTLED, in a column rather than a strip.
- *
- * The empty line is `whitespace-nowrap` and centred, which is right in a 26px
- * strip where it has the whole width of the window and wrapping would put it
- * outside the strip's own height. Carried into a 187px column unchanged it
- * came out as one long line running off BOTH edges of the rail — the first
- * capture of the empty wall at 2560 read `…hase that does appears her`. Same
- * words, wrapped, left-aligned, which is how everything else in this rail is
- * set.
+ * THE DAY NOTHING HAS SETTLED, in a column rather than a strip. The empty line
+ * is `whitespace-nowrap` and centred, which is right in a 26px strip and came
+ * out running off BOTH edges of a 140px column — the first capture read
+ * `…hase that does appears her`. Same words, wrapped, left-aligned, and it does
+ * not move: there is nothing to tick.
  */
-[data-rails="on"] .board-side--right .board-tape__scroller > p {
+[data-rails="full"] .board-side--right .board-tape__scroller > p,
+[data-rails="tools"] .board-side--right .board-tape__scroller > p {
   align-self: stretch;
   padding: 10px;
   white-space: normal;
@@ -1919,36 +1969,58 @@ h3 {
 }
 
 /*
- * IT DOES NOT ROLL IN A COLUMN. The strip rolls because it is too narrow to
- * hold its own rows; a column is not, and a list that moves while somebody
- * reads down it is a list nobody reads. The seamless duplicate goes with the
- * motion — the same pair of rules `prefers-reduced-motion` already makes, for
- * the same reason: a still track showing everything twice reads as a bug.
+ * IT TICKS DOWNWARD. The horizontal strip translates by half its own width; a
+ * column translates by half its own HEIGHT, and the duplicate copy of the rows
+ * is what makes either loop seamless. `PurchaseTape` renders the list twice and
+ * marks the second `aria-hidden`, so an eye sees a continuous register and a
+ * screen reader is read the purchases once.
+ *
+ * The duration is per-row rather than fixed: a rail holding twenty rows at one
+ * speed and a rail holding three at the same speed are two different speeds to
+ * read. `--tape-rows` is set on the element by `PurchaseTape`.
  */
-[data-rails="on"] .board-side--right .board-tape__track {
+[data-rails="full"] .board-side--right .board-tape__track,
+[data-rails="tools"] .board-side--right .board-tape__track {
   width: auto;
-  height: auto;
+  height: max-content;
   flex-direction: column;
-  animation: none;
+  /*
+   * LONGHANDS, NOT THE SHORTHAND, and a test is why. `animation: … infinite`
+   * resets `animation-play-state` to `running` as part of expanding, and this
+   * rule sits AFTER the pause rule at equal specificity — so the column ticked
+   * straight through a reader's focus while the strip along the bottom paused
+   * correctly. The longhands leave the play state alone for the rule that owns
+   * it, which is the same one that pauses the horizontal strip.
+   */
+  animation-name: tape-roll-down;
+  animation-duration: calc(var(--tape-rows, 8) * 3.2s);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
 }
 
-[data-rails="on"] .board-side--right .board-tape__track > [aria-hidden="true"] {
-  display: none;
+@keyframes tape-roll-down {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-50%);
+  }
 }
 
-[data-rails="on"] .board-side--right .board-tape__track > ol {
+[data-rails="full"] .board-side--right .board-tape__track > ol,
+[data-rails="tools"] .board-side--right .board-tape__track > ol {
   height: auto;
   flex-direction: column;
 }
 
 /*
- * A ROW IS A THUMBNAIL AND THREE LINES: what was bought, what it cost, and
- * how long ago with the eight characters that settled it. The one thing the
- * horizontal strip says that this drops is "N pixels at (x, y)" — the size is
- * already the line above it, and a 180px column has to spend its width on
- * something that is not said twice.
+ * A ROW IS A THUMBNAIL AND THREE LINES: what was bought, what it cost, and how
+ * long ago with the eight characters that settled it. The one thing the strip
+ * says that this drops is "N pixels at (x, y)" — the size is the line above it,
+ * and a 108px column has to spend its width on something not said twice.
  */
-[data-rails="on"] .board-side--right .board-tape__row {
+[data-rails="full"] .board-side--right .board-tape__row,
+[data-rails="tools"] .board-side--right .board-tape__row {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);
   grid-template-rows: auto auto;
@@ -1961,16 +2033,17 @@ h3 {
   white-space: nowrap;
 }
 
-[data-rails="on"] .board-side--right .board-tape__thumb {
+[data-rails="full"] .board-side--right .board-tape__thumb,
+[data-rails="tools"] .board-side--right .board-tape__thumb {
   display: block;
   grid-area: 1 / 1 / 3 / 2;
   width: 34px;
   height: 34px;
   border: 1px solid var(--hairline-strong);
-  /* The buyer's own artwork, and it is a bitmap: nearest neighbour here for
-     the same reason the board never interpolates. `--sold-fallback` shows
-     through where a rectangle has no bytes to serve, which is the same tone
-     the wall itself paints there. */
+  /* The buyer's own artwork, and it is a bitmap: nearest neighbour here for the
+     same reason the board never interpolates. `--sold-fallback` shows through
+     where a rectangle has no bytes to serve, which is the same tone the wall
+     itself paints there. */
   background-color: var(--sold-fallback);
   background-position: center;
   background-repeat: no-repeat;
@@ -1978,7 +2051,8 @@ h3 {
   image-rendering: pixelated;
 }
 
-[data-rails="on"] .board-side--right .board-tape__row .board-tape__numbers {
+[data-rails="full"] .board-side--right .board-tape__row .board-tape__numbers,
+[data-rails="tools"] .board-side--right .board-tape__row .board-tape__numbers {
   grid-area: 1 / 2 / 2 / 3;
   flex-direction: column;
   align-items: flex-start;
@@ -1990,12 +2064,11 @@ h3 {
  * THE AGE AND THE PROOF WRAP RATHER THAN CLIP, and that is the difference
  * between a register and a decoration. At the rail's floor the pair measures
  * 114px against 104px of column and the eight characters of signature were
- * being cut — a truncated proof is not a proof, and DESIGN.md's whole
- * argument for this rail is that no row passes without one. `flex-wrap` costs
- * a line where there is no room and costs nothing where there is: at the
- * 288px ceiling the two are back on one.
+ * being cut — a truncated proof is not a proof, and DESIGN.md's whole argument
+ * for this rail is that no row passes without one.
  */
-[data-rails="on"] .board-side--right .board-tape__row .board-tape__meta {
+[data-rails="full"] .board-side--right .board-tape__row .board-tape__meta,
+[data-rails="tools"] .board-side--right .board-tape__row .board-tape__meta {
   grid-area: 2 / 2 / 3 / 3;
   flex-wrap: wrap;
   gap: 2px 7px;
@@ -2003,23 +2076,22 @@ h3 {
   font-size: 10.5px;
 }
 
-[data-rails="on"] .board-side--right .board-tape__where {
+[data-rails="full"] .board-side--right .board-tape__where,
+[data-rails="tools"] .board-side--right .board-tape__where {
   display: none;
 }
 
-
-
 /*
- * THE STANDING, at the foot of the rail. Hidden everywhere else: `/stats`
- * carries the long form with the paragraph this has no room for, and the
- * layout without rails has nowhere to put a third block that is not the
- * board's own width.
+ * THE STANDING belongs to the full pair alone. The tools pair's right rail is
+ * the register and nothing else: at 108px a third block would be a list of
+ * five two-line rows in a column that already has to hold a ticker, and
+ * `/stats` carries the long form with the paragraph neither rail has room for.
  */
 .board-standings {
   display: none;
 }
 
-[data-rails="on"] .board-standings {
+[data-rails="full"] .board-standings {
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
@@ -2029,21 +2101,19 @@ h3 {
   overflow: hidden;
 }
 
-[data-rails="on"] .board-standings__head {
+[data-rails="full"] .board-standings__head {
   padding: 8px 10px;
   border-bottom: 1px solid var(--hairline-strong);
 }
 
 /*
  * TWO LINES PER ROW, and that is measurement rather than taste. At the rail's
- * 180px floor a row has 140px of grid to spend, and `147 × 147` beside
- * `$24,990.00` is 136 of it before the rank and the gaps — the first build of
- * this put them on one line and the size came back `147 × 1…`, which is a
- * ranking that will not say what it ranks. The rank spans both lines, exactly
- * as the thumbnail does in a settled row above it, so the two blocks in this
- * rail have one shape.
+ * floor a row has 140px of grid to spend, and `147 × 147` beside `$24,990.00`
+ * is 136 of it before the rank and the gaps — the first build put them on one
+ * line and the size came back `147 × 1…`, which is a ranking that will not say
+ * what it ranks.
  */
-[data-rails="on"] .board-standings__row {
+[data-rails="full"] .board-standings__row {
   display: grid;
   grid-template-columns: 14px minmax(0, 1fr);
   grid-template-rows: auto auto;
@@ -2055,30 +2125,16 @@ h3 {
   border-bottom: 1px solid var(--hairline);
 }
 
-[data-rails="on"] .board-standings__rank {
+[data-rails="full"] .board-standings__rank {
   grid-area: 1 / 1 / 3 / 2;
-}
-
-[data-rails="on"] .board-standings__size {
-  grid-area: 1 / 2 / 2 / 3;
-}
-
-[data-rails="on"] .board-standings__amount {
-  grid-area: 2 / 2 / 3 / 3;
-}
-
-[data-rails="on"] .board-standings__row:last-child {
-  border-bottom: 0;
-}
-
-[data-rails="on"] .board-standings__rank {
   font-family: var(--font-numeric);
   font-size: 11px;
   font-weight: 700;
   color: var(--mute);
 }
 
-[data-rails="on"] .board-standings__size {
+[data-rails="full"] .board-standings__size {
+  grid-area: 1 / 2 / 2 / 3;
   font-family: var(--font-numeric);
   font-size: 12.5px;
   font-weight: 700;
@@ -2087,21 +2143,26 @@ h3 {
   text-overflow: ellipsis;
 }
 
-[data-rails="on"] .board-standings__amount {
+[data-rails="full"] .board-standings__amount {
+  grid-area: 2 / 2 / 3 / 3;
   font-family: var(--font-numeric);
   font-size: 11.5px;
   font-weight: 600;
   color: var(--body);
 }
 
+[data-rails="full"] .board-standings__row:last-child {
+  border-bottom: 0;
+}
+
 /*
  * THE COUNT OF WHO ELSE IS HERE, in exactly one of its two placements.
  *
- * The `lg` breakpoint on the bar's copy is the shed order this banner has
- * always had — it is context rather than the offer, so it goes early as the
- * bar narrows. It moved out of the markup and into here because the rail's
- * copy needed the other half of the same switch, and a component with two
- * placements should not carry either one's visibility in its own class list.
+ * The `lg` breakpoint on the bar's copy is the shed order this banner has always
+ * had — it is context rather than the offer, so it goes early as the bar
+ * narrows. It moved out of the markup and into here because the rail's copy
+ * needed the other half of the same switch, and a component with two placements
+ * should not carry either one's visibility in its own class list.
  */
 .online-banner--rail {
   display: none;
@@ -2117,14 +2178,15 @@ h3 {
   }
 }
 
-[data-rails="on"] .online-banner--bar {
+[data-rails="full"] .online-banner--bar,
+[data-rails="tools"] .online-banner--bar {
   display: none;
 }
 
-[data-rails="on"] .online-banner--rail {
+[data-rails="full"] .online-banner--rail,
+[data-rails="tools"] .online-banner--rail {
   display: flex;
 }
-
 /* ============================================================================
    THE REGISTER ON /stats
    ----------------------------------------------------------------------------
@@ -2157,99 +2219,143 @@ h3 {
   box-shadow: none;
 }
 
+
 /* ============================================================================
-   THE TOOLS-ONLY RAIL, AND THE OVERLAY THAT HIDES ITSELF WHERE THERE IS NONE
+   THE PRESET PILL'S OWN SPACING, WHICH MUST NOT DEPEND ON A FONT
    ----------------------------------------------------------------------------
-   The board's overlay — the presets, the zoom and the line that says how to
-   start — stands ON the board wherever there is no rail to put it in, and a
-   purchase under it is a purchase covered. DESIGN.md, "The overlay on the
-   board, and the condition on it", has the measurement and the money.
+   REPORTED FROM macOS, not reproduced on this machine, and diagnosed anyway
+   because the measurement says the layout was font-dependent and had no
+   business being.
 
-   Two answers, and which one applies is arithmetic:
+   What the browser was computing, measured at 2495×1484 with the tools rail:
 
-    - `data-tools="on"`: there is enough letterbox beside a board that still has
-      its register underneath — 168.8px at 1920×1080 against the 108 a column of
-      controls needs. The overlay moves off the wall entirely. THE BOARD IS NOT
-      REFITTED: the rail is sized from the letterbox that board already leaves,
-      so it is the same 1567×1004 at 1920 with the rail as without it.
-    - Neither rail: 1440×900 leaves 69.4px and 1280×800 leaves 67.5px, which is
-      not a column. The overlay stays on the wall and gets out of the way
-      instead — see `.board-tools--resting` at the end of this block.
+     row-gap: 4px   column-gap: 4px   — from Tailwind's `gap-1` in the markup,
+                                        which is a UTILITIES-layer rule and
+                                        therefore beat the components-layer
+                                        `gap: 10px` this file has always set.
+                                        DESIGN.md's "ten pixels: four for the
+                                        ring, and six that still read as one
+                                        group" was never in force here.
+     button height: 24px            — declared
+     line-height:   12.5px          — plus 6px of padding top and bottom, so the
+                                        CONTENT box is 24.5px inside a 24px
+                                        button. Half a pixel of overflow with
+                                        this font; more with a taller one.
 
-   Unlayered for the same reason the side rails are: the rules it has to
-   override live outside every layer.
+   And the widths moved with the face: `100×100` set at 73.6px in IBM Plex Mono
+   and 70.1px in the fallback, `10×10` at 58.9 against 56.5. Three and a half
+   pixels per button is enough to change where a wrapped row breaks, which is
+   why the same rail is four rows on one machine and three on another — and four
+   24px pills four pixels apart read as touching.
+
+   THE FIX IS TO STOP ASKING THE FONT. An explicit gap that no utility can
+   outrank, and a min-height that is larger than any line box this type scale
+   can produce, so the button's size is a number rather than a consequence.
    ========================================================================= */
 
-[data-tools="on"] .board-tools {
-  top: calc(var(--bar-top-h) + 10px);
-  left: 10px;
-  transform: none;
-  width: var(--tools-w);
-  max-width: var(--tools-w);
-  align-items: stretch;
-}
-
-/*
- * The pill stops being a pill. Its controls wrap instead of overflowing, which
- * is what lets the floor sit at 108: the zoom trio is 112px in a row and goes
- * two-and-one below that rather than clipping.
- */
-[data-tools="on"] .board-rail {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-  padding: 8px;
-  border-radius: var(--radius-lg);
-  box-shadow: none;
-}
-
-[data-tools="on"] .board-rail .board-rail__presets,
-[data-tools="on"] .board-rail .board-rail__zoom {
+.board-rail .board-rail__presets,
+.board-rail .board-rail__zoom {
+  /* Eight is the floor DESIGN.md asks for and ten is what it asked for before
+     a Tailwind utility quietly won the argument: four pixels for the focus
+     ring, and six that still read as one group. */
+  gap: 10px;
+  /*
+   * AND THEY WRAP EVERYWHERE, not only in a rail.
+   *
+   * The pill is `max-width: calc(100vw - 24px)`, which clamps its BOX and does
+   * nothing about its contents: at 390 the presets are one 503px row inside a
+   * 366px pill, painting straight off the side of the phone. Nothing here hides
+   * overflow, so it has always been visible and nothing measured it until the
+   * rails' overflow probe was pointed at every width.
+   */
   flex-wrap: wrap;
+  justify-content: center;
+  /*
+   * AND THEY ARE ALLOWED TO BE NARROWER THAN THEIR CONTENT, which is what makes
+   * the wrap happen at all. Both rows carry Tailwind's `shrink-0`, so they
+   * refuse to go under max-content and a flex row that cannot be squeezed never
+   * wraps: with the wrap alone the pill still measured 503px of content in a
+   * 195px box. `shrink-0` is right for a row inside a bar that scrolls; it is
+   * wrong for one inside a pill that is capped at the width of the window.
+   */
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+/* The pill itself wraps its two rows for the same reason. */
+.board-rail {
+  flex-wrap: wrap;
+}
+
+.board-rail .btn-quiet,
+.board-rail .btn-quiet.size-8 {
+  /*
+   * A FLOOR, NOT A HEIGHT. `height: 24px` is a promise the content can break —
+   * 12.5px of line box between 6px paddings is 24.5px, and a face with taller
+   * metrics makes it worse. `min-height` lets the button be what it must be and
+   * guarantees it is never smaller than the touch target, and the line-height
+   * is pinned so the box does not move when the face does.
+   */
+  height: auto;
+  min-height: 26px;
+  line-height: 1.1;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
 }
 
-[data-tools="on"] .board-hint {
-  padding: 9px 11px;
-  border-radius: var(--radius-lg);
-  box-shadow: none;
-  text-align: left;
+.board-rail .btn-quiet.size-8 {
+  min-width: 26px;
 }
 
-/* ---------------------------------------------------------------------------
- * AT REST, WHERE THE OVERLAY IS ON THE WALL, IT GOES AWAY.
- *
- * Two seconds without the pointer moving and the overlay fades out; the first
- * movement brings it back. That is the whole of the answer at 1440 and 1280,
- * where there is no letterbox to stand in and the alternative is chrome parked
- * permanently on somebody's artwork.
- *
- * WHAT IT NEVER DOES. It never hides while a rectangle is selected or the
- * purchase panel is open — a control that vanishes mid-purchase is worse than
- * one that covers a pixel — and it never hides on a phone, where there is no
- * pointer to move and the board is letterboxed clear of it anyway. `BoardView`
- * owns those conditions; this is only the paint.
- *
- * OPACITY RATHER THAN `visibility` OR `display`, and that is an accessibility
- * decision rather than a convenience. Both of those take the controls out of
- * the tab order, so a keyboard user would tab straight past the only way to
- * pick a size. At zero opacity they are still focusable, and `BoardView` brings
- * the overlay back on `focusin` — so focus is never on an invisible control for
- * longer than the frame it takes to reappear.
- * ------------------------------------------------------------------------ */
+/* ============================================================================
+   THE OVERLAY THAT HIDES ITSELF WHERE THERE IS NO RAIL
+   ----------------------------------------------------------------------------
+   Below the tools threshold — 1440×900 leaves 49px of gap and 1280×800 leaves
+   47 — there is no column to stand in, so the overlay stands on the board and a
+   purchase under it is a purchase covered. DESIGN.md carries the number: about
+   36,500 board pixels at 1440×900.
+
+   Two seconds without the pointer moving and it fades; the first movement
+   brings it back. It never hides while a rectangle is selected or the purchase
+   panel is open — a control that vanishes mid-purchase is worse than one that
+   covers a pixel — and never on a phone, where there is no pointer to move and
+   the board is letterboxed clear of it anyway. `BoardView` owns those
+   conditions; this is only the paint.
+
+   OPACITY RATHER THAN `visibility` OR `display`, and that is accessibility
+   rather than convenience. Both of those take the controls out of the tab
+   order, so a keyboard user would tab straight past the only way to pick a
+   size. At zero opacity they are still focusable, and `BoardView` brings the
+   overlay back on `focusin`.
+   ========================================================================= */
 .board-tools {
   transition: opacity 220ms var(--ease);
 }
 
 .board-tools--resting {
   opacity: 0;
-  /* The pointer passes through to the board underneath: a reader who is drawing
-     across the top of the wall should not hit an invisible pill. */
+  /* The pointer passes through to the board underneath: a reader drawing across
+     the top of the wall should not hit an invisible pill. */
   pointer-events: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .board-tools {
     transition: none;
+  }
+
+  /*
+   * THE TICKER STOPS AND SHOWS ITS LAST N. The global reduced-motion rule
+   * already reaches every animation; this is here as well because the duplicate
+   * copy of the rows is pointless once the track is still, and a stopped track
+   * showing everything twice reads as a bug rather than as a loop.
+   */
+  .board-tape__track {
+    animation: none !important;
+  }
+
+  .board-tape__track > [aria-hidden="true"] {
+    display: none;
   }
 }

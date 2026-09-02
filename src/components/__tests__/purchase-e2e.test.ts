@@ -173,10 +173,21 @@ const OVERLAY_VS_SALE = `(() => {
     : null;
   const covers = !!tools && tools.left < sold.right && sold.left < tools.right &&
     tools.top < sold.bottom && sold.top < tools.bottom;
+  // Anything inside a rail that is wider than the rail paints over the wall: a
+  // box of the right size whose content spills covers as much artwork as a box
+  // of the wrong size, and nothing here hides overflow.
+  const overflow = [];
+  for (const root of document.querySelectorAll(".board-side")) {
+    for (const node of root.querySelectorAll("*")) {
+      if (node.scrollWidth > node.clientWidth + 1 && node.clientWidth > 0) {
+        overflow.push((node.className.toString().split(" ")[0] || node.tagName) +
+          ": " + node.scrollWidth + " wide in " + node.clientWidth);
+      }
+    }
+  }
   return JSON.stringify({
-    sold, tools, covers,
+    sold, tools, covers, overflow,
     rails: document.documentElement.dataset.rails,
-    toolsRail: document.documentElement.dataset.tools,
   });
 })()`;
 
@@ -185,8 +196,8 @@ type OverlayReading = {
   sold: Edges;
   tools: Edges | null;
   covers: boolean;
+  overflow: string[];
   rails: string;
-  toolsRail: string;
 };
 
 /** A rectangle, as the two numbers a failure message needs on each axis. */
@@ -674,6 +685,193 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
   );
 
   /**
+   * THE PRESET PILL'S SPACING, WITH THE REAL FONT AND WITH IT TAKEN AWAY.
+   *
+   * REPORTED FROM macOS: the presets touching each other in the rail, and not
+   * touching on Windows. Not reproducible on this machine, which has one OS and
+   * one font stack — so what is guarded is the PROPERTY that made it possible
+   * rather than the platform that showed it. Measured before the fix, the pill
+   * was computing `gap: 4px` (Tailwind's `gap-1` in the markup outranking this
+   * stylesheet's `gap: 10px`, a utilities rule beating a components one) and a
+   * 24px button around a 24.5px content box. Button widths moved 3.5px between
+   * the real face and the fallback, which is enough to change where a wrapped
+   * row breaks — four 24px pills four pixels apart on one machine, three rows on
+   * another.
+   *
+   * So this measures the distance between consecutive buttons' boxes twice:
+   * once with the fonts the page loads, and once with every family refused, so
+   * the browser falls back to whatever it has. Both must clear 8px, and the
+   * buttons must be the same height in both.
+   */
+  it(
+    "keeps the preset buttons apart, with the real font and with none",
+    async () => {
+      const MEASURE = `(() => {
+        const presets = document.querySelector(".board-rail__presets");
+        const boxes = [...presets.querySelectorAll("button")].map((b) => {
+          const r = b.getBoundingClientRect();
+          return { text: b.textContent.trim(), x: r.x, y: r.y, w: r.width, h: r.height };
+        });
+        const gaps = [];
+        for (let i = 1; i < boxes.length; i += 1) {
+          const a = boxes[i - 1], b = boxes[i];
+          // Consecutive buttons are separated on exactly one axis: the next one
+          // in the same row, or the first of the row under it.
+          const stacked = b.y > a.y + a.h / 2;
+          gaps.push({ between: a.text + " → " + b.text,
+                      axis: stacked ? "row" : "column",
+                      gap: stacked ? b.y - (a.y + a.h) : b.x - (a.x + a.w) });
+        }
+        return JSON.stringify({ gaps, heights: boxes.map((b) => b.h),
+          font: getComputedStyle(boxes.length ? presets.querySelector("button") : presets).fontFamily });
+      })()`;
+      // Every family the page can ask for, refused. This is the platform
+      // difference made reproducible: whatever the machine falls back to has
+      // different metrics from the face `next/font` self-hosts.
+      const NO_FONTS = `(() => { const s = document.createElement("style");
+        s.textContent = "*{font-family:sans-serif!important}";
+        document.head.appendChild(s); return true; })()`;
+
+      type Reading = {
+        gaps: { between: string; axis: string; gap: number }[];
+        heights: number[];
+        font: string;
+      };
+
+      for (const [width, height] of [
+        [2495, 1484],
+        [1920, 1080],
+        [1440, 900],
+      ] as const) {
+        const at = `${width}x${height}`;
+        await browser.resize(width, height);
+        await browser.goto(`${server.origin}/?presets=${at}`);
+        await waitFor(`the board at ${at}`, async () =>
+          browser.evaluate<string | null>(`document.querySelector('canvas')?.dataset.boardRect ?? null`),
+        );
+
+        const real = JSON.parse(await browser.evaluate<string>(MEASURE)) as Reading;
+        await browser.evaluate(NO_FONTS);
+        await sleep(300);
+        const fallback = JSON.parse(await browser.evaluate<string>(MEASURE)) as Reading;
+
+        // The two passes really were two faces — otherwise this compares a
+        // measurement with itself, which is the same failure the capture script
+        // guards against between themes.
+        expect(real.font, `the face did not change at ${at}`).not.toBe(fallback.font);
+
+        for (const [what, reading] of [["real font", real], ["fallback", fallback]] as const) {
+          expect(reading.gaps.length, `no preset buttons at ${at}`).toBeGreaterThan(2);
+          for (const { between, axis, gap } of reading.gaps) {
+            expect(
+              gap,
+              `${at}, ${what}: ${between} are ${gap.toFixed(1)}px apart across the ${axis}`,
+            ).toBeGreaterThanOrEqual(8);
+          }
+          // And a height that does not come from the type: every button the
+          // same, and never under the 26px floor.
+          for (const h of reading.heights) {
+            expect(h, `${at}, ${what}: a preset button is ${h}px tall`).toBeGreaterThanOrEqual(26);
+          }
+          expect(
+            new Set(reading.heights.map((h) => h.toFixed(1))).size,
+            `${at}, ${what}: the preset buttons are not all the same height`,
+          ).toBe(1);
+        }
+      }
+    },
+    240_000,
+  );
+
+  /**
+   * THE REGISTER IS A TICKER, and the only thing that makes it one is that it
+   * moves.
+   *
+   * DESIGN.md's argument for showing settled purchases at all is that *the
+   * thing that moves fast IS the evidence* — a row cannot pass without its
+   * signature and nothing on it can be reversed. A register that has stopped is
+   * a list, so this asserts the motion itself rather than the markup: the
+   * track's transform at one moment against its transform a beat later.
+   *
+   * It also asserts the two things the motion must not cost. The wall does not
+   * move under it — a ticker that reflowed the board would be paying for
+   * evidence with the artwork — and the ticker does not stand on a purchase.
+   */
+  it(
+    "runs the settled register as a ticker, pauses it for a reader, and moves no pixel of wall",
+    async () => {
+      await execute(
+        `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
+                             payment_signature, caption)
+         VALUES (300, 0, 650, 60, 'paid', 1000000, 39000000000, now(), 'ticker-top', 'Across the top'),
+                (0, 400, 120, 90, 'paid', 1000000, 10800000000, now(), 'ticker-two', 'A second one')`,
+      );
+
+      for (const [width, height, where] of [
+        [2560, 1440, "the full pair"],
+        [1920, 1080, "the tools pair"],
+        [1440, 900, "the strip along the bottom"],
+      ] as const) {
+        const at = `${width}x${height}`;
+        await browser.resize(width, height);
+        await browser.goto(`${server.origin}/?ticker=${at}`);
+        const read = `document.querySelector('canvas')?.dataset.boardRect ?? null`;
+        const settled = await waitFor(`the board's fit at ${at}`, async () => {
+          const before = await browser.evaluate<string | null>(read);
+          await sleep(150);
+          const after = await browser.evaluate<string | null>(read);
+          return before !== null && before === after ? after : null;
+        });
+
+        const transform = `getComputedStyle(document.querySelector(".board-tape__track")).transform`;
+        const first = await browser.evaluate<string>(transform);
+        await sleep(900);
+        const second = await browser.evaluate<string>(transform);
+        expect(
+          second,
+          `the register is not moving at ${at} (${where}): ${first} both times`,
+        ).not.toBe(first);
+
+        /*
+          2. IT STOPS FOR A READER, and this drives the FOCUS half of that.
+
+          One declaration pauses it — `.board-tape__scroller:hover .track,
+          .board-tape__scroller:focus-within .track` — and only one half of it
+          can be driven from a page. `:hover` is a real pointer position, not an
+          event: a dispatched `mouseover` does not set it, which this test found
+          by asserting it and getting `running`. Focus is the same rule reached
+          through the door a script can actually open, and it is the half a
+          keyboard reader depends on.
+        */
+        await browser.evaluate(`document.querySelector(".board-tape__scroller").focus()`);
+        expect(
+          await browser.evaluate<string>(
+            `getComputedStyle(document.querySelector(".board-tape__track")).animationPlayState`,
+          ),
+          `the register did not pause for a reader at ${at}`,
+        ).toBe("paused");
+        await browser.evaluate(`document.querySelector(".board-tape__scroller").blur()`);
+
+        // 3. AND THE WALL DID NOT MOVE while all that happened.
+        const after = await browser.evaluate<string | null>(read);
+        expect(after, `the board moved while the register ticked at ${at}`).toBe(settled);
+
+        // 4. Nor does the register stand on artwork: it is in a rail, or it is
+        //    the strip under the board.
+        const reading = JSON.parse(await browser.evaluate<string>(`(() => {
+          const c = document.querySelector("canvas");
+          const [bx, by, bw, bh] = c.dataset.boardRect.split(",").map(Number);
+          const t = document.querySelector(".board-tape").getBoundingClientRect();
+          return JSON.stringify({ covers:
+            t.left < bx + bw && bx < t.right && t.top < by + bh && by < t.bottom }); })()`,
+        )) as { covers: boolean };
+        expect(reading.covers, `the register is standing on the board at ${at}`).toBe(false);
+      }
+    },
+    240_000,
+  );
+
+  /**
    * THE CONDITION ON THE OVERLAY'S EXEMPTION, in the half where it is absolute:
    * where there is a rail, nothing covers artwork.
    *
@@ -719,11 +917,22 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
         const reading = JSON.parse(await browser.evaluate<string>(OVERLAY_VS_SALE)) as OverlayReading;
 
         expect(reading.tools, `the board's overlay is missing at ${at}`).not.toBeNull();
+        /*
+          AND NOTHING INSIDE EITHER RAIL OVERFLOWS IT. A box of the right size
+          whose content paints outside it covers exactly as much artwork as a
+          box of the wrong size, and this test measured only the box until a
+          missing `flex-wrap` put a 369px row of presets in a 98px column and
+          painted it across the wall. Overflow is the shape that failure takes.
+        */
+        expect(
+          reading.overflow,
+          `content is painting outside the rails at ${at}:\n  ` + reading.overflow.join("\n  "),
+        ).toEqual([]);
         // And the layout really is the one this row is about: a rail that
         // silently failed to appear would pass the coverage check by putting
         // the overlay somewhere else entirely.
-        if (width === 2560) expect(reading.rails, `${at} should have the full rails`).toBe("on");
-        if (width === 1920) expect(reading.toolsRail, `${at} should have the tools rail`).toBe("on");
+        if (width === 2560) expect(reading.rails, `${at} should have the full rails`).toBe("full");
+        if (width === 1920) expect(reading.rails, `${at} should have the tools rails`).toBe("tools");
 
         if (reading.covers) {
           covered.push(`${at} (${why}): overlay ${edges(reading.tools!)}, sale ${edges(reading.sold)}`);
@@ -768,8 +977,8 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
         );
 
         expect(
-          await browser.evaluate<string | null>(`document.documentElement.dataset.tools`),
-          `${at} should have no tools rail — this test is about the widths that cannot have one`,
+          await browser.evaluate<string | null>(`document.documentElement.dataset.rails`),
+          `${at} should have no rail of either kind — this test is about the widths that cannot have one`,
         ).toBe("off");
 
         const resting = `document.querySelector(".board-tools").classList.contains("board-tools--resting")`;
@@ -969,7 +1178,7 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
         expect(
           await browser.evaluate<string | null>(`document.documentElement.dataset.rails`),
           `the rails should be on at ${at} — without them this asserts nothing`,
-        ).toBe("on");
+        ).toBe("full");
 
         for (const [edge, boardX] of [
           ["right", 1245],
@@ -1079,7 +1288,7 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
         expect(
           await browser.evaluate<string | null>(`document.documentElement.dataset.rails`),
           `the rails should be on at ${at} — if they are not, this test is measuring one layout twice`,
-        ).toBe("on");
+        ).toBe("full");
         const [x, , withW, withH] = await settled();
 
         // 1. THE CLAIM. Not "about the same": the rail is sized from a gap the

@@ -113,6 +113,12 @@ const WIDTHS = [
     amendment at the two widths it does not change.
   */
   { name: "2560", width: 2560, height: 1440 },
+  /*
+    AND THE OWNER'S OWN MAC, which is the viewport the paired rails were built
+    for: 120px of gap, which is the tools pair — controls left, the register
+    ticking down the right — and not the full one.
+  */
+  { name: "2495", width: 2495, height: 1484 },
 ];
 
 /**

@@ -76,6 +76,36 @@ the board's rectangle is unchanged to the pixel at every width.
 
 ---
 
+## Settled: rails come in pairs, and the register ticks in both
+
+**Status: settled 2026-09-02 by the owner, on three reports from production.**
+
+**A rail down one side is a board off centre.** The first tools rail put a
+column on the left and left an identical empty gap on the right; at the owner's
+2495×1484 the wall read as slipped. Both sides now carry the same width or
+neither exists, and one gap decides which pair: **180px** for the full pair
+(controls and purchase panel left, register and standings right) and **108px**
+for the tools pair (controls left, register right). Measured in the rendered
+page, the board's two margins agree to within a pixel at 1920, 2495 and 2560.
+
+**The wall gained at both new viewports** and lost nothing anywhere:
+1567×1004 → **1607×1030** at 1920×1080, and 2193×1404 → **2238×1434** at
+2495×1484, which is 86.7% of that screen.
+
+**The register is a ticker in both orientations**, which reverses last batch's
+"the register does not roll in the rail". The owner's reason is the one the rail
+was built on: the thing that moves fast is the evidence, and a register that has
+stopped is a list. It pauses on hover and on focus, `prefers-reduced-motion`
+stops it and drops the seamless duplicate, and with nothing settled the sentence
+that says so is the only item and does not move.
+
+**The doors:** `TOOLS_RAIL_MIN` (108) and `TOOLS_RAIL_MAX` (160) are the tools
+pair's floor and ceiling; the 150px container query is where a row drops its
+thumbnail; `3.2s` a row is the ticker's speed and is the one number here nobody
+measured.
+
+---
+
 ## Settled: a tools rail where there is room, and an overlay that hides itself where there is not
 
 **Status: settled 2026-09-01 by the owner, on the measurement below. Both halves

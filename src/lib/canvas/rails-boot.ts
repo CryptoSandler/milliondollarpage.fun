@@ -4,7 +4,6 @@ import {
   BOARD_INSET,
   SIDE_RAIL_MAX,
   SIDE_RAIL_MIN,
-  TAPE_H_PX,
   TOOLS_RAIL_MAX,
   TOOLS_RAIL_MIN,
 } from "./viewport";
@@ -31,8 +30,9 @@ import {
  *
  * ## The duplication, which is deliberate and is tested
  *
- * This is `sideRailWidth` and `toolsRailWidth` written a second time, because
- * an inline boot script cannot import a module. Every NUMBER in it is interpolated from the constants
+ * This is `railLayout` written a second time, because an inline boot script
+ * cannot import a module. It stamps `data-rails` with one of three words —
+ * `full`, `tools`, `off` — and `--rail-w` with the width that word implies. Every NUMBER in it is interpolated from the constants
  * beside that function, so only the shape is repeated — and `rails-boot.test.ts`
  * evaluates this exact string against the function itself across a sweep of
  * viewports, so a change made to one and not the other fails a test rather than
@@ -49,20 +49,14 @@ import {
 export const RAILS_BOOT =
   `(function(){var d=document.documentElement;function s(){` +
   `var off=location.search.indexOf("rails=off")>=0;` +
-  // The full rails: every piece of chrome in the letterbox, the register off
-  // the bottom of the window, the board fitted under the header alone.
-  `var w=off?0:(innerWidth-${2 * BOARD_INSET}-${BOARD_WIDTH / BOARD_HEIGHT}*(innerHeight-${
+  // ONE gap for both pairs: the letterbox a board fitted under the header alone
+  // leaves. In both layouts the settled register has left the bottom of the
+  // window for the right-hand rail, so the board being measured is the same.
+  `var g=off?-1:(innerWidth-${2 * BOARD_INSET}-${BOARD_WIDTH / BOARD_HEIGHT}*(innerHeight-${
     BAR_TOP_PX + 2 * BOARD_INSET
   }))/2;` +
-  `w=w>=${SIDE_RAIL_MIN}?Math.min(w,${SIDE_RAIL_MAX}):0;` +
-  // The tools-only rail: the board's overlay alone, against a board that still
-  // has the register under it. Only where the full rails did not fit.
-  `var t=(off||w)?0:(innerWidth-${2 * BOARD_INSET}-${BOARD_WIDTH / BOARD_HEIGHT}*(innerHeight-${
-    BAR_TOP_PX + TAPE_H_PX + 2 * BOARD_INSET
-  }))/2;` +
-  `t=t>=${TOOLS_RAIL_MIN}?Math.min(t,${TOOLS_RAIL_MAX}):0;` +
-  `d.setAttribute("data-rails",w?"on":"off");` +
-  `d.setAttribute("data-tools",t?"on":"off");` +
-  `d.style.setProperty("--rail-w",w+"px");` +
-  `d.style.setProperty("--tools-w",t+"px")}` +
+  `var k=g>=${SIDE_RAIL_MIN}?"full":g>=${TOOLS_RAIL_MIN}?"tools":"off";` +
+  `var w=k==="full"?Math.min(g,${SIDE_RAIL_MAX}):k==="tools"?Math.min(g,${TOOLS_RAIL_MAX}):0;` +
+  `d.setAttribute("data-rails",k);` +
+  `d.style.setProperty("--rail-w",w+"px")}` +
   `s();addEventListener("resize",s)})()`;

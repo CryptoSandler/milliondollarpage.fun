@@ -203,48 +203,34 @@ export const SIDE_RAIL_MIN = 180;
 export const SIDE_RAIL_MAX = 288;
 
 /**
- * How wide the side rails are at this viewport, and 0 when there are none.
+ * How wide the FULL rails are at this viewport, and 0 when they do not fit.
  *
- * WHO CALLS THIS: the boot script in `layout.tsx` — by hand, in six lines of
- * inline JavaScript, because the answer is needed before the first paint and a
- * React effect is a frame too late. `rails-boot.test.ts` runs that script
- * against this function over a sweep of viewports, so the two cannot drift.
- *
- * THE GAP IS THE ONE THE BOARD CANNOT USE. The board is contained, not covered,
- * so in a window wider than the board's own 1.5625:1 it is fitted by HEIGHT and
- * the width beside it is width no scale could reach: growing into it would mean
- * growing past a height that is already spent. The height used here is the one
- * the rail layout leaves — the header alone, because the settled register goes
- * into the right rail rather than along the bottom — which is why a rail sized
- * from this gap leaves the board still height-limited and therefore never
- * smaller than it was without one. DESIGN.md carries the argument; the negative
- * assertion is in `purchase-e2e.test.ts`.
+ * A thin reading of `railLayout` below, kept because two guards and a document
+ * ask exactly this question — "does this viewport get the register and the
+ * purchase panel in columns" — and because the answer is one word rather than a
+ * shape.
  */
 export function sideRailWidth(screen: Size, board: Size): number {
-  const free = screen.height - BAR_TOP_PX - 2 * BOARD_INSET;
-  const gap = (screen.width - 2 * BOARD_INSET - (board.width / board.height) * free) / 2;
-  return gap >= SIDE_RAIL_MIN ? Math.min(gap, SIDE_RAIL_MAX) : 0;
+  const layout = railLayout(screen, board);
+  return layout.kind === "full" ? layout.width : 0;
 }
 
 /**
  * The settled register's height along the bottom, nominally, in CSS pixels.
  *
- * Mirrors `--tape-h`. Needed here rather than only in `BoardView` because the
- * tools rail below is sized against a board that still has the register under
- * it — that is the whole difference between the two rails.
+ * Mirrors `--tape-h`. `BoardView` measures the real box; this is what the very
+ * first paint has to assume, and what the layout without rails is fitted under.
  */
 export const TAPE_H_PX = 26;
 
 /**
- * The narrowest and widest a TOOLS-ONLY rail may be.
+ * The narrowest and widest a TOOLS rail may be.
  *
  * 108 IS MEASURED, the same way 180 was: the column was pinned at a width in
  * the rendered page and every element inside it was asked whether its
  * `scrollWidth` exceeded its `clientWidth`. The widest thing that cannot shrink
- * is a preset button at its longest, `100×100`, which sets at 72px; the pill's
- * own padding and border make 90, and the column's padding makes 108. The zoom
- * trio wraps two-and-one below its own 112px rather than overflowing, which is
- * what lets the floor sit under it.
+ * is a preset button at its longest, `100×100`, which sets at 74px; the pill's
+ * padding and border make 92, and the column's padding makes 108.
  *
  * 160 IS THE CEILING and it is taste with a reason: four small buttons and one
  * line of type in a column wider than that stop reading as a rail and start
@@ -254,41 +240,46 @@ export const TOOLS_RAIL_MIN = 108;
 export const TOOLS_RAIL_MAX = 160;
 
 /**
- * How wide a tools-only rail is at this viewport, and 0 when there is not room.
+ * Which pair of rails this viewport gets, and how wide they are.
  *
  * WHO CALLS THIS: the boot script in `layout.tsx`, and `rails-boot.test.ts`.
  *
- * ## Why there are two rails and two thresholds
+ * ## RAILS COME IN PAIRS OR THEY DO NOT COME
  *
- * `sideRailWidth` above moves ALL the chrome into the letterbox and takes the
- * register off the bottom of the window, so the board it is sized against is
- * one the header alone sits above. That needs 180px a side, which 16:9 does not
- * reach until about 1373 lines of height.
+ * A rail down one side and nothing down the other puts the board off the
+ * middle of the window by half a rail, which is what the owner saw at
+ * 2495×1484: a column of controls on the left, an identical empty gap on the
+ * right, and a wall that reads as slipped. So both sides are the same width or
+ * neither side exists, and the board is centred in the VIEWPORT rather than in
+ * whatever is left of it.
  *
- * This one moves only the board's own overlay — the presets, the zoom and the
- * line of instruction. The register stays along the bottom, so the board is the
- * same board it has always been and the gap is the letterbox it already leaves:
- * 168.8px at 1920×1080, 69.4px at 1440×900, 67.5px at 1280×800. A column of
- * controls needs 108, so 1920 has room and 1440 does not.
+ * ## Two pairs, one gap
  *
- * ## What it is for, and it is not tidiness
+ * The gap is the same number for both: the letterbox left by a board fitted
+ * under the header alone, because in both layouts the settled register has left
+ * the bottom of the window for the right-hand rail. What differs is only what
+ * the pair can hold.
  *
- * The overlay stands ON the board where there is no rail, and a purchase under
- * it is a purchase covered — see DESIGN.md, "The overlay on the board". This is
- * how that stops being true at every width that can afford it. Below the
- * threshold nothing here helps, and the overlay hides itself at rest instead.
+ * - **`full`, from 180px.** Left: the controls and the purchase panel. Right:
+ *   the register and the standings. 180 is what the Buy button needs.
+ * - **`tools`, from 108px.** Left: the controls. Right: the register, as a
+ *   vertical ticker. The purchase panel floats, because it does not fit.
+ * - **`off` below that**, which is the layout this stylesheet already had.
  *
- * THE BOARD NEVER PAYS FOR IT. The rail is sized from the letterbox a
- * height-limited board already leaves, so the board is not refitted and not
- * moved: the same 1567×1004 at 1920×1080 with the rail as without it.
+ * THE WALL NEVER CEDES WIDTH TO EITHER. Both are sized from a letterbox a
+ * height-limited board already leaves, so the board is not refitted — and
+ * because the register leaves the bottom of the window, it is fitted to MORE
+ * height than before and comes out larger, never smaller.
  */
-export function toolsRailWidth(screen: Size, board: Size): number {
-  // The full rails win where they fit: they carry these same controls.
-  if (sideRailWidth(screen, board) > 0) return 0;
+export type RailLayout = { kind: "off" | "tools" | "full"; width: number };
 
-  const free = screen.height - BAR_TOP_PX - TAPE_H_PX - 2 * BOARD_INSET;
+export function railLayout(screen: Size, board: Size): RailLayout {
+  const free = screen.height - BAR_TOP_PX - 2 * BOARD_INSET;
   const gap = (screen.width - 2 * BOARD_INSET - (board.width / board.height) * free) / 2;
-  return gap >= TOOLS_RAIL_MIN ? Math.min(gap, TOOLS_RAIL_MAX) : 0;
+
+  if (gap >= SIDE_RAIL_MIN) return { kind: "full", width: Math.min(gap, SIDE_RAIL_MAX) };
+  if (gap >= TOOLS_RAIL_MIN) return { kind: "tools", width: Math.min(gap, TOOLS_RAIL_MAX) };
+  return { kind: "off", width: 0 };
 }
 
 /** The hover card's own width: `w-56` on the element in `BoardView`, 14rem. */
@@ -307,9 +298,9 @@ const HOVER_CARD_GAP = 14;
  * IT KEEPS THE CARD INSIDE THE BOARD'S OWN FREE REGION, not merely inside the
  * window. The old rule was `min(x + 14, innerWidth - 240)` — the window's right
  * edge, which was right when the only thing beside the board was wall and wrong
- * the moment a side rail stands there: a rectangle hovered at the board's right
- * edge put the card over the settled register, which is chrome covering chrome
- * with the artwork's own metadata.
+ * the moment a rail stands there: a rectangle hovered at the board's right edge
+ * put the card over the settled register, which is chrome covering chrome with
+ * the artwork's own metadata.
  *
  * `chrome.left` and `chrome.right` already carry the rails plus the board's
  * inset — `BoardView` measures them off the rails' real boxes — so nothing here

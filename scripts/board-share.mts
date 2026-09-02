@@ -48,9 +48,10 @@ process.env.DATABASE_URL = DATABASE;
 const BUDGET_IDLE = 60;
 const BUDGET_SELECTED = 140;
 /**
- * And the budget where the side rails are on, which is the header and nothing
- * else — measured at exactly 34px, the same number `--bar-top-h` sets and the
- * same one a phone already reports when the settled strip is not shown.
+ * And the budget where a PAIR of rails is on — either pair — which is the
+ * header and nothing else, measured at exactly 34px: the same number
+ * `--bar-top-h` sets and the same one a phone reports when the settled strip is
+ * not shown. The register has left the bottom of the window in both.
  *
  * It does not move with the selection there. The purchase panel is at the foot
  * of the left rail rather than floating over the letterbox, so opening it costs
@@ -66,6 +67,9 @@ const VIEWPORTS = [
   // chrome. Without it the table reports only viewports where the side rails
   // are off, which is the half of the layout that did not change.
   { name: "2560×1440", width: 2560, height: 1440 },
+  // The owner's own Mac. It is the viewport the paired rails were built for:
+  // 120px of gap, which is the tools pair and not the full one.
+  { name: "2495×1484", width: 2495, height: 1484 },
   { name: "1280×800", width: 1280, height: 800 },
   { name: "390×844", width: 390, height: 844 },
 ];
@@ -100,8 +104,7 @@ const MEASURE = `(() => {
     parts,
     vw: innerWidth,
     vh: innerHeight,
-    rails: document.documentElement.getAttribute("data-rails") === "on",
-    tools: document.documentElement.getAttribute("data-tools") === "on",
+    rails: document.documentElement.getAttribute("data-rails") ?? "off",
   });
 })()`;
 
@@ -119,8 +122,8 @@ type Reading = {
   parts: Part[];
   vw: number;
   vh: number;
-  rails: boolean;
-  tools: boolean;
+  /** "full", "tools" or "off" — the word the boot script stamped. */
+  rails: string;
 };
 
 /**
@@ -237,11 +240,28 @@ async function main(): Promise<void> {
           );
         }
         const chrome = chromeHeight(overTheBoard(reading.parts, reading.board));
-        const budget = reading.rails
-          ? BUDGET_RAILED
-          : selected
-            ? BUDGET_SELECTED
-            : BUDGET_IDLE;
+        /*
+          THREE LAYOUTS, AND THE PANEL IS WHAT DECIDES BETWEEN TWO OF THEM.
+
+          Idle, a pair of rails costs the header alone — 34px — because the
+          register has left the bottom of the window. Once something is
+          selected, only the FULL pair keeps that: it docks the purchase panel
+          at the foot of the left rail, where the panel costs no height at all.
+          The tools pair cannot — 180px is what the Buy button measured and its
+          rail is 108 to 160 — so there the panel floats exactly as it does with
+          no rails, and it is allowed exactly what a floating panel has always
+          been allowed. That is the 140px line, and it clears it at 114.
+        */
+        const budget =
+          reading.rails === "full"
+            ? BUDGET_RAILED
+            : reading.rails === "tools"
+              ? selected
+                ? BUDGET_SELECTED
+                : BUDGET_RAILED
+              : selected
+                ? BUDGET_SELECTED
+                : BUDGET_IDLE;
         const [, , bw, bh] = (reading.board ?? "0,0,0,0").split(",").map(Number);
         const share = ((bw * bh) / (reading.vw * reading.vh)) * 100;
         const over = chrome > budget;
@@ -252,7 +272,7 @@ async function main(): Promise<void> {
         }
 
         console.log(
-          `  ${`${view.name}${reading.rails ? " ·rails" : reading.tools ? " ·tools" : ""}`.padEnd(20)}${(selected ? "open" : "none").padEnd(11)}` +
+          `  ${`${view.name}${reading.rails === "off" ? "" : ` ·${reading.rails}`}`.padEnd(20)}${(selected ? "open" : "none").padEnd(11)}` +
             `${chrome.toFixed(0).padStart(6)}px${String(budget).padStart(6)}px` +
             `${`${bw.toFixed(0)}×${bh.toFixed(0)}`.padStart(14)}${share.toFixed(1).padStart(8)}%` +
             (over ? "   OVER" : ""),

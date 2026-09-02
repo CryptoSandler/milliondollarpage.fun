@@ -8,8 +8,8 @@ import {
   TAPE_H_PX,
   TOOLS_RAIL_MAX,
   TOOLS_RAIL_MIN,
+  railLayout,
   sideRailWidth,
-  toolsRailWidth,
 } from "../viewport";
 import { BOARD_HEIGHT, BOARD_WIDTH } from "../../board/geometry";
 
@@ -29,7 +29,7 @@ function boot(
   width: number,
   height: number,
   search = "",
-): { rails: string; railW: string; tools: string; toolsW: string } {
+): { rails: string; railW: string } {
   const attributes = new Map<string, string>();
   const properties = new Map<string, string>();
   const documentElement = {
@@ -49,24 +49,24 @@ function boot(
   return {
     rails: attributes.get("data-rails") ?? "",
     railW: properties.get("--rail-w") ?? "",
-    tools: attributes.get("data-tools") ?? "",
-    toolsW: properties.get("--tools-w") ?? "",
   };
 }
 
-describe("the boot script and sideRailWidth", () => {
+describe("the boot script and railLayout", () => {
   /**
-   * Every viewport in DESIGN.md's table, plus the two edges of the clamp and a
-   * phone. The step through the threshold is the part that matters: the
-   * function and the script have to change their minds at the same pixel, not
-   * merely agree in the middle of each range.
+   * Every viewport in DESIGN.md's table, plus both thresholds and a phone. The
+   * steps through them are what matter: the function and the script have to
+   * change their minds at the same pixel, not merely agree in the middle of a
+   * range.
    */
   const SWEEP: [number, number][] = [
     [390, 844],
     [1280, 800],
     [1440, 900],
+    [1600, 900],
     [1920, 1080],
     [2400, 1440],
+    [2495, 1484],
     [2540, 1440],
     [2560, 1440],
     [2600, 1440],
@@ -76,76 +76,63 @@ describe("the boot script and sideRailWidth", () => {
     [800, 1280],
   ];
 
-  it("agree at every viewport, including across the threshold", () => {
+  it("agree at every viewport, including across both thresholds", () => {
     for (const [width, height] of SWEEP) {
-      const expected = sideRailWidth({ width, height }, BOARD);
-      const tools = toolsRailWidth({ width, height }, BOARD);
+      const expected = railLayout({ width, height }, BOARD);
       const stamped = boot(width, height);
-      expect(stamped.railW, `--rail-w at ${width}×${height}`).toBe(`${expected}px`);
-      expect(stamped.rails, `data-rails at ${width}×${height}`).toBe(expected > 0 ? "on" : "off");
-      expect(stamped.toolsW, `--tools-w at ${width}×${height}`).toBe(`${tools}px`);
-      expect(stamped.tools, `data-tools at ${width}×${height}`).toBe(tools > 0 ? "on" : "off");
+      expect(stamped.rails, `data-rails at ${width}×${height}`).toBe(expected.kind);
+      expect(stamped.railW, `--rail-w at ${width}×${height}`).toBe(`${expected.width}px`);
     }
   });
 
-  it("agree at every pixel of width across the threshold at 1440 tall", () => {
-    // The width the rails begin at, hunted rather than asserted: what this
-    // checks is that there is exactly ONE crossing and both implementations
-    // make it in the same place.
-    for (let width = 2400; width <= 2700; width += 1) {
-      expect(boot(width, 1440).railW, `--rail-w at ${width}×1440`).toBe(
-        `${sideRailWidth({ width, height: 1440 }, BOARD)}px`,
-      );
-    }
-  });
-
-  it("agree at every pixel across the TOOLS threshold at 1080 tall", () => {
+  it("agree at every pixel across both thresholds at 1080 tall", () => {
     /*
-      Two thresholds now, and the second has its own crossing. The range stops
-      at 1983 because the FULL rails begin at 1984×1080 — a gap of 180.4px —
-      which this test found by failing when it assumed 1080 was out of their
-      reach entirely. 1920 is comfortably inside the tools rail's range and
-      outside the full rails', which is the case the option was chosen for.
+      The full rails begin at 1984×1080 — a gap of 180.4px — which an earlier
+      version of this test found by assuming 1080 was out of their reach and
+      failing. Both crossings are inside this range.
     */
-    for (let width = 1400; width <= 1983; width += 1) {
+    for (let width = 1400; width <= 2100; width += 1) {
+      const expected = railLayout({ width, height: 1080 }, BOARD);
       const stamped = boot(width, 1080);
-      expect(stamped.toolsW, `--tools-w at ${width}×1080`).toBe(
-        `${toolsRailWidth({ width, height: 1080 }, BOARD)}px`,
-      );
-      expect(stamped.railW, `--rail-w at ${width}×1080`).toBe("0px");
+      expect(stamped.rails, `data-rails at ${width}×1080`).toBe(expected.kind);
+      expect(stamped.railW, `--rail-w at ${width}×1080`).toBe(`${expected.width}px`);
     }
-
-    // And the handover: one pixel wider, the full rails take it and the tools
-    // rail stands down rather than both claiming the same controls.
-    expect(boot(1984, 1080).rails).toBe("on");
-    expect(boot(1984, 1080).tools).toBe("off");
   });
 
-  it("stamps nothing wider than the ceiling, however wide the window", () => {
+  it("stamps nothing wider than either ceiling, however wide the window", () => {
     expect(boot(7680, 1440).railW).toBe(`${SIDE_RAIL_MAX}px`);
+    /*
+      And the tools pair's own ceiling, which needs a viewport wide enough to
+      reach it: at 1920×1080 the gap is 148.4px and the rail takes ALL of it,
+      which is the pair's whole point — the leftover is what threw the board off
+      centre. The ceiling needs a gap between 160 and 180, which is a narrow
+      band: 1963×1080 leaves 169.9px and is clamped to 160.
+    */
+    expect(boot(1920, 1080).rails).toBe("tools");
+    expect(boot(1963, 1080).rails).toBe("tools");
+    expect(boot(1963, 1080).railW).toBe(`${TOOLS_RAIL_MAX}px`);
   });
 
-  it("never stamps a rail narrower than the floor", () => {
+  it("never stamps a rail narrower than the floor of the kind it stamped", () => {
     for (let width = 1200; width <= 3000; width += 7) {
-      const rail = Number(boot(width, 1440).railW.replace("px", ""));
-      expect(rail === 0 || rail >= SIDE_RAIL_MIN, `${width}×1440 stamped ${rail}px`).toBe(true);
+      const { rails, railW } = boot(width, 1440);
+      const w = Number(railW.replace("px", ""));
+      if (rails === "off") expect(w, `${width}×1440`).toBe(0);
+      if (rails === "tools") expect(w, `${width}×1440`).toBeGreaterThanOrEqual(TOOLS_RAIL_MIN);
+      if (rails === "full") expect(w, `${width}×1440`).toBeGreaterThanOrEqual(SIDE_RAIL_MIN);
     }
   });
 
   /**
    * The switch the negative fit guard drives. Without it there is no way to ask
-   * one window for both layouts, and "the board never narrows because of the
-   * rail" is a comparison between two viewports rather than between two
-   * layouts of one.
+   * one window for both layouts.
    */
-  it("forces both rails off for ?rails=off, at viewports that would have them", () => {
-    expect(boot(3440, 1440).rails).toBe("on");
+  it("forces every rail off for ?rails=off, at viewports that would have them", () => {
+    expect(boot(3440, 1440).rails).toBe("full");
     expect(boot(3440, 1440, "?rails=off").rails).toBe("off");
     expect(boot(3440, 1440, "?capture=1&rails=off").railW).toBe("0px");
-    // And the tools rail, which is the one 1920 has.
-    expect(boot(1920, 1080).tools).toBe("on");
-    expect(boot(1920, 1080, "?rails=off").tools).toBe("off");
-    expect(boot(1920, 1080, "?rails=off").toolsW).toBe("0px");
+    expect(boot(1920, 1080).rails).toBe("tools");
+    expect(boot(1920, 1080, "?rails=off").rails).toBe("off");
   });
 });
 
@@ -193,70 +180,104 @@ describe("sideRailWidth", () => {
   });
 });
 
-describe("toolsRailWidth", () => {
+describe("railLayout", () => {
   /**
-   * The two rails never both claim the chrome. Where the full rails fit they
-   * carry these same controls, so a tools rail there would be a second column
-   * holding what the first one already holds.
+   * RAILS COME IN PAIRS OR THEY DO NOT COME, and the kinds do not overlap: one
+   * gap decides, and it decides once. A viewport that got `full` must not also
+   * look like `tools` to anybody reading the width.
    */
-  it("stands down wherever the full rails fit", () => {
+  it("gives each viewport exactly one kind", () => {
     for (const [width, height] of [
       [2560, 1440],
       [3440, 1440],
       [3840, 2160],
       [5120, 1440],
     ] as const) {
+      expect(railLayout({ width, height }, BOARD).kind, `${width}×${height}`).toBe("full");
       expect(sideRailWidth({ width, height }, BOARD), `${width}×${height}`).toBeGreaterThan(0);
-      expect(toolsRailWidth({ width, height }, BOARD), `${width}×${height}`).toBe(0);
     }
   });
 
   /**
-   * The door this option was chosen to open, and the one it deliberately does
-   * not: 1920 gets the overlay off the wall, 1440 and 1280 cannot.
+   * The door this pair was chosen to open, and the one it deliberately does
+   * not: 1920 and the owner's own 2495×1484 get the overlay off the wall, 1440
+   * and 1280 cannot.
    */
-  it("reaches 1920 and does not reach 1440 or 1280", () => {
-    expect(toolsRailWidth({ width: 1920, height: 1080 }, BOARD)).toBe(TOOLS_RAIL_MAX);
-    expect(toolsRailWidth({ width: 1440, height: 900 }, BOARD)).toBe(0);
-    expect(toolsRailWidth({ width: 1280, height: 800 }, BOARD)).toBe(0);
-    expect(toolsRailWidth({ width: 390, height: 844 }, BOARD)).toBe(0);
-  });
-
-  it("never stands narrower than its floor or wider than its ceiling", () => {
-    for (let width = 1000; width <= 3000; width += 3) {
-      for (const height of [800, 900, 1080, 1200]) {
-        const w = toolsRailWidth({ width, height }, BOARD);
-        expect(
-          w === 0 || (w >= TOOLS_RAIL_MIN && w <= TOOLS_RAIL_MAX),
-          `${width}×${height} gave a ${w}px tools rail`,
-        ).toBe(true);
-      }
-    }
+  it("reaches 1920 and 2495×1484 with tools, and does not reach 1440 or 1280", () => {
+    const at1920 = railLayout({ width: 1920, height: 1080 }, BOARD);
+    expect(at1920.kind).toBe("tools");
+    // The whole gap, because it is under the ceiling — 148.4px, not 160.
+    expect(at1920.width).toBeCloseTo(148.4375, 4);
+    expect(at1920.width).toBeGreaterThanOrEqual(TOOLS_RAIL_MIN);
+    expect(at1920.width).toBeLessThanOrEqual(TOOLS_RAIL_MAX);
+    expect(railLayout({ width: 2495, height: 1484 }, BOARD).kind).toBe("tools");
+    expect(railLayout({ width: 1440, height: 900 }, BOARD).kind).toBe("off");
+    expect(railLayout({ width: 1280, height: 800 }, BOARD).kind).toBe("off");
+    expect(railLayout({ width: 390, height: 844 }, BOARD).kind).toBe("off");
   });
 
   /**
-   * THE BOARD DOES NOT PAY FOR IT, and this is the arithmetic rather than the
-   * hope: the rail is sized from the letterbox a board fitted UNDER THE SAME
-   * CHROME already leaves, so the board is not refitted at all. Its scale with
-   * the rail is its scale without one, exactly.
+   * THE BOARD DOES NOT PAY FOR EITHER PAIR, and this is the arithmetic rather
+   * than the hope. Both rails are sized from the letterbox a board fitted under
+   * the header alone already leaves, so the board is still fitted by height
+   * with them there — and to MORE height than the layout without them, because
+   * the settled register has left the bottom of the window.
    */
-  it("leaves the board the size it already was", () => {
-    for (let width = 1400; width <= 2600; width += 11) {
-      for (const height of [900, 1080, 1200]) {
-        const rail = toolsRailWidth({ width, height }, BOARD);
-        if (rail === 0) continue;
+  it("leaves the board at least the size it had without rails, at every viewport", () => {
+    for (let width = 1000; width <= 6000; width += 13) {
+      for (const height of [800, 900, 1080, 1200, 1440, 1484, 1600, 2160]) {
+        const { kind, width: rail } = railLayout({ width, height }, BOARD);
+        if (kind === "off") continue;
 
-        const freeH = height - BAR_TOP_PX - TAPE_H_PX - 2 * BOARD_INSET;
-        const without = Math.min((width - 2 * BOARD_INSET) / BOARD_WIDTH, freeH / BOARD_HEIGHT);
-        const withRail = Math.min(
+        // Without rails: the register is along the bottom.
+        const withoutH = height - BAR_TOP_PX - TAPE_H_PX - 2 * BOARD_INSET;
+        const without = Math.min(
+          (width - 2 * BOARD_INSET) / BOARD_WIDTH,
+          withoutH / BOARD_HEIGHT,
+        );
+        // With them: the header alone, and a rail on each side.
+        const withRails = Math.min(
           (width - 2 * rail - 2 * BOARD_INSET) / BOARD_WIDTH,
-          freeH / BOARD_HEIGHT,
+          (height - BAR_TOP_PX - 2 * BOARD_INSET) / BOARD_HEIGHT,
         );
         expect(
-          withRail,
-          `the board at ${width}×${height} fits at ${withRail} with a ${rail}px tools rail and ${without} without`,
-        ).toBeCloseTo(without, 10);
+          withRails,
+          `the board at ${width}×${height} fits at ${withRails} with a ${rail}px ${kind} rail and ${without} without`,
+        ).toBeGreaterThanOrEqual(without);
       }
+    }
+  });
+
+  /**
+   * AND THE BOARD IS CENTRED IN THE VIEWPORT, which is the complaint the pair
+   * exists to answer: a rail on one side alone put the wall half a rail off the
+   * middle of the window. Equal rails mean equal chrome, and equal chrome
+   * around a centred fit is a centred board.
+   */
+  it("leaves the board centred in the window wherever there is a pair", () => {
+    for (const [width, height] of [
+      [1920, 1080],
+      [2495, 1484],
+      [2560, 1440],
+      [3440, 1440],
+    ] as const) {
+      const { kind, width: rail } = railLayout({ width, height }, BOARD);
+      expect(kind, `${width}×${height} should have a pair`).not.toBe("off");
+
+      const left = rail + BOARD_INSET;
+      const right = rail + BOARD_INSET;
+      const free = width - left - right;
+      const scale = Math.min(
+        free / BOARD_WIDTH,
+        (height - BAR_TOP_PX - 2 * BOARD_INSET) / BOARD_HEIGHT,
+      );
+      const boardW = BOARD_WIDTH * scale;
+      const boardLeft = left + (free - boardW) / 2;
+      const boardRight = width - (boardLeft + boardW);
+      expect(
+        boardLeft,
+        `at ${width}×${height} the board sits ${boardLeft} from the left and ${boardRight} from the right`,
+      ).toBeCloseTo(boardRight, 6);
     }
   });
 });

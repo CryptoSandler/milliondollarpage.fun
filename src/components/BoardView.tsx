@@ -528,10 +528,11 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
    *
    * FOUR CONDITIONS STOP IT, and each is a way this could have gone wrong:
    *
-   *  - a rail. Where the overlay is in a column beside the board it covers
-   *    nothing, so hiding it would be a disappearing control for no reason at
-   *    all. Read off the root's own attributes, which the boot script stamps —
-   *    the same source the stylesheet reads, so the two cannot disagree.
+   *  - a rail of either kind. Where the overlay is in a column beside the board
+   *    it covers nothing, so hiding it would be a disappearing control for no
+   *    reason at all. Read off the root's own attribute, which the boot script
+   *    stamps `full`, `tools` or `off` — the same source the stylesheet reads,
+   *    so the two cannot disagree.
    *  - a phone. There is no pointer to move, so nothing would ever bring it
    *    back, and the board is letterboxed clear of the overlay there anyway.
    *  - a selection, or an open purchase panel. A control that vanishes in the
@@ -553,8 +554,9 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
     if (!overlayIsOnTheWall) return;
 
     const root = document.documentElement;
-    // A rail, or a viewport with no pointer to speak of: nothing to hide from.
-    if (root.dataset.rails === "on" || root.dataset.tools === "on") return;
+    // A rail of either kind, or a viewport with no pointer to speak of: nothing
+    // to hide from, because the overlay is not on the board there.
+    if (root.dataset.rails !== "off") return;
     if (!window.matchMedia("(min-width: 641px)").matches) return;
     if (!window.matchMedia("(hover: hover)").matches) return;
 

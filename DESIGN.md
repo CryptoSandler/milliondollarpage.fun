@@ -879,7 +879,14 @@ preference.
 and a **26px** settled rail. **≤ 140px once the purchase panel is open**, which
 is the one piece of chrome that comes and goes.
 
-**With the side rails on the budget is 34px, and it is the header alone.** That
+**With a pair of rails on, the idle budget is 34px, and it is the header
+alone.** The register has left the bottom of the window in both pairs. What
+differs is what a selection costs: the **full** pair docks the purchase panel at
+the foot of the left rail, where it costs no height at all and the budget stays
+34; the **tools** pair cannot hold it, so it floats there exactly as it does
+with no rails and is allowed exactly what a floating panel has always been
+allowed. Measured, that is **114px against the 140px line** at both 1920×1080
+and 2495×1484. That
 is the whole of the vertical chrome there: the settled register and the
 purchase panel have both left the bottom of the window for a column that costs
 the board no height at all. The number is measured, not asserted — see the
@@ -960,6 +967,41 @@ Measured, with a sale seeded across the top-centre of the wall:
 At a dollar a pixel those last two are **$36,500 and $47,400 of wall** under a
 pill, in the same place, forever — which is what makes the third answer a
 mechanism rather than a shrug.
+
+### The pill's own spacing is a number, not a consequence of a font
+
+**Reported from macOS: the presets touching each other in the rail, and not
+touching on Windows.** Not reproducible on this machine, which has one OS and
+one font stack — so what is fixed is the property that made it possible rather
+than the platform that showed it, and what is guarded is that property.
+
+**What the browser was actually computing**, measured at 2495×1484:
+
+| | Was | Why |
+|---|---|---|
+| row and column gap | **4px** | Tailwind's `gap-1` in the markup, a *utilities* rule, outranking this stylesheet's components-layer `gap: 10px`. The ten pixels this document specifies were never in force. |
+| button box | **24px** | declared, around a **24.5px** content box: 12.5px of line between 6px paddings |
+| `100×100` | **73.6px** real, **70.1px** fallback | three and a half pixels per button, which is enough to move where a wrapped row breaks |
+
+Four 24px pills four pixels apart read as touching; a face with wider metrics
+turns three wrapped rows into four. **Both halves of that are the type deciding
+the layout.**
+
+**The fix stops asking the font.** An explicit `gap: 10px` that no utility
+outranks, and `min-height: 26px` with a pinned line-height instead of a fixed
+`height`, so the button is never smaller than its own content and never smaller
+than a touch target. `purchase-e2e.test.ts` measures the distance between
+consecutive buttons' boxes **twice — once with the faces the page loads and
+once with every family refused** — and fails under 8px in either, at three
+viewports, with a check that the two passes really were two faces.
+
+**And two things the same probe found that nobody had measured.** The presets
+row carries `shrink-0`, so it refused to go under its own max-content and never
+wrapped: at 390 it was one **503px** row painting off the side of a 366px phone,
+and in a 98px rail it painted across the wall. The rows shrink and wrap
+everywhere now, and the sold-pixel guard checks for overflow as well as for the
+overlay's box — because a box of the right size whose content spills covers
+exactly as much artwork as a box of the wrong size.
 
 ### So at those two widths it gets out of the way
 
@@ -1089,10 +1131,35 @@ That leftover is not the wall's. It is the ground the sheet hangs on, and the
 chrome is allowed to stand in it. **The rule is the guarantee, not the
 geometry: the board is never smaller because a rail is there.**
 
-**So the chrome moves into two side rails exactly when the leftover is wide
-enough to hold it, and nowhere else.** Below that it is the layout this
-document already described — a bar on top, a register along the bottom, a
-floating panel — unchanged, down to the pixel.
+**So the chrome moves into side rails exactly when the leftover is wide enough
+to hold it, and nowhere else.** Below that it is the layout this document
+already described — a bar on top, a register along the bottom, a floating
+panel — unchanged, down to the pixel.
+
+**AND RAILS COME IN PAIRS OR THEY DO NOT COME.** A column down one side and an
+identical empty gap down the other puts the wall half a rail off the middle of
+the window, which is what the owner saw at 2495×1484 and what a single-sided
+first build deserved. Both sides carry the same width or neither exists, and
+the board is centred in the VIEWPORT rather than in whatever is left of it —
+asserted in `rails-boot.test.ts` and measured in the rendered page at 1920,
+2495 and 2560, where the board's two margins agree to within a pixel.
+
+**There are two pairs, and one gap decides between them.** The gap is the same
+number for both — the letterbox a board fitted under the header alone leaves,
+because in both the register has left the bottom of the window — and what
+differs is only what the pair can hold:
+
+| Kind | From | Left rail | Right rail |
+|---|---|---|---|
+| **full** | 180px | the controls and the purchase panel | the register and the standings |
+| **tools** | 108px | the controls | the register, ticking |
+| off | — | — | — |
+
+**108 is the controls' own floor** and 180 is the Buy button's: a 108px column
+cannot hold `Buy these pixels — $1,000,000.00` on any number of lines, so the
+tools pair leaves the purchase panel floating exactly as the layout with no
+rails does. That is the one thing the tools pair costs, and it costs it only
+while somebody is buying — see the budget below.
 
 ### The threshold, and the arithmetic that sets it
 
@@ -1148,24 +1215,27 @@ the viewport named, before and after.
 | Viewport | Gap each side | Rails | Board before | Board after | Share |
 |---|---|---|---|---|---|
 | 1440×900 | 49.1px | off | 1285×824 | 1285×824 | 81.7% |
-| 1920×1080 | 148.4px | off | 1567×1004 | 1567×1004 | 75.9% |
-| 2560×1440 | 187.2px | **on** | 2129×1364 | **2170×1390** | 78.8% → **81.8%** |
-| 1280×800 | none | off | 1129×724 | 1129×724 | 79.8% |
+| 1280×800 | 47.2px | off | 1129×724 | 1129×724 | 79.8% |
 | 390×844 | none | off | 374×241 | 374×241 | 27.4% |
+| 1920×1080 | 148.4px | **tools** | 1567×1004 | **1607×1030** | 75.9% → **79.8%** |
+| 2495×1484 | 120.3px | **tools** | 2193×1404 | **2238×1434** | 84.0% → **86.7%** |
+| 2560×1440 | 187.2px | **full** | 2129×1364 | **2170×1390** | 78.8% → **81.8%** |
 
 **The one viewport that changes gains 41px of width and 26px of height** — the
 26 is exactly the settled strip that left the bottom of the window, which is
 the amendment's own claim arriving as a measurement. The other four are
 identical to the pixel, which is the other half of it.
 
-**This is a narrow door and it is meant to be.** A 16:9 window's gap is
-`0.108 × height + 32`, so 1080 gives 148 and 1440 gives 187: on 16:9 the rails
-begin at about **1373 lines of height** — a 2441×1373 window — and they begin
-immediately on anything wider than 16:9, where a 3440×1440 ultrawide has 626px
-a side and takes the 288 ceiling. At 2560×1440 they are on by **7.2 pixels**.
-That is not a rounding error to be tuned away; it is the honest edge of the
-arithmetic, and it errs the safe way — every real browser window on that
-monitor has less height than 1440 and therefore MORE gap than this.
+**The door is wider than it was, and that is the whole of the second pair.** A
+16:9 window's gap is `0.108 × height + 32`, so 1080 gives 148: the full pair
+does not reach 1920×1080 — it begins at 1984 wide there — and the tools pair
+does, comfortably. On 16:9 the full pair begins at about **1373 lines of
+height**; the tools pair begins at about **700**, which is every desktop this
+design is looked at on and none of the two it is not.
+
+**The two viewports it does not reach are 1440×900 and 1280×800**, at 49 and 47
+pixels of gap. There is no arrangement of a column in 49 pixels, so those keep
+the overlay on the wall and the resting rule that gets it out of the way.
 
 ### What each rail carries
 
@@ -1181,9 +1251,27 @@ wall, which is `/stats`'s standing in short form. **It carries no total.** The
 bar's rule reaches every rail on this page: a per-rectangle price is a fact
 about a rectangle, and a sum of them would be a forecast.
 
-**The register does not roll in the rail.** The horizontal rail rolls because
-it is a strip too narrow to hold its own rows; a column is not, and a list that
-moves while somebody reads down it is a list nobody reads.
+**The register is a ticker in both, and this reverses a decision made one batch
+ago.** That decision said a strip rolls because it is too narrow to hold its
+rows and a column is not. The owner overruled it, and the reason is the one this
+rail was built on: *the thing that moves fast IS the evidence*. A register that
+has stopped is a list. So it translates by half its own width along the bottom
+and by half its own height down the side, the seamless duplicate stays in both,
+it **pauses on hover and on focus**, and `prefers-reduced-motion` stops it
+outright and drops the duplicate with it. With nothing settled the sentence that
+says so is the only item, and it does not move.
+
+**Its speed is per row rather than per rail** — `3.2s` a row, set from the row
+count — because a column of twenty rows and one of three, translated over the
+same duration, are two different reading speeds.
+
+**A rail under 150px drops the row's thumbnail.** The 108px floor was measured
+against the LEFT rail's contents and the right one holds the register, whose
+rows are wider: at the owner's 2495×1484 the gap is 120px and the first capture
+came back reading `26 × 3`, `$988`, `capt…7K`, every line cut. The thumbnail is
+the widest fixed cost in a row and the only decorative part of it, so below
+150px of rail the figures take its 43 pixels. A container query, because what
+decides is the rail's width and no viewport dimension names it.
 
 **The header keeps three things when the rails are on:** the wordmark, the
 count of what is left, and the theme toggle beside the way to the questions.

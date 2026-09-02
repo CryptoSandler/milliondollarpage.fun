@@ -1,5 +1,6 @@
 "use client";
 
+import type React from "react";
 import { type ReactNode, type Ref, useEffect, useState } from "react";
 import type { TapeRow } from "../lib/board/tape";
 import { blockImageUrl } from "../lib/board/block-image";
@@ -49,15 +50,20 @@ import { formatUsdc, pixelCount } from "../lib/board/pricing";
  * stops it outright and drops the duplicate copy with it, because a still
  * track showing everything twice reads as a bug rather than as a loop.
  *
- * ## Where it lives, which is two places now
+ * ## Where it lives, which is two places, and it ticks in both
  *
- * Along the bottom of the wall, as a strip that rolls — and, on the viewports
- * wide enough for the side rails, as a COLUMN down the right, where it does not
- * roll at all. Same component, same rows, same DOM: `globals.css` turns it on
- * its side, drops the seamless duplicate, and reveals a thumbnail per row.
- * DESIGN.md carries why the column is still: a strip rolls because it is too
- * narrow to hold its own rows, and a list that moves while somebody reads down
- * it is a list nobody reads.
+ * Along the bottom of the wall as a strip, and — on the viewports wide enough
+ * for a pair of rails — as a COLUMN down the right. Same component, same rows,
+ * same DOM: `globals.css` turns it on its side, keeps the seamless duplicate,
+ * swaps `translateX` for `translateY`, and reveals a thumbnail per row.
+ *
+ * IT MOVES IN BOTH, and an earlier build of the column did not. The argument
+ * for stillness was that a strip rolls because it is too narrow to hold its
+ * rows and a column is not; the owner overruled it, and the reason is the one
+ * this rail was built for in the first place — *the thing that moves fast IS
+ * the evidence*. A register that has stopped is a list. It pauses for anybody
+ * reading it, on hover and on focus, and `prefers-reduced-motion` stops it
+ * outright and drops the duplicate with it.
  *
  * ## Why it is not on a phone
  *
@@ -188,7 +194,17 @@ export default function PurchaseTape({
             the signature that settled it.
           </p>
         ) : (
-          <div className="board-tape__track">
+          /*
+            THE TICKER'S SPEED IS PER ROW, NOT PER RAIL. A column holding twenty
+            rows and one holding three, translated over the same duration, are
+            two different reading speeds — and the point of a register is that it
+            can be read going past. The stylesheet spends 3.2s a row; this is the
+            only thing it needs from here.
+          */
+          <div
+            className="board-tape__track"
+            style={{ "--tape-rows": rows.length } as React.CSSProperties}
+          >
             {/* Two copies, so the roll has no seam. Only the first is read. */}
             {[false, true].map((duplicate) => (
               <ol
