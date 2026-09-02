@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3103",
     "build": "next build && rm -rf .next/cache .next-e2e/cache .next-e2e/dev/cache && tsx scripts/check-build-secrets.mts",
-    "start": "next start",
+    "start": "next start -p 3103",
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
