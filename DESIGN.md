@@ -899,52 +899,100 @@ would have looked mean. Against a 60px budget, 20px top and bottom is two thirds
 of it spent on clear paper. Eight still reads as hung rather than cropped, and
 the 2px frame still sits inside it and still never covers a pixel.
 
-### The overlay on the board, and the condition on it
+### The overlay, where it stands, and what it costs when it stands on the wall
 
-**One overlay stands on the board, and it is two rows:** the size presets with
-the zoom, and — while nothing is selected — the one line that says how to start.
-They are one element because they are one exemption. Everything else on this
-page either takes a band of the viewport and is counted in the budget above, or
-sits in the letterbox beside a board that cannot use it.
+**One overlay carries the board's own controls, and it is two rows:** the size
+presets with the zoom, and — while nothing is selected — the one line that says
+how to start. They are one element because they are one exemption, and it is the
+only chrome on this page that is neither a band of the viewport nor a column
+beside the board.
 
-**The exemption is granted because the overlay is not a band.** It does not push
-the board down, it does not shrink it, and `board-share.mts` reports the board's
-rectangle identical to the pixel with it there.
+**Where it goes is arithmetic, and there are three answers.**
 
-**THE CONDITION: it may not cover a pixel somebody bought.** An exemption that
-lets chrome stand permanently on artwork a buyer paid for is not a layout
-decision, it is a defect with a rule written round it. `purchase-e2e.test.ts`
-seeds a sale straight across the top-centre of the wall — the strip the overlay
-stands on — and fails if the overlay's box meets it.
+| | The overlay | Threshold |
+|---|---|---|
+| **Full rails** | in the left rail, with the purchase panel under it | gap ≥ 180px |
+| **Tools rail** | its own column in the letterbox; the register stays along the bottom | gap ≥ 108px |
+| **Neither** | on the board, and it hides itself at rest | below both |
 
-**THE CONDITION DOES NOT HOLD AT THREE WIDTHS, AND THIS IS WHERE THAT IS SAID
-OUT LOUD RATHER THAN QUIETLY ALLOWED.** Measured, with a sale at board
-`(300, 0, 650×60)`:
+**The tools rail is the same idea as the full rails at a lower price.** The full
+rails move every piece of chrome into the letterbox and take the register off
+the bottom of the window, which needs 180px a side. This one moves the overlay
+alone, so the board it is measured against still has the register underneath —
+which is to say it is the board that is already there, and the gap is the
+letterbox it already leaves: **168.8px at 1920×1080, 69.4px at 1440×900, 67.5px
+at 1280×800.** A column of these controls needs 108, so 1920 has room and 1440
+does not.
 
-| Viewport | Overlay | The sale | Covers artwork |
+**108 is measured**, the same way 180 was: the column was pinned at a width in
+the rendered page and every element in it was asked whether its `scrollWidth`
+exceeded its `clientWidth`. The widest thing that cannot shrink is a preset at
+its longest, `100×100`, at 72px; the pill's padding and border make 90 and the
+column's padding makes 108. The zoom trio wraps two-and-one below its own 112px
+rather than overflowing, which is what lets the floor sit under it. **160 is the
+ceiling**, past which four small buttons and a line of type stop reading as a
+rail and start reading as an empty panel; the leftover stays wall.
+
+**THE WALL NEVER CEDES WIDTH TO EITHER RAIL.** Both are sized from a letterbox a
+height-limited board already leaves, so the board is not refitted: measured,
+1567×1004 at 1920×1080 with the tools rail and without it, to the pixel.
+
+### The sentence that was never true, and the number it was hiding
+
+This document said, from the day the rail was invented, that it *"costs the wall
+a strip of its own top margin"*. **That was never true and it is deleted.** The
+board's margin is the 8px inset; the overlay is 40px with the presets alone and
+81px with the line under them. At every width where the board is fitted by
+height — which is every landscape window — it takes all the height the budget
+leaves, and the only thing above it is those 8px. **What the overlay stands on is
+artwork.**
+
+Measured, with a sale seeded across the top-centre of the wall:
+
+| Viewport | Overlay | Where it stands | Board pixels under it |
 |---|---|---|---|
-| 1440×900 | 483–957 × 44–125 | 386–1053 × 44–105 | **yes** |
-| 1920×1080 | 723–1197 × 44–125 | 554–1367 × 44–119 | **yes** |
-| 1280×800 | 403–877 × 44–125 | 348–933 × 44–98 | **yes** |
-| 2560×1440 | in the left rail | 717–1843 × 44–148 | no |
-| 390×844 | above a letterboxed board | 99–291 × 321–339 | no |
+| 2560×1440 | in the left rail | beside the board | **0** |
+| 1920×1080 | in the tools rail | beside the board | **0** |
+| 390×844 | above a letterboxed board | on the ground | **0** |
+| 1440×900 | on the board | on artwork | **~36,500** (~18,000 with no line) |
+| 1280×800 | on the board | on artwork | **~47,400** (~23,200 with no line) |
 
-**The arithmetic behind it, because the fix is not a nudge.** At those three
-widths the board is fitted by HEIGHT and takes every pixel the budget leaves, so
-the only space above it is the 8px inset — and the overlay is 81px. The sentence
-this document has carried since the rail was invented, *"it costs the wall a
-strip of its own top margin"*, was never true: the margin is 8px and was always
-8px. **It costs the wall a strip of its own ARTWORK**, about 474×81 at 1440,
-which is 3.7% of the board and — at a dollar a pixel — roughly **$18,000 of wall
-under the pill alone**, in the same place forever.
+At a dollar a pixel those last two are **$36,500 and $47,400 of wall** under a
+pill, in the same place, forever — which is what makes the third answer a
+mechanism rather than a shrug.
 
-**Three futures, and none of them is free.** `DECISIONS.md` carries them with
-the numbers: reserve the strip in the board's own inset and the wall's share
-falls from 81.7% to 66.4% at 1440; move the controls into the top bar, which
-fits at 1920 and does not fit at 1440; or keep the overlay where it is and
-retire the condition, which is the only one that costs nothing and the only one
-that leaves a purchase obscured. **It is the owner's, and until it is taken the
-guard stays red.**
+### So at those two widths it gets out of the way
+
+**Two seconds without the pointer moving and the overlay fades; the first
+movement brings it back.** The reader who has stopped to LOOK at the wall is
+exactly the reader it was covering, and they get it uncovered almost at once;
+the reader reaching for a preset never sees it go.
+
+**Four things stop it, and each is a way this could have gone wrong.** A rail —
+where the overlay covers nothing, hiding it would be a disappearing control for
+no reason. A phone, where there is no pointer to move and the board is
+letterboxed clear of it anyway. **A selection or an open purchase panel**: a
+control that vanishes in the middle of a purchase is worse than one that covers
+a pixel. And focus inside it — `focusin` anywhere wakes it, which is what keeps
+a keyboard user off a control at zero opacity.
+
+**Opacity rather than `display` or `visibility`, and that is accessibility
+rather than convenience.** Both of those take the controls out of the tab order,
+so a keyboard user would tab straight past the only way to pick a size. At zero
+opacity they are still focusable and the overlay is back within the frame.
+
+### What the guards say, and they say two different things
+
+**`purchase-e2e.test.ts` asks the condition twice, because it holds two
+different ways.** Where there is a rail — 2560, 1920, and a phone — *nothing
+covers artwork* is absolute, and the test seeds a purchase under where the
+overlay would be and fails if it meets it. Where there is none — 1440 and
+1280 — the promise is the other one: *the overlay is gone at rest*, back on the
+first movement, and never hidden with a rectangle selected.
+
+**`scripts/board-share.mts` does not measure the overlay at all**, in any of the
+three, because it is not a band in any of them. It exits 0 on every row with the
+budget at 60, and its table marks which layout each row is in.
 
 ### Why a budget and not a percentage
 
@@ -993,8 +1041,9 @@ letterbox where there is one and over the board only where there is not.
 edge.** They are how a rectangle GETS selected, so putting them behind a
 selection made them unreachable exactly when they were wanted. Overlaid rather
 than stacked: a rail that pushed the board down would spend the budget twice, so
-it costs the viewport no band at all. **What it costs instead is a strip of the
-board — see the section below, which is where that claim finally got measured.**
+it costs the viewport no band at all. **What it costs instead is a strip of
+artwork wherever it has no letterbox to stand in — see *The sentence that was
+never true* below, and the two things that answer it.**
 
 **The settled rail went from two tiers to one line.** 104px was right when it
 was the only thing under the board and is not right against a 60px budget.

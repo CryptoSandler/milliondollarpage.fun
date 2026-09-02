@@ -16,15 +16,21 @@ import type { ZoomState } from "./BoardCanvas";
  * what you are placing it on — so putting them behind a selection made them
  * unreachable exactly when they were needed. They are always there now.
  *
- * ## Why it overlays the board rather than displacing it
+ * ## Where it goes, and what it costs there
  *
- * The norm is that the wall takes almost the whole screen and everything else
- * is a small contribution. A rail that pushed the board down would spend the
- * vertical budget twice over; this one sits ON the board's top edge, inside the
- * frame, where it costs the wall a strip of its own margin rather than a strip
- * of the viewport. It is the one piece of chrome allowed to do that, and it is
- * allowed because it is 28px tall and because a reader reaching for a size is
- * looking at the board rather than at the pixels under this.
+ * Three places, decided by arithmetic in `toolsRailWidth` and `sideRailWidth`
+ * and stamped on the root before the first paint: the full left rail above a
+ * 180px gap, a tools-only column above 108, and — below both — the board's own
+ * top edge, overlaid rather than stacked, because a rail that pushed the board
+ * down would spend the vertical budget twice.
+ *
+ * IT USED TO SAY IT COST THE WALL "A STRIP OF ITS OWN MARGIN". That was never
+ * true. The margin is the 8px board inset and this is 40px tall, so on the
+ * third of those three it stands on artwork: about 18,000 board pixels at
+ * 1440×900 and 23,200 at 1280×800, and more with the instruction line under it.
+ * That is why the first two exist at all, and why `BoardView` hides the whole
+ * overlay after two seconds of a still pointer wherever the third one applies.
+ * DESIGN.md carries the table and the money.
  */
 export default function BoardRail({
   perPixel,

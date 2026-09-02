@@ -143,6 +143,57 @@ function token(name: string, theme: "light" | "dark" = "light"): [number, number
 const PIN_LIGHT = `document.documentElement.setAttribute("data-theme", "light")`;
 
 /**
+ * The overlay's box, the seeded sale's box, and whether they meet.
+ *
+ * Read out of the page in one call because the two have to be measured in the
+ * same frame: the board re-fits on a resize, and a sale computed from one
+ * rectangle against an overlay measured after another is a comparison of two
+ * different layouts.
+ */
+const OVERLAY_VS_SALE = `(() => {
+  const c = document.querySelector("canvas");
+  const [bx, by, bw] = c.dataset.boardRect.split(",").map(Number);
+  /*
+    The reported rectangle carries the 2px frame on every side, so the paper
+    starts one frame in and the scale is the paper's width over the board's own
+    1250. Everything below is in screen pixels.
+  */
+  const FRAME = 2;
+  const scale = (bw - 2 * FRAME) / 1250;
+  const sold = {
+    left: bx + FRAME + 300 * scale,
+    top: by + FRAME,
+    right: bx + FRAME + 950 * scale,
+    bottom: by + FRAME + 60 * scale,
+  };
+  const el = document.querySelector(".board-tools");
+  const b = el && el.getBoundingClientRect();
+  const tools = b && b.width > 0 && b.height > 0
+    ? { left: b.left, top: b.top, right: b.right, bottom: b.bottom }
+    : null;
+  const covers = !!tools && tools.left < sold.right && sold.left < tools.right &&
+    tools.top < sold.bottom && sold.top < tools.bottom;
+  return JSON.stringify({
+    sold, tools, covers,
+    rails: document.documentElement.dataset.rails,
+    toolsRail: document.documentElement.dataset.tools,
+  });
+})()`;
+
+type Edges = { left: number; top: number; right: number; bottom: number };
+type OverlayReading = {
+  sold: Edges;
+  tools: Edges | null;
+  covers: boolean;
+  rails: string;
+  toolsRail: string;
+};
+
+/** A rectangle, as the two numbers a failure message needs on each axis. */
+const edges = (e: Edges) =>
+  `${Math.round(e.left)}–${Math.round(e.right)} × ${Math.round(e.top)}–${Math.round(e.bottom)}`;
+
+/**
  * Draws a rectangle on the board, which is now what makes the purchase panel
  * exist at all.
  *
@@ -623,28 +674,23 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
   );
 
   /**
-   * THE CONDITION ON THE OVERLAY'S EXEMPTION: it may sit on the board, and it
-   * may not cover a pixel somebody bought.
+   * THE CONDITION ON THE OVERLAY'S EXEMPTION, in the half where it is absolute:
+   * where there is a rail, nothing covers artwork.
    *
-   * DESIGN.md lets exactly one overlay stand on the board's own margin — the
-   * preset pill and, under it, the line that says how to start — on the ground
-   * that it costs the wall a strip of its own margin rather than costing the
-   * viewport a band. That sentence is only true while the strip it stands on is
-   * the MARGIN. The moment it reaches past the frame onto artwork somebody paid
-   * for, the exemption is a licence to hide a purchase, and this is what says
-   * so out loud.
+   * DESIGN.md lets one overlay stand on the board — the preset pill and, under
+   * it, the line that says how to start. Where a rail exists it does not stand
+   * on the board at all, and that is a hard claim with no conditions on it: the
+   * full rails at 2560, the tools-only rail at 1920, and a phone, where the
+   * board is letterboxed clear of the overlay above it.
    *
    * It seeds a sale straight across the top-centre of the wall — the strip the
-   * overlay stands on — and asks the page for two rectangles: the overlay's own
-   * box, and where that purchase actually landed on screen, derived from the
-   * rectangle the renderer reports rather than from the fit maths, so this is
-   * not the arithmetic checking itself.
+   * overlay stands on where there is no rail — and derives where that purchase
+   * landed on screen from the rectangle the renderer reports, so this is not the
+   * fit maths checking itself.
    */
   it(
-    "never covers a sold pixel with the board's own overlay, at any width",
+    "never covers a sold pixel where the overlay has a rail to stand in",
     async () => {
-      // Across the top-centre: 650 wide, 60 tall, starting at x = 300. That is
-      // where the pill is centred at every width, which is the point.
       await execute(
         `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
                              payment_signature, caption)
@@ -654,12 +700,10 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
 
       const covered: string[] = [];
 
-      for (const [width, height] of [
-        [1440, 900],
-        [1920, 1080],
-        [1280, 800],
-        [2560, 1440],
-        [390, 844],
+      for (const [width, height, why] of [
+        [2560, 1440, "the full rails"],
+        [1920, 1080, "the tools rail"],
+        [390, 844, "a letterboxed board"],
       ] as const) {
         const at = `${width}x${height}`;
         await browser.resize(width, height);
@@ -672,58 +716,95 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
           return before !== null && before === after ? after : null;
         });
 
-        const reading = JSON.parse(
-          await browser.evaluate<string>(`(() => {
-            const c = document.querySelector("canvas");
-            const [bx, by, bw] = c.dataset.boardRect.split(",").map(Number);
-            /*
-              The reported rectangle carries the 2px frame on every side, so the
-              paper starts one frame in and the scale is the paper's width over
-              the board's own 1250. Everything below is in screen pixels.
-            */
-            const FRAME = 2;
-            const scale = (bw - 2 * FRAME) / 1250;
-            const sold = {
-              left: bx + FRAME + 300 * scale,
-              top: by + FRAME,
-              right: bx + FRAME + 950 * scale,
-              bottom: by + FRAME + 60 * scale,
-            };
-            const box = (selector) => {
-              const el = document.querySelector(selector);
-              if (!el) return null;
-              const b = el.getBoundingClientRect();
-              if (b.width === 0 || b.height === 0) return null;
-              return { left: b.left, top: b.top, right: b.right, bottom: b.bottom };
-            };
-            const hits = (o) =>
-              !!o && o.left < sold.right && sold.left < o.right &&
-              o.top < sold.bottom && sold.top < o.bottom;
-            const tools = box(".board-tools");
-            return JSON.stringify({ sold, tools, covers: hits(tools) });
-          })()`),
-        ) as {
-          sold: { left: number; top: number; right: number; bottom: number };
-          tools: { left: number; top: number; right: number; bottom: number } | null;
-          covers: boolean;
-        };
+        const reading = JSON.parse(await browser.evaluate<string>(OVERLAY_VS_SALE)) as OverlayReading;
 
         expect(reading.tools, `the board's overlay is missing at ${at}`).not.toBeNull();
+        // And the layout really is the one this row is about: a rail that
+        // silently failed to appear would pass the coverage check by putting
+        // the overlay somewhere else entirely.
+        if (width === 2560) expect(reading.rails, `${at} should have the full rails`).toBe("on");
+        if (width === 1920) expect(reading.toolsRail, `${at} should have the tools rail`).toBe("on");
+
         if (reading.covers) {
-          covered.push(
-            `${at}: the overlay spans ${Math.round(reading.tools!.left)}–` +
-              `${Math.round(reading.tools!.right)} × ${Math.round(reading.tools!.top)}–` +
-              `${Math.round(reading.tools!.bottom)} and the sale spans ` +
-              `${Math.round(reading.sold.left)}–${Math.round(reading.sold.right)} × ` +
-              `${Math.round(reading.sold.top)}–${Math.round(reading.sold.bottom)}`,
-          );
+          covered.push(`${at} (${why}): overlay ${edges(reading.tools!)}, sale ${edges(reading.sold)}`);
         }
       }
 
       expect(
         covered,
-        "the board's overlay is standing on artwork somebody bought:\n  " + covered.join("\n  "),
+        "the overlay is standing on artwork somebody bought:\n  " + covered.join("\n  "),
       ).toEqual([]);
+    },
+    240_000,
+  );
+
+  /**
+   * And the other half: where there is NO rail, the overlay stands on the wall,
+   * and what is guaranteed instead is that it gets out of the way.
+   *
+   * 1440×900 leaves 69.4px of letterbox and 1280×800 leaves 67.5, against the
+   * 108 a column of controls needs. There is nowhere to put the overlay at
+   * those widths that does not cost the wall height, so the promise is a
+   * different one: two seconds without the pointer moving and it is gone, and
+   * the first movement brings it back. DESIGN.md says so plainly rather than
+   * repeating the claim about a margin that was never there.
+   *
+   * WHAT THIS WOULD CATCH. A resting rule that never fires, which is the
+   * failure that leaves chrome parked on a purchase forever; and a resting rule
+   * that fires while somebody is buying, which is worse.
+   */
+  it(
+    "hides the overlay at rest where it stands on the wall, and never mid-purchase",
+    async () => {
+      for (const [width, height] of [
+        [1440, 900],
+        [1280, 800],
+      ] as const) {
+        const at = `${width}x${height}`;
+        await browser.resize(width, height);
+        await browser.goto(`${server.origin}/?resting=${at}`);
+        await waitFor(`the board at ${at}`, async () =>
+          browser.evaluate<string | null>(`document.querySelector('canvas')?.dataset.boardRect ?? null`),
+        );
+
+        expect(
+          await browser.evaluate<string | null>(`document.documentElement.dataset.tools`),
+          `${at} should have no tools rail — this test is about the widths that cannot have one`,
+        ).toBe("off");
+
+        const resting = `document.querySelector(".board-tools").classList.contains("board-tools--resting")`;
+        const nudge = `(() => { dispatchEvent(new PointerEvent("pointermove",
+          { clientX: 40, clientY: 400, bubbles: true, pointerId: 1, isPrimary: true })); return true; })()`;
+
+        // 1. Awake to begin with, and still awake before the two seconds are up.
+        await browser.evaluate(nudge);
+        await sleep(400);
+        expect(await browser.evaluate<boolean>(resting), `the overlay rested early at ${at}`).toBe(false);
+
+        // 2. Gone, once the pointer has been still for its two seconds.
+        await waitFor(`the overlay to rest at ${at}`, () => browser.evaluate<boolean>(resting), 8_000);
+
+        // 3. Back, on the first movement.
+        await browser.evaluate(nudge);
+        await sleep(120);
+        expect(
+          await browser.evaluate<boolean>(resting),
+          `the overlay stayed hidden after the pointer moved at ${at}`,
+        ).toBe(false);
+
+        /*
+          4. AND NEVER MID-PURCHASE. With a rectangle selected the clock does
+          not run at all — a size preset that fades while somebody is reaching
+          for it is a worse defect than the one this whole mechanism exists to
+          fix.
+        */
+        await selectARectangle(browser);
+        await sleep(2_600);
+        expect(
+          await browser.evaluate<boolean>(resting),
+          `the overlay hid itself with a rectangle selected at ${at}`,
+        ).toBe(false);
+      }
     },
     240_000,
   );

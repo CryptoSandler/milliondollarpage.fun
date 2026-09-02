@@ -226,6 +226,71 @@ export function sideRailWidth(screen: Size, board: Size): number {
   return gap >= SIDE_RAIL_MIN ? Math.min(gap, SIDE_RAIL_MAX) : 0;
 }
 
+/**
+ * The settled register's height along the bottom, nominally, in CSS pixels.
+ *
+ * Mirrors `--tape-h`. Needed here rather than only in `BoardView` because the
+ * tools rail below is sized against a board that still has the register under
+ * it — that is the whole difference between the two rails.
+ */
+export const TAPE_H_PX = 26;
+
+/**
+ * The narrowest and widest a TOOLS-ONLY rail may be.
+ *
+ * 108 IS MEASURED, the same way 180 was: the column was pinned at a width in
+ * the rendered page and every element inside it was asked whether its
+ * `scrollWidth` exceeded its `clientWidth`. The widest thing that cannot shrink
+ * is a preset button at its longest, `100×100`, which sets at 72px; the pill's
+ * own padding and border make 90, and the column's padding makes 108. The zoom
+ * trio wraps two-and-one below its own 112px rather than overflowing, which is
+ * what lets the floor sit under it.
+ *
+ * 160 IS THE CEILING and it is taste with a reason: four small buttons and one
+ * line of type in a column wider than that stop reading as a rail and start
+ * reading as an empty panel. Past it the leftover stays wall.
+ */
+export const TOOLS_RAIL_MIN = 108;
+export const TOOLS_RAIL_MAX = 160;
+
+/**
+ * How wide a tools-only rail is at this viewport, and 0 when there is not room.
+ *
+ * WHO CALLS THIS: the boot script in `layout.tsx`, and `rails-boot.test.ts`.
+ *
+ * ## Why there are two rails and two thresholds
+ *
+ * `sideRailWidth` above moves ALL the chrome into the letterbox and takes the
+ * register off the bottom of the window, so the board it is sized against is
+ * one the header alone sits above. That needs 180px a side, which 16:9 does not
+ * reach until about 1373 lines of height.
+ *
+ * This one moves only the board's own overlay — the presets, the zoom and the
+ * line of instruction. The register stays along the bottom, so the board is the
+ * same board it has always been and the gap is the letterbox it already leaves:
+ * 168.8px at 1920×1080, 69.4px at 1440×900, 67.5px at 1280×800. A column of
+ * controls needs 108, so 1920 has room and 1440 does not.
+ *
+ * ## What it is for, and it is not tidiness
+ *
+ * The overlay stands ON the board where there is no rail, and a purchase under
+ * it is a purchase covered — see DESIGN.md, "The overlay on the board". This is
+ * how that stops being true at every width that can afford it. Below the
+ * threshold nothing here helps, and the overlay hides itself at rest instead.
+ *
+ * THE BOARD NEVER PAYS FOR IT. The rail is sized from the letterbox a
+ * height-limited board already leaves, so the board is not refitted and not
+ * moved: the same 1567×1004 at 1920×1080 with the rail as without it.
+ */
+export function toolsRailWidth(screen: Size, board: Size): number {
+  // The full rails win where they fit: they carry these same controls.
+  if (sideRailWidth(screen, board) > 0) return 0;
+
+  const free = screen.height - BAR_TOP_PX - TAPE_H_PX - 2 * BOARD_INSET;
+  const gap = (screen.width - 2 * BOARD_INSET - (board.width / board.height) * free) / 2;
+  return gap >= TOOLS_RAIL_MIN ? Math.min(gap, TOOLS_RAIL_MAX) : 0;
+}
+
 /** The hover card's own width: `w-56` on the element in `BoardView`, 14rem. */
 export const HOVER_CARD_W = 224;
 /** How far the card sits from the pointer, on whichever side it ends up. */

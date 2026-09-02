@@ -75,6 +75,17 @@ const FALLBACK_CHROME: Chrome = {
 // only when that version actually changes, because its URL is its hash.
 const REFRESH_INTERVAL_MS = 30_000;
 
+/**
+ * How long the pointer has to be still before the board's overlay gets out of
+ * the way, where it is standing on the wall.
+ *
+ * Two seconds: long enough that it is never fading while somebody is reaching
+ * for a preset, short enough that a reader who has stopped to LOOK at the wall
+ * — which is the whole state this exists for — gets it uncovered almost at
+ * once.
+ */
+const OVERLAY_REST_MS = 2_000;
+
 export default function BoardView({ initial }: { initial: BoardPayload }) {
   const [board, setBoard] = useState(initial);
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -506,6 +517,70 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
     };
   }, []);
 
+  /**
+   * WHETHER THE BOARD'S OVERLAY IS RESTING, which is to say invisible.
+   *
+   * It stands on the wall at the widths that have no rail to put it in — 1440
+   * and 1280 — and a purchase under it is a purchase covered. Two seconds
+   * without the pointer moving and it fades; the first movement brings it back.
+   * DESIGN.md carries the measurement that made this necessary and the money it
+   * is worth.
+   *
+   * FOUR CONDITIONS STOP IT, and each is a way this could have gone wrong:
+   *
+   *  - a rail. Where the overlay is in a column beside the board it covers
+   *    nothing, so hiding it would be a disappearing control for no reason at
+   *    all. Read off the root's own attributes, which the boot script stamps —
+   *    the same source the stylesheet reads, so the two cannot disagree.
+   *  - a phone. There is no pointer to move, so nothing would ever bring it
+   *    back, and the board is letterboxed clear of the overlay there anyway.
+   *  - a selection, or an open purchase panel. A control that vanishes in the
+   *    middle of a purchase is worse than one that covers a pixel.
+   *  - focus inside it. `focusin` anywhere wakes it, which is what keeps a
+   *    keyboard user from landing on a control at zero opacity: it is focusable
+   *    throughout (see the stylesheet) and visible again within the frame.
+   */
+  const [toolsResting, setToolsResting] = useState(false);
+  const overlayIsOnTheWall = selection === null && purchaseSelection === null;
+
+  useEffect(() => {
+    /*
+      Nothing is set here on the way out, and that is the linter's rule rather
+      than a preference: the class below is `toolsResting && overlayIsOnTheWall`,
+      so a selection made while the overlay is resting shows it again without
+      this effect having to reach for state on its way past.
+    */
+    if (!overlayIsOnTheWall) return;
+
+    const root = document.documentElement;
+    // A rail, or a viewport with no pointer to speak of: nothing to hide from.
+    if (root.dataset.rails === "on" || root.dataset.tools === "on") return;
+    if (!window.matchMedia("(min-width: 641px)").matches) return;
+    if (!window.matchMedia("(hover: hover)").matches) return;
+
+    // The clock starts here rather than with a wake(): the overlay is already
+    // visible when this runs, so there is nothing to set, only something to
+    // wait for.
+    let timer = setTimeout(() => setToolsResting(true), OVERLAY_REST_MS);
+    const wake = () => {
+      setToolsResting(false);
+      clearTimeout(timer);
+      timer = setTimeout(() => setToolsResting(true), OVERLAY_REST_MS);
+    };
+
+    window.addEventListener("pointermove", wake, { passive: true });
+    window.addEventListener("pointerdown", wake, { passive: true });
+    window.addEventListener("keydown", wake);
+    window.addEventListener("focusin", wake);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("pointermove", wake);
+      window.removeEventListener("pointerdown", wake);
+      window.removeEventListener("keydown", wake);
+      window.removeEventListener("focusin", wake);
+    };
+  }, [overlayIsOnTheWall]);
+
   const walletNeeded = selection?.buyable === true && walletMissing;
 
   return (
@@ -618,7 +693,11 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           because they are one exemption — see DESIGN.md, which allows exactly
           this overlay on the board's own margin and attaches a condition to it.
         */}
-        <div className="board-tools">
+        <div
+          className={`board-tools${
+            toolsResting && overlayIsOnTheWall ? " board-tools--resting" : ""
+          }`}
+        >
           <BoardRail
             perPixel={board.pricePerPixelBaseUnits}
             activePreset={activePreset}

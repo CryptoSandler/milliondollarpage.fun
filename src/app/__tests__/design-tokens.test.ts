@@ -427,11 +427,13 @@ describe("the dark theme", () => {
     // silently falls back to the other register's value.
     // The prefixes excluded here are the measurements and the motion — radii,
     // easings, durations, the two bars' heights, the settled strip's, the
-    // panel's, and the side rails' width. None of them is themed, because
-    // DESIGN.md is explicit that "a theme is a colourway, not a second design":
-    // the layout is one page in both registers.
+    // panel's, and the width of each of the two rails. None of them is themed,
+    // because DESIGN.md is explicit that "a theme is a colourway, not a second
+    // design": the layout is one page in both registers.
     const colourish = (names: string[]) =>
-      names.filter((name) => !/^(radius|ease|dur|bar-|tape-|panel-|rail-)/.test(name)).sort();
+      names
+        .filter((name) => !/^(radius|ease|dur|bar-|tape-|panel-|rail-|tools-)/.test(name))
+        .sort();
 
     expect(colourish([...TOKENS_DARK.keys()])).toEqual(colourish([...TOKENS.keys()]));
   });

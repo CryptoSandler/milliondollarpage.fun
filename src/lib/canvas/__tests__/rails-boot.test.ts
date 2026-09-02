@@ -5,7 +5,11 @@ import {
   BOARD_INSET,
   SIDE_RAIL_MAX,
   SIDE_RAIL_MIN,
+  TAPE_H_PX,
+  TOOLS_RAIL_MAX,
+  TOOLS_RAIL_MIN,
   sideRailWidth,
+  toolsRailWidth,
 } from "../viewport";
 import { BOARD_HEIGHT, BOARD_WIDTH } from "../../board/geometry";
 
@@ -21,7 +25,11 @@ const BOARD = { width: BOARD_WIDTH, height: BOARD_HEIGHT };
  * globals the script names as its parameters, so the script's own arithmetic is
  * what answers, and a fake document element records what it stamped.
  */
-function boot(width: number, height: number, search = ""): { rails: string; railW: string } {
+function boot(
+  width: number,
+  height: number,
+  search = "",
+): { rails: string; railW: string; tools: string; toolsW: string } {
   const attributes = new Map<string, string>();
   const properties = new Map<string, string>();
   const documentElement = {
@@ -38,7 +46,12 @@ function boot(width: number, height: number, search = ""): { rails: string; rail
     RAILS_BOOT,
   )({ documentElement }, { search }, width, height, () => {});
 
-  return { rails: attributes.get("data-rails") ?? "", railW: properties.get("--rail-w") ?? "" };
+  return {
+    rails: attributes.get("data-rails") ?? "",
+    railW: properties.get("--rail-w") ?? "",
+    tools: attributes.get("data-tools") ?? "",
+    toolsW: properties.get("--tools-w") ?? "",
+  };
 }
 
 describe("the boot script and sideRailWidth", () => {
@@ -66,9 +79,12 @@ describe("the boot script and sideRailWidth", () => {
   it("agree at every viewport, including across the threshold", () => {
     for (const [width, height] of SWEEP) {
       const expected = sideRailWidth({ width, height }, BOARD);
+      const tools = toolsRailWidth({ width, height }, BOARD);
       const stamped = boot(width, height);
       expect(stamped.railW, `--rail-w at ${width}×${height}`).toBe(`${expected}px`);
       expect(stamped.rails, `data-rails at ${width}×${height}`).toBe(expected > 0 ? "on" : "off");
+      expect(stamped.toolsW, `--tools-w at ${width}×${height}`).toBe(`${tools}px`);
+      expect(stamped.tools, `data-tools at ${width}×${height}`).toBe(tools > 0 ? "on" : "off");
     }
   });
 
@@ -81,6 +97,28 @@ describe("the boot script and sideRailWidth", () => {
         `${sideRailWidth({ width, height: 1440 }, BOARD)}px`,
       );
     }
+  });
+
+  it("agree at every pixel across the TOOLS threshold at 1080 tall", () => {
+    /*
+      Two thresholds now, and the second has its own crossing. The range stops
+      at 1983 because the FULL rails begin at 1984×1080 — a gap of 180.4px —
+      which this test found by failing when it assumed 1080 was out of their
+      reach entirely. 1920 is comfortably inside the tools rail's range and
+      outside the full rails', which is the case the option was chosen for.
+    */
+    for (let width = 1400; width <= 1983; width += 1) {
+      const stamped = boot(width, 1080);
+      expect(stamped.toolsW, `--tools-w at ${width}×1080`).toBe(
+        `${toolsRailWidth({ width, height: 1080 }, BOARD)}px`,
+      );
+      expect(stamped.railW, `--rail-w at ${width}×1080`).toBe("0px");
+    }
+
+    // And the handover: one pixel wider, the full rails take it and the tools
+    // rail stands down rather than both claiming the same controls.
+    expect(boot(1984, 1080).rails).toBe("on");
+    expect(boot(1984, 1080).tools).toBe("off");
   });
 
   it("stamps nothing wider than the ceiling, however wide the window", () => {
@@ -100,10 +138,14 @@ describe("the boot script and sideRailWidth", () => {
    * rail" is a comparison between two viewports rather than between two
    * layouts of one.
    */
-  it("forces the rails off for ?rails=off, at a viewport that would have them", () => {
+  it("forces both rails off for ?rails=off, at viewports that would have them", () => {
     expect(boot(3440, 1440).rails).toBe("on");
     expect(boot(3440, 1440, "?rails=off").rails).toBe("off");
     expect(boot(3440, 1440, "?capture=1&rails=off").railW).toBe("0px");
+    // And the tools rail, which is the one 1920 has.
+    expect(boot(1920, 1080).tools).toBe("on");
+    expect(boot(1920, 1080, "?rails=off").tools).toBe("off");
+    expect(boot(1920, 1080, "?rails=off").toolsW).toBe("0px");
   });
 });
 
@@ -148,5 +190,73 @@ describe("sideRailWidth", () => {
   it("gives a portrait window no rails at all", () => {
     expect(sideRailWidth({ width: 390, height: 844 }, BOARD)).toBe(0);
     expect(sideRailWidth({ width: 800, height: 1280 }, BOARD)).toBe(0);
+  });
+});
+
+describe("toolsRailWidth", () => {
+  /**
+   * The two rails never both claim the chrome. Where the full rails fit they
+   * carry these same controls, so a tools rail there would be a second column
+   * holding what the first one already holds.
+   */
+  it("stands down wherever the full rails fit", () => {
+    for (const [width, height] of [
+      [2560, 1440],
+      [3440, 1440],
+      [3840, 2160],
+      [5120, 1440],
+    ] as const) {
+      expect(sideRailWidth({ width, height }, BOARD), `${width}×${height}`).toBeGreaterThan(0);
+      expect(toolsRailWidth({ width, height }, BOARD), `${width}×${height}`).toBe(0);
+    }
+  });
+
+  /**
+   * The door this option was chosen to open, and the one it deliberately does
+   * not: 1920 gets the overlay off the wall, 1440 and 1280 cannot.
+   */
+  it("reaches 1920 and does not reach 1440 or 1280", () => {
+    expect(toolsRailWidth({ width: 1920, height: 1080 }, BOARD)).toBe(TOOLS_RAIL_MAX);
+    expect(toolsRailWidth({ width: 1440, height: 900 }, BOARD)).toBe(0);
+    expect(toolsRailWidth({ width: 1280, height: 800 }, BOARD)).toBe(0);
+    expect(toolsRailWidth({ width: 390, height: 844 }, BOARD)).toBe(0);
+  });
+
+  it("never stands narrower than its floor or wider than its ceiling", () => {
+    for (let width = 1000; width <= 3000; width += 3) {
+      for (const height of [800, 900, 1080, 1200]) {
+        const w = toolsRailWidth({ width, height }, BOARD);
+        expect(
+          w === 0 || (w >= TOOLS_RAIL_MIN && w <= TOOLS_RAIL_MAX),
+          `${width}×${height} gave a ${w}px tools rail`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  /**
+   * THE BOARD DOES NOT PAY FOR IT, and this is the arithmetic rather than the
+   * hope: the rail is sized from the letterbox a board fitted UNDER THE SAME
+   * CHROME already leaves, so the board is not refitted at all. Its scale with
+   * the rail is its scale without one, exactly.
+   */
+  it("leaves the board the size it already was", () => {
+    for (let width = 1400; width <= 2600; width += 11) {
+      for (const height of [900, 1080, 1200]) {
+        const rail = toolsRailWidth({ width, height }, BOARD);
+        if (rail === 0) continue;
+
+        const freeH = height - BAR_TOP_PX - TAPE_H_PX - 2 * BOARD_INSET;
+        const without = Math.min((width - 2 * BOARD_INSET) / BOARD_WIDTH, freeH / BOARD_HEIGHT);
+        const withRail = Math.min(
+          (width - 2 * rail - 2 * BOARD_INSET) / BOARD_WIDTH,
+          freeH / BOARD_HEIGHT,
+        );
+        expect(
+          withRail,
+          `the board at ${width}×${height} fits at ${withRail} with a ${rail}px tools rail and ${without} without`,
+        ).toBeCloseTo(without, 10);
+      }
+    }
   });
 });

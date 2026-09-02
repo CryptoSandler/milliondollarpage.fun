@@ -101,6 +101,7 @@ const MEASURE = `(() => {
     vw: innerWidth,
     vh: innerHeight,
     rails: document.documentElement.getAttribute("data-rails") === "on",
+    tools: document.documentElement.getAttribute("data-tools") === "on",
   });
 })()`;
 
@@ -119,6 +120,7 @@ type Reading = {
   vw: number;
   vh: number;
   rails: boolean;
+  tools: boolean;
 };
 
 /**
@@ -131,12 +133,14 @@ type Reading = {
  * chrome, which is arithmetic answering a question nobody asked.
  *
  * WHAT IS NOT IN THE LIST AT ALL is the board's own overlay — the preset pill
- * and the line of instruction under it. It is not a band: it stands on the
- * board rather than above or below it, which is the exemption DESIGN.md grants
- * it by name and the reason its height has never been in this sum. The
- * condition attached to that exemption is not a budget question and is not
- * asked here — `purchase-e2e.test.ts` asks it, by seeding a purchase under the
- * overlay and measuring whether the overlay covers it.
+ * and the line of instruction under it. It is not a band anywhere: it stands ON
+ * the board where there is nothing beside it, and in a column where there is,
+ * so its height has never belonged in this sum. The `·tools` marker in the
+ * table below says which of those a row is.
+ *
+ * The condition attached to that exemption is not a budget question and is not
+ * asked here — `purchase-e2e.test.ts` asks it twice: nothing covers artwork
+ * where there is a rail, and where there is not, the overlay is gone at rest.
  *
  * So a part is counted only where its horizontal span meets the board's. That
  * is the same predicate the fit guard in `purchase-e2e.test.ts` uses for
@@ -248,7 +252,7 @@ async function main(): Promise<void> {
         }
 
         console.log(
-          `  ${`${view.name}${reading.rails ? " ·rails" : ""}`.padEnd(20)}${(selected ? "open" : "none").padEnd(11)}` +
+          `  ${`${view.name}${reading.rails ? " ·rails" : reading.tools ? " ·tools" : ""}`.padEnd(20)}${(selected ? "open" : "none").padEnd(11)}` +
             `${chrome.toFixed(0).padStart(6)}px${String(budget).padStart(6)}px` +
             `${`${bw.toFixed(0)}×${bh.toFixed(0)}`.padStart(14)}${share.toFixed(1).padStart(8)}%` +
             (over ? "   OVER" : ""),

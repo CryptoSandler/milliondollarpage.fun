@@ -293,6 +293,10 @@
    * the one every rule in this file already describes.
    */
   --rail-w: 0px;
+  /* The tools-only rail's width, and 0 wherever it is not on. Same boot script,
+     same fallback: what the page is if that script never runs is the layout
+     with the overlay on the board. */
+  --tools-w: 0px;
 }
 
 @media (max-width: 640px) {
@@ -675,10 +679,12 @@ h3 {
    * THE RAIL, on the board's own top edge.
    *
    * Overlaid rather than stacked: a rail that pushed the board down would spend
-   * the vertical budget twice. It costs the wall a 28px strip of its own top
-   * margin instead of costing the viewport a band, and it is the only piece of
-   * chrome allowed to sit over the board — because it is what a reader reaches
-   * for while looking at the board, and because it is 28px.
+   * the vertical budget twice. It costs the viewport no band at all — and where
+   * there is no letterbox to stand in, what it costs instead is artwork, which
+   * is what the tools rail below and the resting rule at the end of this file
+   * exist to answer. It used to claim it cost "a strip of its own top margin";
+   * the margin is 8px and this is 40px, and DESIGN.md now carries the real
+   * number instead of the claim.
    */
   /*
    * THE OVERLAY, which is now two things rather than one.
@@ -2149,4 +2155,101 @@ h3 {
   background: var(--card-lift);
   border-top: 0;
   box-shadow: none;
+}
+
+/* ============================================================================
+   THE TOOLS-ONLY RAIL, AND THE OVERLAY THAT HIDES ITSELF WHERE THERE IS NONE
+   ----------------------------------------------------------------------------
+   The board's overlay — the presets, the zoom and the line that says how to
+   start — stands ON the board wherever there is no rail to put it in, and a
+   purchase under it is a purchase covered. DESIGN.md, "The overlay on the
+   board, and the condition on it", has the measurement and the money.
+
+   Two answers, and which one applies is arithmetic:
+
+    - `data-tools="on"`: there is enough letterbox beside a board that still has
+      its register underneath — 168.8px at 1920×1080 against the 108 a column of
+      controls needs. The overlay moves off the wall entirely. THE BOARD IS NOT
+      REFITTED: the rail is sized from the letterbox that board already leaves,
+      so it is the same 1567×1004 at 1920 with the rail as without it.
+    - Neither rail: 1440×900 leaves 69.4px and 1280×800 leaves 67.5px, which is
+      not a column. The overlay stays on the wall and gets out of the way
+      instead — see `.board-tools--resting` at the end of this block.
+
+   Unlayered for the same reason the side rails are: the rules it has to
+   override live outside every layer.
+   ========================================================================= */
+
+[data-tools="on"] .board-tools {
+  top: calc(var(--bar-top-h) + 10px);
+  left: 10px;
+  transform: none;
+  width: var(--tools-w);
+  max-width: var(--tools-w);
+  align-items: stretch;
+}
+
+/*
+ * The pill stops being a pill. Its controls wrap instead of overflowing, which
+ * is what lets the floor sit at 108: the zoom trio is 112px in a row and goes
+ * two-and-one below that rather than clipping.
+ */
+[data-tools="on"] .board-rail {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 8px;
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+}
+
+[data-tools="on"] .board-rail .board-rail__presets,
+[data-tools="on"] .board-rail .board-rail__zoom {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+[data-tools="on"] .board-hint {
+  padding: 9px 11px;
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+  text-align: left;
+}
+
+/* ---------------------------------------------------------------------------
+ * AT REST, WHERE THE OVERLAY IS ON THE WALL, IT GOES AWAY.
+ *
+ * Two seconds without the pointer moving and the overlay fades out; the first
+ * movement brings it back. That is the whole of the answer at 1440 and 1280,
+ * where there is no letterbox to stand in and the alternative is chrome parked
+ * permanently on somebody's artwork.
+ *
+ * WHAT IT NEVER DOES. It never hides while a rectangle is selected or the
+ * purchase panel is open — a control that vanishes mid-purchase is worse than
+ * one that covers a pixel — and it never hides on a phone, where there is no
+ * pointer to move and the board is letterboxed clear of it anyway. `BoardView`
+ * owns those conditions; this is only the paint.
+ *
+ * OPACITY RATHER THAN `visibility` OR `display`, and that is an accessibility
+ * decision rather than a convenience. Both of those take the controls out of
+ * the tab order, so a keyboard user would tab straight past the only way to
+ * pick a size. At zero opacity they are still focusable, and `BoardView` brings
+ * the overlay back on `focusin` — so focus is never on an invisible control for
+ * longer than the frame it takes to reappear.
+ * ------------------------------------------------------------------------ */
+.board-tools {
+  transition: opacity 220ms var(--ease);
+}
+
+.board-tools--resting {
+  opacity: 0;
+  /* The pointer passes through to the board underneath: a reader who is drawing
+     across the top of the wall should not hit an invisible pill. */
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-tools {
+    transition: none;
+  }
 }

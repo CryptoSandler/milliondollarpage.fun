@@ -76,53 +76,57 @@ the board's rectangle is unchanged to the pixel at every width.
 
 ---
 
-## Open: whether the board's overlay may stand on artwork somebody bought
+## Settled: a tools rail where there is room, and an overlay that hides itself where there is not
 
-**Status: undecided, and the guard is red until it is decided.**
+**Status: settled 2026-09-01 by the owner, on the measurement below. Both halves
+are reversible and each is one constant.**
 
-The exemption that lets the preset pill sit on the board carries a condition the
-owner set: **neither row of that overlay may cover sold pixels.** Measured, with
-a sale across the top-centre of the wall, it does — at 1440×900, 1920×1080 and
-1280×800. It does not at 2560×1440, where the overlay is in the left rail, nor
-at 390×844, where the board is letterboxed above and below.
+The exemption that lets the board's overlay stand on the board carried a
+condition — it may not cover sold pixels — and measurement showed it did, at
+1440×900, 1920×1080 and 1280×800. It also showed that this document's oldest
+claim about that overlay, *"it costs the wall a strip of its own top margin"*,
+was never true: the margin is the 8px board inset and the overlay is 40px, or
+81px with the instruction line under it.
 
-**The claim that was never true.** DESIGN.md has said since the rail was
-invented that it "costs the wall a strip of its own top margin". The margin is
-the 8px board inset; the overlay is 81px with the line and 40px without it. At
-those three widths the board is fitted by height and takes every pixel the
-budget leaves, so there is no margin to stand on and never was. What the overlay
-costs is **artwork**: about 474×81 at 1440, 3.7% of the board, roughly
-**$18,000 of wall at a dollar a pixel**, in the same place forever.
+**What ships, in three parts:**
 
-**Why there is no free fix.** The board is height-limited at those widths, so
-there is no vertical letterbox; the horizontal letterbox is 67px at 1440 and
-66px at 1280 against roughly 86px for the narrowest column the controls fit in;
-and the board cannot trade width for it, because it has no width to trade while
-height is what limits it. The three constraints — the 60px budget, every control
-present, no artwork covered — are mutually exclusive below about 1600px wide.
+- **A tools-only rail** — the presets, the zoom and the instruction line in
+  their own column in the letterbox — wherever the gap clears **108px**, which
+  is what those controls measure. The full rails stay at 180 and still win where
+  they fit. At 1920×1080 the gap is 168.8px, so the overlay comes off the wall
+  there. **The board is not refitted**: 1567×1004 with the rail and without it.
+- **Below that, the overlay stands on the wall and the document says so**, with
+  the number: about 36,500 board pixels at 1440×900 and 47,400 at 1280×800, or
+  18,000 and 23,200 with the presets alone. No more claim about a margin.
+- **And at those widths it gets out of the way**: two seconds without the
+  pointer moving and it fades, back on the first movement. Never while a
+  rectangle is selected or the panel is open, never on a phone, and never with
+  focus inside it.
 
-**The three futures, with their numbers:**
+**Measured, before and after, by `scripts/board-share.mts` — exit 0 on every row
+with the idle budget at 60:**
 
-- **Reserve the strip.** Grow the board's top inset to the overlay's height so
-  the margin is real. The condition holds by construction at every width. The
-  wall's share falls from **81.7% to 66.4%** at 1440 and from 75.9% to 64.1% at
-  1920. The budget stays 60, because an inset is not a band.
-- **Move the controls into the top bar.** The bar is already counted at 34px and
-  its buttons are 24px tall, so the presets and the zoom fit in it and nothing
-  overlays the wall. It fits at 1920 with room; at 1440 the bar would need about
-  1480px of content in 1440px, so the instruction line has nowhere to go there
-  and the shed order would have to reach it.
-- **A tools-only rail at a lower threshold.** The side rails already take the
-  overlay off the board completely, and they begin at a 180px gap because they
-  carry the register and the panel. Controls alone need about 90px, which 1920
-  has (148px) and 1440 does not (67px). It fixes 1920 and everything wider and
-  leaves 1440 and below exactly where they are.
-- **Or retire the condition** and say plainly in DESIGN.md that the overlay
-  stands on the wall. It is the only option that costs nothing and the only one
-  that leaves a purchase obscured.
+| Viewport | Layout | Board | Overlay covers |
+|---|---|---|---|
+| 1440×900 | overlay on the wall, resting | 1285×824 | ~36,500 px while awake, 0 at rest |
+| 1920×1080 | **tools rail** | 1567×1004 | **0** |
+| 2560×1440 | full rails | 2170×1390 | **0** |
+| 1280×800 | overlay on the wall, resting | 1129×724 | ~47,400 px while awake, 0 at rest |
+| 390×844 | overlay above a letterboxed board | 374×241 | **0** |
 
-**What must not happen is the guard being deleted.** It is red because the
-statement it checks is false, and it was the owner who asked for the statement.
+**The doors, each one number:**
+
+- `TOOLS_RAIL_MIN` is 108. Lowering it reaches narrower windows and gives the
+  controls less room; there is nothing under about 90 that the presets fit in.
+- `TOOLS_RAIL_MAX` is 160, which is taste with a reason rather than a
+  measurement. Raising it makes the column wider and the leftover wall smaller.
+- `OVERLAY_REST_MS` is 2,000. It is the one number here nobody measured — it was
+  chosen so that a reader who has stopped to look gets the wall uncovered almost
+  at once without the overlay ever fading under a reaching hand.
+- And the option not taken: **reserving the strip** in the board's own inset
+  would make the margin real at every width, and would drop the wall's share
+  from 81.7% to 66.4% at 1440. It stays written down here because it is the only
+  answer that needs no mechanism at all.
 
 ---
 
