@@ -127,6 +127,33 @@ subset.
 Paste the parts that are not about your change too. A pre-existing failure you inherited is
 information the reader needs; hiding it makes the next batch debug it from scratch.
 
+### A migration is applied to all three databases, in the same close
+
+**A batch that adds a file to `migrations/` is not closed until every database this
+repository can name reports it — test first, production last.**
+
+**This repository has two databases, not three** — its migrator names test and production
+only, and no `PREVIEW_DATABASE_URL` is configured. The check compares what exists and fails
+if that is fewer than two. If a preview database is ever added, it goes between them and
+the check picks it up without being edited. The suite cannot see this: it runs against
+`TEST_DATABASE_URL`, and that is the one database the close is guaranteed to have
+migrated. Every other one is invisible to every other gate.
+
+    npm run db:migrate:test    > "$EV/migrate-test.log" 2>&1;    echo "EXIT: $?"
+    npm run db:migrate         > "$EV/migrate-prod.log" 2>&1;    echo "EXIT: $?"
+
+Then **ask each database what it holds**, rather than trusting that the commands ran:
+
+    npx tsx scripts/schema-versions.mts > "$EV/schema-versions.log" 2>&1; echo "EXIT: $?"
+
+It prints one line per database with its host and version, and exits non-zero when they
+disagree, when one cannot be read, or when fewer than two are configured. A disagreement is
+a blocked close, not a note in the report.
+
+**Measured 2026-09-02 in `nftraffle`:** a green close shipped `007_listing_attempts` to the
+test database only. Preview answered `500` on the new route's first request, and production
+was found a further version behind, at `006`. `~/.claude/GATES.md` has the incident.
+
 ## 3. Read the captures yourself
 
 A batch that ran Playwright produced screenshots. **They are evidence for you, not a
