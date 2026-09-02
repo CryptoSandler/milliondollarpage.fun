@@ -21,6 +21,8 @@
  * That is the number this guards, it is the same number at every viewport, and
  * the percentages fall out of it. They are reported rather than asserted.
  */
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { config } from "dotenv";
 import { Pool } from "pg";
 import { launchChrome, sleep, waitFor } from "../src/components/__tests__/cdp";
@@ -37,16 +39,46 @@ if (!DATABASE) {
 process.env.DATABASE_URL = DATABASE;
 
 /**
+ * Where to photograph each row, if anywhere.
+ *
+ * `npx tsx scripts/board-share.mts <directory>` writes one PNG per viewport per
+ * selection state beside the table. The numbers say the chrome is off the wall;
+ * only a picture says whether what is left is worth looking at, and
+ * `cierre.md` §3 asks for both.
+ */
+const SHOTS = process.argv[2];
+if (SHOTS) mkdirSync(SHOTS, { recursive: true });
+
+/**
  * The budget, in CSS pixels of vertical room the chrome may take.
  *
- * 60 with nothing selected: a 34px header, a 26px rail, and the 8px board inset
- * on each side counted separately below. 140 once the purchase panel is open,
- * which is the one piece of chrome that comes and goes. Both of these are the
- * layout WITHOUT side rails, which is every viewport under the threshold in
- * `sideRailWidth` — see DESIGN.md's "Which viewports this reaches".
+ * ONE NUMBER NOW, WHERE THERE WERE TWO. It was 60 idle and 140 with the
+ * purchase panel open, because the panel came and went and the preset pill
+ * stood on the wall in between. Since 2026-09-02 nothing stands on the wall at
+ * any width: the tools, the panel and the register are one strip along the
+ * bottom whose height does not move with the selection — deliberately, because
+ * a strip that grew would refit the board under a rectangle somebody was
+ * drawing. So idle and selected measure the same, and a difference between them
+ * is now a bug rather than a second budget.
+ *
+ * 130 is a 34px header plus a strip that measures 92 at the widths this table
+ * covers — the purchase panel's own two lines, which the idle box is padded to
+ * match — with four pixels of slack for a browser that rounds a border
+ * differently. It is a CEILING and not a target.
  */
-const BUDGET_IDLE = 60;
-const BUDGET_SELECTED = 140;
+const BUDGET_BANDED = 130;
+
+/**
+ * And a phone's, which is a different question wearing the same units.
+ *
+ * At 390 the board is fitted by its WIDTH — 370px of free width against 844 of
+ * height — so vertical chrome costs it nothing at all: the board measures
+ * 374×241 with a 60px strip and with a 240px one. The number here is a sanity
+ * ceiling on a strip that stacks three segments, not a claim about the wall's
+ * share, and the table's own percentage column is what says the wall did not
+ * move.
+ */
+const BUDGET_PHONE = 260;
 /**
  * And the budget where a PAIR of rails is on — either pair — which is the
  * header and nothing else, measured at exactly 34px: the same number
@@ -72,6 +104,10 @@ const VIEWPORTS = [
   { name: "2495×1484", width: 2495, height: 1484 },
   { name: "1280×800", width: 1280, height: 800 },
   { name: "390×844", width: 390, height: 844 },
+  // The one viewport where the rails still come on with the floor at 200px.
+  // Without it the table would report only the banded layout, which is half the
+  // change and the half that got harder rather than easier.
+  { name: "3440×1440", width: 3440, height: 1440 },
 ];
 
 /**
@@ -85,7 +121,7 @@ const VIEWPORTS = [
 const MEASURE = `(() => {
   const board = document.querySelector("canvas")?.dataset.boardRect ?? null;
   const parts = [];
-  for (const selector of ["header.board-bar", ".board-tape", ".board-controls:not([hidden])"]) {
+  for (const selector of ["header.board-bar", ".board-strip", ".board-tape", ".board-tools", ".board-controls"]) {
     const el = document.querySelector(selector);
     if (!el) continue;
     const box = el.getBoundingClientRect();
@@ -99,9 +135,18 @@ const MEASURE = `(() => {
       right: box.right,
     });
   }
+  /*
+    THE PANEL IS ALWAYS IN THE LAYOUT NOW, so its presence stopped being the
+    signal for whether anything is selected — the strip holds one box that shows
+    the hint or the readout, and it is the same height either way. The hint's
+    own hidden attribute is what says which. No backticks anywhere in this
+    string: the whole of it is a template literal, and one would close it.
+  */
+  const hint = document.querySelector(".board-hint");
   return JSON.stringify({
     board,
     parts,
+    panelOpen: !!hint && hint.hasAttribute("hidden"),
     vw: innerWidth,
     vh: innerHeight,
     rails: document.documentElement.getAttribute("data-rails") ?? "off",
@@ -120,6 +165,7 @@ type Part = {
 type Reading = {
   board: string | null;
   parts: Part[];
+  panelOpen: boolean;
   vw: number;
   vh: number;
   /** "full" or "off" — the word the boot script stamped. */
@@ -230,8 +276,13 @@ async function main(): Promise<void> {
           await sleep(600);
         }
 
+        if (SHOTS) {
+          const name = `${view.name.replace("×", "x")}-${selected ? "selected" : "idle"}.png`;
+          writeFileSync(join(SHOTS, name), await browser.screenshot());
+        }
+
         const reading = JSON.parse(await browser.evaluate<string>(MEASURE)) as Reading;
-        const panelOpen = reading.parts.some((part) => part.what.startsWith(".board-controls"));
+        const panelOpen = reading.panelOpen;
         if (selected !== panelOpen) {
           throw new Error(
             `at ${view.name} the panel is ${panelOpen ? "open" : "closed"} when this pass ` +
@@ -241,19 +292,40 @@ async function main(): Promise<void> {
         }
         const chrome = chromeHeight(overTheBoard(reading.parts, reading.board));
         /*
-          A PAIR OF RAILS COSTS THE HEADER AND NOTHING ELSE, idle or not: the
-          register has left the bottom of the window and the purchase panel is
-          docked at the foot of the left rail, where it costs no height at all.
-          Without them it is the 60/140 this document has always set.
+          A PAIR OF RAILS COSTS THE HEADER AND NOTHING ELSE: the register and
+          the purchase panel are in the columns, where they cost no height at
+          all. Without them it is the header plus the strip, and the same number
+          whether or not anything is selected.
         */
         const budget =
           reading.rails === "full"
             ? BUDGET_RAILED
-            : selected
-              ? BUDGET_SELECTED
-              : BUDGET_IDLE;
+            : reading.vw <= 640
+              ? BUDGET_PHONE
+              : BUDGET_BANDED;
 
-        const [, , bw, bh] = (reading.board ?? "0,0,0,0").split(",").map(Number);
+        /*
+          AND THE RULE THE BUDGET CANNOT EXPRESS: no piece of chrome overlaps the
+          board's own rectangle, at any width. The budget is about how much
+          height the board is denied; this is about whether anything is standing
+          on the artwork, which until this batch was allowed and priced. It is
+          checked on the BOX rather than on one axis — a thing beside the board
+          and a thing on top of it differ in exactly this.
+        */
+        const [bx, by, bw, bh] = (reading.board ?? "0,0,0,0").split(",").map(Number);
+        for (const part of reading.parts) {
+          const meets =
+            part.left < bx + bw && bx < part.right && part.top < by + bh && by < part.bottom;
+          if (meets) {
+            failures.push(
+              `${view.name} ${selected ? "selected" : "idle"}: ${part.what} is standing on the ` +
+                `board — chrome ${part.left.toFixed(0)},${part.top.toFixed(0)} to ` +
+                `${part.right.toFixed(0)},${part.bottom.toFixed(0)}, board ${bx.toFixed(0)},` +
+                `${by.toFixed(0)} to ${(bx + bw).toFixed(0)},${(by + bh).toFixed(0)}`,
+            );
+          }
+        }
+
         const share = ((bw * bh) / (reading.vw * reading.vh)) * 100;
         const over = chrome > budget;
         if (over) {
@@ -274,14 +346,17 @@ async function main(): Promise<void> {
     console.log(
       "\n  Percentages are reported, not guarded: the board is 1.5625:1 and a" +
         "\n  viewport is whatever it is, so a share threshold would encode the" +
-        "\n  monitor rather than the design. The budget is the design.",
+        "\n  monitor rather than the design. The budget is the design." +
+        "\n\n  What IS guarded, at every row: nothing overlaps the board's own box." +
+        "\n  Not a budget question — a purchase under a control is covered whatever" +
+        "\n  the height arithmetic says.",
     );
 
     if (failures.length > 0) {
-      console.error("\n  OVER BUDGET:\n" + failures.map((f) => `    ${f}`).join("\n"));
+      console.error("\n  FAILED:\n" + failures.map((f) => `    ${f}`).join("\n"));
       process.exitCode = 1;
     } else {
-      console.log("\n  every viewport is inside its budget.");
+      console.log("\n  every viewport is inside its budget, and nothing stands on the wall.");
     }
   } finally {
     await browser.close();

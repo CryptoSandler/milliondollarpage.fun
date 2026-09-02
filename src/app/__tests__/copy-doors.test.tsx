@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { query } from "../../lib/db";
 import BlockPageRoute from "../b/[id]/page";
 import FaqPage from "../faq/page";
+import HowToBuyPage from "../how-to-buy/page";
 import StatsPage from "../stats/page";
 
 /**
@@ -124,6 +125,12 @@ const CLOSES_THE_DOOR: { phrase: RegExp; direction: string; example: string }[] 
 describe("no page answers whether a rectangle can ever change hands", () => {
   it.each([
     ["the landing and the FAQ", async () => renderToStaticMarkup(<FaqPage />)],
+    /*
+      THE PAGE MOST LIKELY TO WALK THROUGH THE DOOR, and the reason this list
+      exists at all: a page that teaches somebody to buy is a page that wants to
+      tell them what they may do with it afterwards.
+    */
+    ["how to buy", async () => renderToStaticMarkup(<HowToBuyPage />)],
     ["what the wall has done", async () => renderToStaticMarkup(await StatsPage())],
     [
       "one rectangle's own page",

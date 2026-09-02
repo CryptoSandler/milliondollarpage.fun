@@ -291,6 +291,15 @@ export default function AboutPage() {
           </li>
         </ol>
 
+        <p className="mt-5 text-[15px] leading-relaxed text-body">
+          Never used a crypto wallet?{" "}
+          <Link href="/how-to-buy" className="font-semibold text-ink underline underline-offset-2">
+            How to buy, from nothing
+          </Link>{" "}
+          walks the whole thing in three steps — installing a wallet, putting money in it, and
+          drawing the rectangle.
+        </p>
+
         {/* -------------------------------------------------- what you get */}
         <h2 className="mt-14 font-display text-[22px] font-semibold tracking-tight">
           <Typer>What you actually get</Typer>

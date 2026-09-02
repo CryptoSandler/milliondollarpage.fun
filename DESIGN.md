@@ -867,25 +867,21 @@ and the zoom are how a rectangle GETS selected, so they can never sit behind a
 selection: they are always on screen. The readout, the wallet and Buy are about
 a rectangle that exists, so they come up with one and retract with it.
 
-### The three placements, and what decides between them
+### The two placements, and what decides between them
 
-**Phones and portrait, below 640px: a bottom sheet.** The panel takes the bottom
-edge, full width, one fixed height, never wrapping — the board's fit maths reads
-its measured box, and a bar that can grow to two rows is a bar that can cover
-the board it was measured against. The settled register is not shown at all
-there; `/stats` carries it for anybody on a phone.
+**Amended 2026-09-02: there are two now, not three, and neither of them floats.**
+See *Nothing stands on the wall* below for the rule that collapsed them.
 
-**Above 640px and below the rail threshold: the panel floats.** It is not part
-of the chrome the fit maths sees, so the board is the same size with it open and
-closed. It sits over the letterbox the fit leaves under the board, and over the
-board itself only where there is no letterbox to sit on. The presets and the
-zoom are a pill overlaid on the board's own top margin.
+**Above a 200px letterbox: the rails.** The presets and the zoom become the head
+of the left column and the panel is at its foot; the register stands up into the
+right one. The threshold is the gap arithmetic in *No new column takes width
+from the wall*.
 
-**Where the side rails are on: the left rail.** The presets and the zoom become
-the head of the column and stop covering artwork at all; the panel is at its
-foot. The threshold is the gap arithmetic below — `gap ≥ 180px`, rail
-`min(gap, 288px)` — and the whole of it is in *No new column takes width from
-the wall*.
+**Everywhere else: one strip along the bottom**, holding the tools, the panel
+and the register in a single row — stacked into rows at 390, where there is no
+width to share. It IS part of the chrome the fit maths sees, which is the whole
+change: the board is fitted above it, and its height does not move with the
+selection, so the wall does not resize when somebody finishes a drag.
 
 **288px is a ceiling now, not a column.** It was the width of a side panel that
 took that much of the board's width whether or not anybody was buying anything;
@@ -896,11 +892,10 @@ of padding either side and a 1px border. It is what a side rail stops growing
 at, and below it the button's price takes a second line.
 
 **The old crossover is retired.** This section used to put the decision at 5:4
-and 640px — "which arrangement leaves a bigger board", a panel or a bar — and to
-record 1024×768 as an open question. Neither survives a panel that floats: a
-layout that costs the board nothing has nothing to lose the comparison with. The
-only width that decides anything now is 640px, and it decides whether the panel
-is a sheet on the bottom edge or a floating bar.
+and 640px — "which arrangement leaves a bigger board", a panel or a bar. What
+decides now is the letterbox: 200px of it buys rails, and below that there is
+one strip. 640px still decides one thing, and only one: whether that strip is a
+row or three.
 
 **Tab order is the board, then the controls, and it ends on Buy.** One DOM tree
 serves all three placements, so one source order has to answer for all of them:
@@ -944,242 +939,141 @@ somebody who reaches for those finds them, and a line that lists every gesture
 is a line nobody finishes — and the presets, which are four labelled buttons on
 screen and do not need a sentence pointing at them.
 
-**It costs the idle chrome nothing.** It is the second row of the board's own
-overlay, directly under the preset pill, rather than a dock of its own — see
-*The overlay on the board, and the condition on it* below. Docked at the
-purchase panel it was a third band and cost 33px against a 60px budget; here it
-costs zero, and `scripts/board-share.mts` reports every viewport inside budget
-with the board's rectangle unchanged to the pixel.
+**It shares the purchase panel's box, and that is a layout requirement rather
+than a place to put it.** The panel is two lines; this box has to be exactly as
+tall, or the strip changes height the moment a rectangle is drawn and the wall
+refits under the pointer that drew it. Rather than reserve blank paper the
+second line says the offer — `unitOfSale`, the same sentence the selector
+uses.
 
-## The wall takes almost the whole screen
+## Nothing stands on the wall
 
-**Everything that is not the wall is a small contribution to it.** That is the
-governing sentence of the layout, and it is enforced as a number rather than a
-preference.
+**Settled 2026-09-02 by the owner, and it supersedes the exemption this section
+used to carry.** Every piece of chrome lives OUTSIDE the board's 2px frame, at
+every viewport, in every state. The wall is then sized from what is left.
+Covering artwork somebody paid for is no longer a cost this design is allowed to
+pay, at any width.
+
+### What it replaced, and what that was worth
+
+The preset pill and the line of instruction under it used to stand ON the board
+wherever the letterbox was too narrow for a rail. With the rail floor at 200px
+that is **every viewport this design is looked at except an ultrawide**: 1280
+leaves 47px of gap, 1440 leaves 49, 1920 leaves 148, and the owner's own
+2495×1484 leaves 120. The cover was priced here at about **36,500 board pixels
+at 1440×900**, and the overlay faded itself after two still seconds to make it
+bearable.
+
+Both are gone: the exemption, and the resting rule that mitigated it. A control
+that disappears is worse than one that never had to.
+
+### Where each thing goes
+
+**Above a 200px letterbox — the `full` pair of rails.** Unchanged. Left: the
+controls and the purchase panel. Right: the register ticking, and the standings.
+The vertical chrome is the header alone, 34px, and the wall pays nothing for
+either column because both are sized from a gap a height-limited board leaves.
+
+**Below it — one strip along the bottom**, holding three segments in one row:
+the tools (presets and zoom), the panel, and the register. The header stays a
+single 34px line.
+
+**At 390 that strip stacks**, each segment taking a full row. The bottom sheet
+the phone already had is the middle row.
+
+**The tools did not go to the header, and that is a deviation from the owner's
+own sketch with a number behind it.** A second row in the top band costs the
+board a band of its own — about 38px, which at 1440×900 is 5% of the wall's
+area — while the tools sitting beside the panel in a strip that has to exist
+anyway costs nothing. The invariant is the same either way. Moving them is one
+`order` and one `position`.
+
+### The strip's height does not move with the selection
+
+**The panel and the instruction line are the same box**, and the idle half is
+padded to the height of the selected half rather than left short. This is not
+tidiness: the strip is measured into the chrome the board is fitted against, so
+a strip that grew when somebody finished a drag would refit the wall **under the
+rectangle they had just drawn**. `scripts/board-share.mts` reads the same chrome
+in both passes and fails if it ever reads two.
+
+The idle half spends that space on the offer — `unitOfSale`, the same sentence
+the selector uses — rather than on blank paper.
 
 ### The vertical chrome budget
 
-**≤ 60px with nothing selected**, and that is the whole of it: a **34px** header
-and a **26px** settled rail. **≤ 140px once the purchase panel is open**, which
-is the one piece of chrome that comes and goes.
+**≤ 130px without rails**, measured at 127: a 34px header, a 92px strip, and the
+board's own inset counted separately. **≤ 34px with the rails on**, which is the
+header alone. **≤ 260px at 390**, which is a different question wearing the same
+units — the board there is fitted by its WIDTH, 370px of free width against 844
+of height, so vertical chrome costs it nothing at all and the number is a sanity
+ceiling rather than a claim about the wall's share.
 
-**With a pair of rails on, the idle budget is 34px, and it is the header
-alone.** The register has left the bottom of the window in both pairs. What
-differs is what a selection costs: the **full** pair docks the purchase panel at
-the foot of the left rail, where it costs no height at all and the budget stays
-34; the **tools** pair cannot hold it, so it floats there exactly as it does
-with no rails and is allowed exactly what a floating panel has always been
-allowed. Measured, that is **114px against the 140px line** at both 1920×1080
-and 2495×1484. That
-is the whole of the vertical chrome there: the settled register and the
-purchase panel have both left the bottom of the window for a column that costs
-the board no height at all. The number is measured, not asserted — see the
-table under *Which viewports this reaches* — and `scripts/board-share.mts`
-holds it at 34 the same way it holds 60 and 140 everywhere else. **What the
-guard counts is the vertical band of chrome that stands over the board's own
-width**, so a rail beside the board contributes nothing to it, which is the
-same claim the layout makes said in the guard's own terms.
+**It is one number now where there were two.** The old budget was 60 idle and
+140 with the panel open, because the panel came and went. Idle and selected
+measure the same, and a difference between them is a bug rather than a second
+budget.
 
-The board then takes every pixel of height the budget leaves, scaled by
-whichever of its dimensions limits first, centred — so the spare width becomes
-letterbox, and the letterbox is where the floating panel goes.
+### What it cost the wall, measured before and after
 
-**The inset dropped from 20px to 8px** and that is an amendment, not a slip.
-Twenty was chosen when the chrome was a 52px bar and a 288px column, where eight
-would have looked mean. Against a 60px budget, 20px top and bottom is two thirds
-of it spent on clear paper. Eight still reads as hung rather than cropped, and
-the 2px frame still sits inside it and still never covers a pixel.
+`scripts/board-share.mts`, 2026-09-02, the board's own box as a percentage of
+the viewport:
 
-### The overlay, where it stands, and what it costs when it stands on the wall
-
-**One overlay carries the board's own controls, and it is two rows:** the size
-presets with the zoom, and — while nothing is selected — the one line that says
-how to start. They are one element because they are one exemption, and it is the
-only chrome on this page that is neither a band of the viewport nor a column
-beside the board.
-
-**Where it goes is arithmetic, and there are three answers.**
-
-| | The overlay | Threshold |
-|---|---|---|
-| **Full rails** | in the left rail, with the purchase panel under it | gap ≥ 180px |
-| **Tools rail** | its own column in the letterbox; the register stays along the bottom | gap ≥ 108px |
-| **Neither** | on the board, and it hides itself at rest | below both |
-
-**The tools rail is the same idea as the full rails at a lower price.** The full
-rails move every piece of chrome into the letterbox and take the register off
-the bottom of the window, which needs 180px a side. This one moves the overlay
-alone, so the board it is measured against still has the register underneath —
-which is to say it is the board that is already there, and the gap is the
-letterbox it already leaves: **168.8px at 1920×1080, 69.4px at 1440×900, 67.5px
-at 1280×800.** A column of these controls needs 108, so 1920 has room and 1440
-does not.
-
-**108 is measured**, the same way 180 was: the column was pinned at a width in
-the rendered page and every element in it was asked whether its `scrollWidth`
-exceeded its `clientWidth`. The widest thing that cannot shrink is a preset at
-its longest, `100×100`, at 72px; the pill's padding and border make 90 and the
-column's padding makes 108. The zoom trio wraps two-and-one below its own 112px
-rather than overflowing, which is what lets the floor sit under it. **160 is the
-ceiling**, past which four small buttons and a line of type stop reading as a
-rail and start reading as an empty panel; the leftover stays wall.
-
-**THE WALL NEVER CEDES WIDTH TO EITHER RAIL.** Both are sized from a letterbox a
-height-limited board already leaves, so the board is not refitted: measured,
-1567×1004 at 1920×1080 with the tools rail and without it, to the pixel.
-
-### The sentence that was never true, and the number it was hiding
-
-This document said, from the day the rail was invented, that it *"costs the wall
-a strip of its own top margin"*. **That was never true and it is deleted.** The
-board's margin is the 8px inset; the overlay is 40px with the presets alone and
-81px with the line under them. At every width where the board is fitted by
-height — which is every landscape window — it takes all the height the budget
-leaves, and the only thing above it is those 8px. **What the overlay stands on is
-artwork.**
-
-Measured, with a sale seeded across the top-centre of the wall:
-
-| Viewport | Overlay | Where it stands | Board pixels under it |
+| Viewport | Before | After | Change |
 |---|---|---|---|
-| 2560×1440 | in the left rail | beside the board | **0** |
-| 1920×1080 | in the tools rail | beside the board | **0** |
-| 390×844 | above a letterboxed board | on the ground | **0** |
-| 1440×900 | on the board | on artwork | **~36,500** (~18,000 with no line) |
-| 1280×800 | on the board | on artwork | **~47,400** (~23,200 with no line) |
+| 1280×800 | 1129×724 · **79.8%** | 1024×657 · **65.7%** | −14.1 pts |
+| 1440×900 | 1285×824 · **81.7%** | 1181×757 · **69.0%** | −12.7 pts |
+| 1920×1080 | 1567×1004 · **75.9%** | 1462×937 · **66.1%** | −9.8 pts |
+| 2495×1484 | 2198×1408 · **83.6%** | 2093×1341 · **75.8%** | −7.8 pts |
+| 2560×1440 | 2129×1364 · **78.8%** | 2024×1297 · **71.2%** | −7.6 pts |
+| 390×844 | 374×241 · **27.4%** | 374×241 · **27.4%** | none |
+| 3440×1440 (rails) | — | 2170×1390 · **60.9%** | unchanged |
 
-At a dollar a pixel those last two are **$36,500 and $47,400 of wall** under a
-pill, in the same place, forever — which is what makes the third answer a
-mechanism rather than a shrug.
+**The phone pays nothing** because its board is width-limited. **Everything else
+pays between 7 and 14 points**, and that is the price of the rule rather than a
+regression to fix.
 
-### The pill's own spacing is a number, not a consequence of a font
-
-**Reported from macOS: the presets touching each other in the rail, and not
-touching on Windows.** Not reproducible on this machine, which has one OS and
-one font stack — so what is fixed is the property that made it possible rather
-than the platform that showed it, and what is guarded is that property.
-
-**What the browser was actually computing**, measured at 2495×1484:
-
-| | Was | Why |
-|---|---|---|
-| row and column gap | **4px** | Tailwind's `gap-1` in the markup, a *utilities* rule, outranking this stylesheet's components-layer `gap: 10px`. The ten pixels this document specifies were never in force. |
-| button box | **24px** | declared, around a **24.5px** content box: 12.5px of line between 6px paddings |
-| `100×100` | **73.6px** real, **70.1px** fallback | three and a half pixels per button, which is enough to move where a wrapped row breaks |
-
-Four 24px pills four pixels apart read as touching; a face with wider metrics
-turns three wrapped rows into four. **Both halves of that are the type deciding
-the layout.**
-
-**The fix stops asking the font.** An explicit `gap: 10px` that no utility
-outranks, and `min-height: 26px` with a pinned line-height instead of a fixed
-`height`, so the button is never smaller than its own content and never smaller
-than a touch target. `purchase-e2e.test.ts` measures the distance between
-consecutive buttons' boxes **twice — once with the faces the page loads and
-once with every family refused** — and fails under 8px in either, at three
-viewports, with a check that the two passes really were two faces.
-
-**And two things the same probe found that nobody had measured.** The presets
-row carries `shrink-0`, so it refused to go under its own max-content and never
-wrapped: at 390 it was one **503px** row painting off the side of a 366px phone,
-and in a 98px rail it painted across the wall. The rows shrink and wrap
-everywhere now, and the sold-pixel guard checks for overflow as well as for the
-overlay's box — because a box of the right size whose content spills covers
-exactly as much artwork as a box of the wrong size.
-
-### So at those two widths it gets out of the way
-
-**Two seconds without the pointer moving and the overlay fades; the first
-movement brings it back.** The reader who has stopped to LOOK at the wall is
-exactly the reader it was covering, and they get it uncovered almost at once;
-the reader reaching for a preset never sees it go.
-
-**Four things stop it, and each is a way this could have gone wrong.** A rail —
-where the overlay covers nothing, hiding it would be a disappearing control for
-no reason. A phone, where there is no pointer to move and the board is
-letterboxed clear of it anyway. **A selection or an open purchase panel**: a
-control that vanishes in the middle of a purchase is worse than one that covers
-a pixel. And focus inside it — `focusin` anywhere wakes it, which is what keeps
-a keyboard user off a control at zero opacity.
-
-**Opacity rather than `display` or `visibility`, and that is accessibility
-rather than convenience.** Both of those take the controls out of the tab order,
-so a keyboard user would tab straight past the only way to pick a size. At zero
-opacity they are still focusable and the overlay is back within the frame.
-
-### What the guards say, and they say two different things
-
-**`purchase-e2e.test.ts` asks the condition twice, because it holds two
-different ways.** Where there is a rail — 2560, 1920, and a phone — *nothing
-covers artwork* is absolute, and the test seeds a purchase under where the
-overlay would be and fails if it meets it. Where there is none — 1440 and
-1280 — the promise is the other one: *the overlay is gone at rest*, back on the
-first movement, and never hidden with a rectangle selected.
-
-**`scripts/board-share.mts` does not measure the overlay at all**, in any of the
-three, because it is not a band in any of them. It exits 0 on every row with the
-budget at 60, and its table marks which layout each row is in.
+**THE LEVER THAT WOULD GIVE MOST OF IT BACK, recorded because it is the owner's
+to pull and nobody else's.** A rail costs the wall nothing — it stands in a
+letterbox no scale could reach — so a viewport with rails is strictly better off
+than one with a strip. At 2495×1484 the letterbox is 120px and at 2560×1440 it
+is 187, both under the 200px floor set by *a rail only exists if it can be
+read*. With a 120px floor the wall at 2495 would measure about **85.4%**, which
+is larger than it was before this change. That reverses a decision the owner
+took on evidence, so it stays written down rather than taken. **At 1280 and 1440
+nothing helps**: there is no letterbox there to move into.
 
 ### Why a budget and not a percentage
 
-The obvious guard is "the board is at least N% of the viewport". It does not
-survive the arithmetic. The board is **1.5625:1** and a 1920×1080 viewport is
-**1.778:1**, so the board can never fill it: with **no chrome at all** — no
-header, no rail, no inset — the ceiling there is **87.9%**. An 85% threshold
-would leave an 18px budget for everything, which is less than one line of
-anything.
+The obvious guard is "the board is at least N% of the viewport", and it does not
+survive the arithmetic. The board is 1250×800, an aspect of 1.5625; a 1920×1080
+viewport is 1.778. They do not match, so the board can never fill it: with **no
+chrome at all** the ceiling at 1920×1080 is 87.9%, which leaves an 18px budget
+for everything if the threshold is 85%. A percentage threshold encodes the
+monitor as much as the design. What the design controls is how much VERTICAL
+room the chrome takes; that is what is guarded, and the percentages are
+reported.
 
-A percentage therefore encodes the monitor as much as the design, and fails on
-one nobody was thinking about. What the design controls is how much vertical
-room the chrome takes; that is the same number at every viewport, so that is
-what is guarded. **The shares are reported, not asserted:**
+### The inset
 
-| Viewport | Chrome idle | Chrome open | Board | Share |
-|---|---|---|---|---|
-| 1440×900 | 60px | 140px | 1285×824 | **81.7%** |
-| 1920×1080 | 60px | 140px | 1567×1004 | **75.9%** |
-| 2560×1440 (rails) | 34px | 34px | 2170×1390 | **81.8%** |
-| 1280×800 | 60px | 140px | 1129×724 | **79.8%** |
-| 390×844 | 34px | 126px | 374×241 | **27.4%** |
+**8px on all four sides, plus the 2px frame drawn immediately outside the
+paper.** It dropped from 20 when the budget dropped, and the argument holds:
+against a 130px budget, 20px top and bottom would be a third of it spent on
+clear paper. Eight still reads as hung rather than cropped.
 
-The board's size is **identical** with the panel open and closed at every
-viewport, which is the point of the panel floating: opening it does not resize
-the wall. On a phone the share is small because a 1.5625:1 board in a 0.46:1
-window is mostly letterbox, and no layout decision changes that.
+### What the guards say
 
-### What moved, and why each one
+**`scripts/board-share.mts`** reports the table above and asserts two things at
+every row: the vertical chrome is inside its budget, and **no piece of chrome
+overlaps the board's own box**. The second is checked on the BOX rather than on
+one axis — a thing beside the board and a thing on top of it differ in exactly
+that — and it is the mechanical form of this section's title.
 
-**The header is one line and carries three things** — the wordmark, the count of
-what is left, and the theme toggle, plus the way to the questions. **The offer
-line left it.** It was the widest thing in the bar, and a reader who wants the
-terms finds them as the wordmark's own tooltip and as the first paragraph of
-`/faq`. It also carried the last irreducible drift between the two themes, 20px
-of prose in two body faces; removing it for a layout reason closed that too.
-
-**The purchase panel stopped being a column.** 288px down the left was 20% of a
-1440 window taken from the dimension the board is shortest in, and taken whether
-or not anybody was buying anything. It is a compact floating bar now — size,
-price, wallet, Buy — that appears on selection and retracts when there is none,
-and it is **not part of the chrome the fit maths sees**. It sits over the
-letterbox where there is one and over the board only where there is not.
-
-**The size presets and the zoom went to a thin rail on the board's own top
-edge.** They are how a rectangle GETS selected, so putting them behind a
-selection made them unreachable exactly when they were wanted. Overlaid rather
-than stacked: a rail that pushed the board down would spend the budget twice, so
-it costs the viewport no band at all. **What it costs instead is a strip of
-artwork wherever it has no letterbox to stand in — see *The sentence that was
-never true* below, and the two things that answer it.**
-
-**The settled rail went from two tiers to one line.** 104px was right when it
-was the only thing under the board and is not right against a 60px budget.
-
-**At 390 the panel is a bottom sheet**, full width on the bottom edge, because
-there is no letterbox to float over and no room to float in.
-
-**`scripts/board-share.mts` is the guard**, and it was validated by putting the
-header back to 52px: `chrome 78px over a 60px budget`, at every desktop
-viewport, exit 1.
+**`purchase-e2e.test.ts`** asks the same question in a browser, at 1280, 1440,
+1920, 2495, 390 and 3440, against a real sale seeded across the top of the wall.
+**And it validates itself in the negative**: the last pass puts the tools back
+over the board by hand and requires the detector to say so, because a geometry
+test that has never been seen to fail may be comparing two empty boxes.
 
 ## No new column takes width from the wall
 
@@ -1216,9 +1110,8 @@ chrome is allowed to stand in it. **The rule is the guarantee, not the
 geometry: the board is never smaller because a rail is there.**
 
 **So the chrome moves into side rails exactly when the leftover is wide enough
-to hold it, and nowhere else.** Below that it is the layout this document
-already described — a bar on top, a register along the bottom, a floating
-panel — unchanged, down to the pixel.
+to hold it, and nowhere else.** Below that it is a bar on top and one strip
+along the bottom — see *Nothing stands on the wall*.
 
 **AND RAILS COME IN PAIRS OR THEY DO NOT COME.** A column down one side and an
 identical empty gap down the other puts the wall half a rail off the middle of
@@ -1228,22 +1121,22 @@ the board is centred in the VIEWPORT rather than in whatever is left of it —
 asserted in `rails-boot.test.ts` and measured in the rendered page at 1920,
 2495 and 2560, where the board's two margins agree to within a pixel.
 
-**There are two pairs, and one gap decides between them.** The gap is the same
-number for both — the letterbox a board fitted under the header alone leaves,
-because in both the register has left the bottom of the window — and what
-differs is only what the pair can hold:
+**There is ONE pair, and one gap decides whether it exists.** The gap is the
+letterbox a board fitted under the header alone leaves, because with the rails
+on the register has left the bottom of the window:
 
 | Kind | From | Left rail | Right rail |
 |---|---|---|---|
-| **full** | 180px | the controls and the purchase panel | the register and the standings |
-| **tools** | 108px | the controls | the register, ticking |
-| off | — | — | — |
+| **full** | 200px | the controls and the purchase panel | the register and the standings |
+| off | — | the strip along the bottom carries all of it | — |
 
-**108 is the controls' own floor** and 180 is the Buy button's: a 108px column
-cannot hold `Buy these pixels — $1,000,000.00` on any number of lines, so the
-tools pair leaves the purchase panel floating exactly as the layout with no
-rails does. That is the one thing the tools pair costs, and it costs it only
-while somebody is buying — see the budget below.
+**The `tools` pair is gone**, and with it the 108px floor it stood on. It was a
+column for the presets alone, added when the alternative was an overlay on the
+wall; the alternative now is a strip that costs the same height whether the
+presets are in it or not, so a middle kind buys nothing. **200 is what a rail
+needs to be READ** — `100×100` rather than `100`, and a settled row on one
+legible line — which is the floor the owner set after seeing a 120px rail in
+production.
 
 ### The threshold, and the arithmetic that sets it
 
@@ -1293,40 +1186,43 @@ are on.
 ### Which viewports this reaches, measured
 
 Every board figure below was read off `data-board-rect` — the rectangle the
-renderer actually painted, frame included — by `scripts/board-share.mts`, at
-the viewport named, before and after.
+renderer actually painted, frame included — by `scripts/board-share.mts`.
+Re-measured 2026-09-02, after the floor moved to 200 and the strip replaced the
+overlay:
 
-| Viewport | Gap each side | Rails | Board before | Board after | Share |
-|---|---|---|---|---|---|
-| 1440×900 | 49.1px | off | 1285×824 | 1285×824 | 81.7% |
-| 1280×800 | 47.2px | off | 1129×724 | 1129×724 | 79.8% |
-| 390×844 | none | off | 374×241 | 374×241 | 27.4% |
-| 1920×1080 | 148.4px | **tools** | 1567×1004 | **1607×1030** | 75.9% → **79.8%** |
-| 2495×1484 | 120.3px | **tools** | 2193×1404 | **2238×1434** | 84.0% → **86.7%** |
-| 2560×1440 | 187.2px | **full** | 2129×1364 | **2170×1390** | 78.8% → **81.8%** |
+| Viewport | Gap each side | Rails | Board |
+|---|---|---|---|
+| 1280×800 | 47.2px | off | 1024×657 · 65.7% |
+| 1440×900 | 49.1px | off | 1181×757 · 69.0% |
+| 1920×1080 | 148.4px | off | 1462×937 · 66.1% |
+| 2495×1484 | 120.3px | off | 2093×1341 · 75.8% |
+| 2560×1440 | 187.2px | off | 2024×1297 · 71.2% |
+| 390×844 | none | off | 374×241 · 27.4% |
+| 3440×1440 | 627.2px, capped at 288 | **full** | 2170×1390 · 60.9% |
 
-**The one viewport that changes gains 41px of width and 26px of height** — the
-26 is exactly the settled strip that left the bottom of the window, which is
-the amendment's own claim arriving as a measurement. The other four are
-identical to the pixel, which is the other half of it.
+**WITH THE FLOOR AT 200, ONE VIEWPORT IN THIS TABLE HAS RAILS.** 1920 leaves
+148, 2495 leaves 120 and 2560 leaves 187 — all short of what a rail needs to be
+read. That is the consequence of *a rail only exists if it can be read*, taken
+on evidence after a 120px rail in production, and it is why the strip is the
+common layout rather than the exception.
 
-**The door is wider than it was, and that is the whole of the second pair.** A
-16:9 window's gap is `0.108 × height + 32`, so 1080 gives 148: the full pair
-does not reach 1920×1080 — it begins at 1984 wide there — and the tools pair
-does, comfortably. On 16:9 the full pair begins at about **1373 lines of
-height**; the tools pair begins at about **700**, which is every desktop this
-design is looked at on and none of the two it is not.
+**Where the door actually is.** On 16:9 the pair begins at **2770×1558** —
+computed by walking the heights against `railLayout`, not by a formula — and
+earlier on wider aspects: 3440×1440 clears it with 627px of gap, which is capped
+at 288.
 
-**The two viewports it does not reach are 1440×900 and 1280×800**, at 49 and 47
-pixels of gap. There is no arrangement of a column in 49 pixels, so those keep
-the overlay on the wall and the resting rule that gets it out of the way.
+**The lever, and it is the owner's.** Every viewport in the top six would be
+strictly better off with rails than with the strip, because a rail stands in a
+letterbox no scale could reach and the strip does not. At 2495 a 120px pair
+would put the wall at about **85.4%**, above where it was before any of this.
+What that costs is the readability floor. Recorded, not taken.
 
 ### What each rail carries
 
-**Left, top to bottom:** the size presets and the zoom, which stop floating
-over the artwork and become a column; then the purchase panel, at the bottom,
-when there is a selection. The panel still comes and goes with the selection
-and still costs the board nothing when it is there.
+**Left, top to bottom:** the size presets and the zoom, which leave the strip
+and become a column; then the purchase panel, at the bottom. The panel's
+contents come and go with the selection and it costs the board nothing either
+way.
 
 **Right, top to bottom:** **LIVE**, its pip and the count of who else is here;
 then the settled-purchase register, vertical — a thumbnail, the size, the

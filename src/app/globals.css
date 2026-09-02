@@ -700,26 +700,23 @@ h3 {
    * number instead of the claim.
    */
   /*
-   * THE OVERLAY, which is now two things rather than one.
+   * THE TOOLS. NOT AN OVERLAY ANY MORE, at any width.
    *
-   * The preset pill has always sat here; the one-line instruction joins it
-   * directly underneath, which is what makes them ONE overlay in one place
-   * rather than two exemptions in two corners. The wrapper carries the fixed
-   * position both used to carry separately, so the hint follows the pill's
-   * height instead of being told a number that goes stale the next time a
-   * control changes.
+   * This used to be `position: fixed` over the board's own top edge, with a
+   * resting rule that hid it after two still seconds. That was an exemption
+   * DESIGN.md wrote down and priced — about 36,500 covered wall pixels at
+   * 1440 — and on 2026-09-02 the owner withdrew it: nothing stands on the wall
+   * at any width. It is a segment of the strip along the bottom now, beside the
+   * selection panel and the register, and the board is fitted above all three.
+   *
+   * No position of its own left: `.board-strip` places it where there are no
+   * rails, and the rail block at the end of this file places it where there
+   * are.
    */
   .board-tools {
-    position: fixed;
-    top: calc(var(--bar-top-h) + 10px);
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 11;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 8px;
-    max-width: calc(100vw - 24px);
+    min-width: 0;
   }
 
   .board-rail {
@@ -788,31 +785,40 @@ h3 {
    * norm allows and the reason it is centred on the board's own width rather
    * than the window's.
    */
+  /*
+   * THE PURCHASE PANEL, which used to float over the letterbox and now stands
+   * in the strip with everything else.
+   *
+   * IT IS THE SAME HEIGHT WHETHER OR NOT ANYTHING IS SELECTED, and that is the
+   * point rather than a detail: this element is measured into the chrome the
+   * board is fitted against, so a panel that appeared on selection would refit
+   * the wall under the rectangle somebody was in the middle of drawing. What
+   * changes is its CONTENTS — the one line that says how to start, or the
+   * readout and the Buy button — and the two are never both shown.
+   */
   .board-controls {
-    position: fixed;
-    left: 50%;
-    transform: translateX(-50%);
-    bottom: calc(var(--tape-h) + 10px);
-    z-index: 12;
     display: flex;
     align-items: center;
     gap: 14px;
-    padding: 0 14px;
-    height: var(--bar-bottom-h);
-    max-width: min(calc(100vw - 24px), 980px);
+    min-width: 0;
+    flex: 1 1 auto;
+    /*
+      PINNED, so the strip is the same height whether or not anything is
+      selected. The panel is two lines — a readout, and the Buy button with what
+      it costs under it — and the idle box is shorter; without this the strip
+      grew by 39px the moment somebody finished a drag, and the wall refitted
+      under the rectangle they had just drawn. Measured by
+      `scripts/board-share.mts`, which now reads the same chrome in both passes
+      and fails if it ever reads two.
+    */
+    min-height: var(--bar-bottom-h);
+    padding: 0 12px;
     border: 1px solid var(--control-line);
-    border-radius: var(--radius-lg);
-    background: var(--card);
-    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
-    overflow: hidden;
+    border-radius: var(--radius-md);
   }
 
-  /*
-    Retracted. `display: none` rather than opacity, so nothing about it is in
-    the layout, nothing about it is focusable, and a screen reader is not read a
-    purchase panel for a purchase nobody has started.
-  */
-  .board-controls[hidden] {
+  /* Both states live in the same box, so the strip cannot change height. */
+  .board-controls > [hidden] {
     display: none;
   }
 
@@ -837,17 +843,43 @@ h3 {
    * all. DESIGN.md carries the exemption that allows it and the condition
    * attached to it.
    */
+  /*
+   * THE IDLE HALF OF THE PANEL'S BOX, and it is two lines for a layout reason
+   * rather than a copy one: the selected half is two lines, and a strip that
+   * changed height on selection would refit the wall under the rectangle
+   * somebody had just drawn.
+   */
   .board-hint {
-    max-width: 100%;
-    padding: 7px 15px;
-    border: 1px solid var(--control-line);
-    border-radius: var(--radius-pill);
-    background: var(--card);
-    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+  }
+
+  .board-hint__lead {
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--ink);
+  }
+
+  .board-hint__offer {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
     font-size: 12.5px;
-    line-height: 1.35;
+    line-height: 1.2;
     color: var(--body);
-    text-align: center;
+  }
+
+  .board-hint__link {
+    flex: 0 0 auto;
+    font-weight: 600;
+    color: var(--ink);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    white-space: nowrap;
   }
 
   /*
@@ -1060,27 +1092,12 @@ h3 {
      than beside the token overrides above, so the side-panel layout — which
      starts at exactly this width — is not fighting an unlayered rule for the
      one viewport where both queries match. */
-  /*
-   * A PHONE GETS A BOTTOM SHEET, not a floating bar. At 390 there is no
-   * letterbox worth speaking of and no room to float anything, so the panel
-   * takes the bottom edge, full width, and the board keeps everything above it.
-   */
+  /* A phone stacks the strip instead of sharing one row across it. The rule
+     is unlayered with the rest of the strip — see the strip's own block. */
   @media (max-width: 640px) {
     .board-controls {
-      left: 0;
-      right: 0;
-      bottom: var(--tape-h);
-      transform: none;
-      max-width: none;
       gap: 8px;
-      padding: 0 10px;
-      border-left: 0;
-      border-right: 0;
-      border-bottom: 0;
-      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-      padding-bottom: max(0px, env(safe-area-inset-bottom));
     }
-
   }
 
   /* A horizontally-scrolling row (the preset buttons on a narrow bottom bar)
@@ -1484,18 +1501,21 @@ h3 {
    */
   @media (min-width: 640px) {
     .board-tape {
-      position: fixed;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 10;
       display: flex;
-      align-items: stretch;
-      height: var(--tape-h);
-      padding: 0 12px;
-      padding-bottom: max(0px, env(safe-area-inset-bottom));
-      background: var(--card-lift);
-      border-top: 1px solid var(--hairline-strong);
+      align-items: center;
+      /*
+        A FLOOR, NOT A SHARE. The register is the segment that gives way — its
+        rows scroll and one legible row is all it owes — but at 1440 with the
+        panel open, `flex: 1 1 0` squeezed it to the word LIVE and a sliver of
+        the first row, which is a register nobody can read. 200px is one row's
+        size, amount and age; below that the strip would rather the panel
+        wrapped.
+      */
+      flex: 1 1 220px;
+      min-width: 200px;
+      height: 100%;
+      padding-left: 12px;
+      border-left: 1px solid var(--hairline-strong);
     }
   }
 
@@ -1793,6 +1813,16 @@ h3 {
   transform: none;
   width: 100%;
   max-width: none;
+  /*
+    A COLUMN HERE, A ROW IN THE STRIP, and this line is the one the strip batch
+    forgot. `align-items: stretch` below only stretches the CROSS axis: in a row
+    that is height, so the preset pill was left to size itself by its content —
+    and its content is two grids with `1fr` columns, which have no intrinsic
+    width and collapse to nothing. Measured at 3440×1440: the pill came out
+    **18px wide**, its labels painting over the wordmark, while the rail stood
+    288px wide and empty beside them.
+  */
+  flex-direction: column;
   align-items: stretch;
 }
 
@@ -1860,6 +1890,13 @@ h3 {
   left: auto;
   bottom: auto;
   transform: none;
+  /*
+    IT DOES NOT GROW HERE. In the strip the panel takes the slack — `flex: 1 1
+    auto` — and in a COLUMN that same rule made it grow to the rail's whole
+    height: a 268×1221 slab of receipt-white down the left of a 3440 window.
+    `margin-top: auto` is what puts it at the foot; growing was never how.
+  */
+  flex: 0 0 auto;
   margin-top: auto;
   width: 100%;
   max-width: none;
@@ -2332,42 +2369,108 @@ h3 {
 }
 
 /* ============================================================================
-   THE OVERLAY THAT HIDES ITSELF WHERE THERE IS NO RAIL
+   THE STRIP ALONG THE BOTTOM, AND THE RULE THAT REPLACED AN EXEMPTION
    ----------------------------------------------------------------------------
-   Below the tools threshold — 1440×900 leaves 49px of gap and 1280×800 leaves
-   47 — there is no column to stand in, so the overlay stands on the board and a
-   purchase under it is a purchase covered. DESIGN.md carries the number: about
-   36,500 board pixels at 1440×900.
+   Settled 2026-09-02 by the owner: NOTHING STANDS ON THE WALL, AT ANY WIDTH.
 
-   Two seconds without the pointer moving and it fades; the first movement
-   brings it back. It never hides while a rectangle is selected or the purchase
-   panel is open — a control that vanishes mid-purchase is worse than one that
-   covers a pixel — and never on a phone, where there is no pointer to move and
-   the board is letterboxed clear of it anyway. `BoardView` owns those
-   conditions; this is only the paint.
+   What was here before was an exemption and a mitigation. The preset pill and
+   the instruction line stood ON the board wherever the letterbox was too narrow
+   for a rail — which, with the rail floor at 200px, is every viewport this
+   design is looked at except an ultrawide: 1280 leaves 47px of gap, 1440 leaves
+   49, 1920 leaves 148, and the owner's own 2495×1484 leaves 120. DESIGN.md
+   priced the cover at about 36,500 board pixels at 1440×900 and the overlay
+   faded itself after two still seconds to make that bearable. It is not an
+   exemption any more, so there is nothing to fade.
 
-   OPACITY RATHER THAN `visibility` OR `display`, and that is accessibility
-   rather than convenience. Both of those take the controls out of the tab
-   order, so a keyboard user would tab straight past the only way to pick a
-   size. At zero opacity they are still focusable, and `BoardView` brings the
-   overlay back on `focusin`.
+   THE STRIP IS ONE ROW ALONG THE BOTTOM and it holds three segments: the tools
+   (presets and zoom), the panel (the line that says how to start, or the
+   readout and Buy), and the register. The board is fitted above it, so the
+   chrome is measured out of the board's share ONCE, before the fit maths ever
+   runs, and no pixel of artwork is ever underneath anything.
+
+   ITS HEIGHT DOES NOT MOVE WITH THE SELECTION. The panel and the hint are the
+   same box: a strip that grew when somebody drew a rectangle would refit the
+   wall under the rectangle they were drawing.
+
+   THE TOOLS DID NOT GO TO THE HEADER, and that is a deviation from the owner's
+   sketch with a number behind it. A second row in the top band costs the board
+   a band of its own — about 38px, which at 1440×900 is 5% of the wall's area —
+   while the tools sitting BESIDE the panel and the register in a strip that
+   already exists costs nothing. The invariant they asked for is the same either
+   way; this is the cheaper way to hold it. Moving them is one `order` and one
+   `position` if the owner prefers the sketch.
    ========================================================================= */
-.board-tools {
-  transition: opacity 220ms var(--ease);
+
+/*
+ * NO BOX WHERE THE RAILS ARE ON. `display: contents` leaves the two rails with
+ * exactly the fixed positions the rail block gives them, and leaves this
+ * element measuring a row of zeros — which is how `BoardView` tells the two
+ * layouts apart without a second opinion about the viewport.
+ */
+.board-strip {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 12;
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  padding: 6px 12px;
+  padding-bottom: max(6px, env(safe-area-inset-bottom));
+  background: var(--card-lift);
+  border-top: 1px solid var(--hairline-strong);
 }
 
-.board-tools--resting {
-  opacity: 0;
-  /* The pointer passes through to the board underneath: a reader drawing across
-     the top of the wall should not hit an invisible pill. */
-  pointer-events: none;
+[data-rails="full"] .board-strip {
+  display: contents;
+}
+
+/*
+ * A PHONE STACKS IT. There is no room for the tools, the panel and the register
+ * beside each other at 390, so each segment takes a full row — which is the
+ * bottom sheet the phone already had, with the tools above it and the register
+ * below. `order` puts them in that reading order whatever the DOM says: the
+ * rails need the register FIRST in the source for the tab walk, and a phone
+ * needs it last on the screen.
+ */
+@media (max-width: 640px) {
+  .board-strip {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .board-strip > * {
+    flex: 1 0 100%;
+  }
+
+  .board-tape {
+    border-left: 0;
+    padding-left: 0;
+  }
+}
+
+.board-tools {
+  order: 1;
+}
+
+.board-controls {
+  order: 2;
+}
+
+.board-tape {
+  order: 3;
+}
+
+/*
+ * The standings belong to the right rail and to nothing else. Without this they
+ * render into the strip as a stack of rows taller than the strip itself.
+ */
+.board-standings {
+  display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .board-tools {
-    transition: none;
-  }
-
   /*
    * THE TICKER STOPS AND SHOWS ITS LAST N. The global reduced-motion rule
    * already reaches every animation; this is here as well because the duplicate

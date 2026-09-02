@@ -8,11 +8,11 @@ import type { BlockDetails, BoardRect, BoardStats, Standing } from "../lib/board
 import type { Wall } from "../lib/board/composite";
 import type { Point } from "../lib/board/geometry";
 import { holdMinutes } from "../lib/board/hold-clock";
-import { offerLine } from "../lib/board/pricing";
+import { offerLine, unitOfSale } from "../lib/board/pricing";
 import { walletSigner } from "../lib/board/purchase-client";
 import type { Selection } from "../lib/board/selection";
 import type { TapeRow } from "../lib/board/tape";
-import { BAR_TOP_PX, BOARD_INSET, type Chrome, hoverCardLeft } from "../lib/canvas/viewport";
+import { BAR_TOP_PX, BOARD_INSET, STRIP_H_PX, type Chrome, hoverCardLeft } from "../lib/canvas/viewport";
 import BlockCard from "./BlockCard";
 import BoardCanvas, { type ZoomControls, type ZoomState } from "./BoardCanvas";
 import BoardCounters from "./BoardCounters";
@@ -66,11 +66,10 @@ type BoardPayload = {
 // something, and this is what the CSS assumes too. Every side already carries
 // BOARD_INSET, so the first paint leaves the same strip of paper round the
 // board — and the same room for its frame — that every later one does.
-const FALLBACK_TAPE = 26;
 const FALLBACK_CHROME: Chrome = {
   top: BAR_TOP_PX + BOARD_INSET,
   right: BOARD_INSET,
-  bottom: FALLBACK_TAPE + BOARD_INSET,
+  bottom: STRIP_H_PX + BOARD_INSET,
   left: BOARD_INSET,
 };
 
@@ -83,17 +82,6 @@ const FALLBACK_CHROME: Chrome = {
 // is also what brings a NEW WALL VERSION down; the bitmap itself is fetched
 // only when that version actually changes, because its URL is its hash.
 const REFRESH_INTERVAL_MS = 30_000;
-
-/**
- * How long the pointer has to be still before the board's overlay gets out of
- * the way, where it is standing on the wall.
- *
- * Two seconds: long enough that it is never fading while somebody is reaching
- * for a preset, short enough that a reader who has stopped to LOOK at the wall
- * — which is the whole state this exists for — gets it uncovered almost at
- * once.
- */
-const OVERLAY_REST_MS = 2_000;
 
 export default function BoardView({ initial }: { initial: BoardPayload }) {
   const [board, setBoard] = useState(initial);
@@ -152,6 +140,16 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
   const topBarRef = useRef<HTMLElement>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
   const tapeRef = useRef<HTMLElement>(null);
+  /**
+   * The strip along the bottom: the tools, the panel and the register in one
+   * row, and the whole of the chrome the board is fitted above.
+   *
+   * It has a box only where the rails are OFF — with them on it is
+   * `display: contents` and measures a row of zeros, which is the same trick
+   * the rails themselves use and the reason the measurement below needs no
+   * media query.
+   */
+  const stripRef = useRef<HTMLDivElement>(null);
   /**
    * The two side rails, which exist as boxes only where the layout has room for
    * them.
@@ -476,10 +474,10 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
    */
   useEffect(() => {
     const topEl = topBarRef.current;
-    const tapeEl = tapeRef.current;
+    const stripEl = stripRef.current;
     const leftEl = leftRailRef.current;
     const rightEl = rightRailRef.current;
-    if (!topEl || !tapeEl || !leftEl || !rightEl) return;
+    if (!topEl || !stripEl || !leftEl || !rightEl) return;
 
     function measure() {
       const top = topEl!.offsetHeight || FALLBACK_CHROME.top;
@@ -490,37 +488,32 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
       // than re-asked. It is measured rather than taken from --tape-h for the
       // same reason everything else here is: the rail's real height includes
       // whatever line-height and rem sizing the browser actually applied.
-      const tape = tapeEl!.getBoundingClientRect().height;
+      const strip = stripEl!.getBoundingClientRect().height;
       /*
-        THE BOARD TAKES EVERY PIXEL OF HEIGHT THE BUDGET LEAVES.
+        EVERY PIXEL OF CHROME IS IN THIS SUM, which is the whole of the rule the
+        owner settled on 2026-09-02: nothing stands on the wall at any width.
 
-        The chrome is a 34px header and a 26px rail — 60px — plus 8px of inset
-        on each side. Nothing else displaces the board: the purchase panel
-        FLOATS, so it is not in this sum at all, and the preset rail sits over
-        the board's own edge.
+        The strip along the bottom holds the tools, the purchase panel and the
+        register, and it is measured as ONE box — so there is nothing floating
+        over the board to leave out of the arithmetic and nothing to argue about
+        whether it counts. Its height does not move with the selection, so this
+        number does not either, and the board never refits under a rectangle
+        somebody is drawing.
 
-        Left and right are the inset alone WHERE THERE ARE NO SIDE RAILS, which
-        is every viewport under the threshold in `sideRailWidth`: a 288px panel
-        was 20% of a 1440 window taken from the dimension the board is shortest
-        in, and it was taken whether or not anybody was buying anything. Where
-        there ARE rails they are added below — out of width the board could not
-        have used at any scale, which is the whole of that amendment.
-
-        The board is then scaled by whichever of its dimensions limits first and
-        centred, so the spare width becomes letterbox — which is exactly where
-        the floating panel goes when there is any.
+        Left and right are the inset alone where there are no side rails. Where
+        there ARE rails they are added below — out of width a height-limited
+        board could not have used at any scale — and the strip is
+        `display: contents` there, so it measures zero and the register and the
+        panel are in the rails instead.
       */
       /*
         THE SIDE RAILS, WHERE THERE ARE ANY, AND THEY COST NO HEIGHT.
 
         A rail has a box only above the width its contents need — see
         `sideRailWidth`, and the boot script in layout.tsx that decides it
-        before the first paint. Where it has one, three things follow at once
-        and they follow from this measurement rather than from a second
-        opinion about the viewport: the board's left and right insets grow by
-        the rails, the settled register has left the bottom of the window for
-        the right rail, so the bottom is the board's own inset and nothing
-        else, and the vertical chrome is the header alone.
+        before the first paint. Where it has one, the board's left and right
+        insets grow by the rails and the strip along the bottom stops having a
+        box at all, so the vertical chrome is the header alone.
 
         Read off the boxes, not off `--rail-w`. The custom property is what the
         stylesheet was TOLD; these are what the browser actually laid out, and
@@ -529,12 +522,11 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
       */
       const left = leftEl!.getBoundingClientRect().width;
       const right = rightEl!.getBoundingClientRect().width;
-      const railed = right > 0;
 
       setChrome({
         top: top + BOARD_INSET,
         right: right + BOARD_INSET,
-        bottom: (railed ? 0 : tape) + BOARD_INSET,
+        bottom: strip + BOARD_INSET,
         left: left + BOARD_INSET,
       });
     }
@@ -542,7 +534,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(topEl);
-    observer.observe(tapeEl);
+    observer.observe(stripEl);
     observer.observe(leftEl);
     observer.observe(rightEl);
     /*
@@ -557,72 +549,6 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
       window.removeEventListener("resize", measure);
     };
   }, []);
-
-  /**
-   * WHETHER THE BOARD'S OVERLAY IS RESTING, which is to say invisible.
-   *
-   * It stands on the wall at the widths that have no rail to put it in — 1440
-   * and 1280 — and a purchase under it is a purchase covered. Two seconds
-   * without the pointer moving and it fades; the first movement brings it back.
-   * DESIGN.md carries the measurement that made this necessary and the money it
-   * is worth.
-   *
-   * FOUR CONDITIONS STOP IT, and each is a way this could have gone wrong:
-   *
-   *  - a rail of either kind. Where the overlay is in a column beside the board
-   *    it covers nothing, so hiding it would be a disappearing control for no
-   *    reason at all. Read off the root's own attribute, which the boot script
-   *    stamps `full`, `tools` or `off` — the same source the stylesheet reads,
-   *    so the two cannot disagree.
-   *  - a phone. There is no pointer to move, so nothing would ever bring it
-   *    back, and the board is letterboxed clear of the overlay there anyway.
-   *  - a selection, or an open purchase panel. A control that vanishes in the
-   *    middle of a purchase is worse than one that covers a pixel.
-   *  - focus inside it. `focusin` anywhere wakes it, which is what keeps a
-   *    keyboard user from landing on a control at zero opacity: it is focusable
-   *    throughout (see the stylesheet) and visible again within the frame.
-   */
-  const [toolsResting, setToolsResting] = useState(false);
-  const overlayIsOnTheWall = selection === null && purchaseSelection === null;
-
-  useEffect(() => {
-    /*
-      Nothing is set here on the way out, and that is the linter's rule rather
-      than a preference: the class below is `toolsResting && overlayIsOnTheWall`,
-      so a selection made while the overlay is resting shows it again without
-      this effect having to reach for state on its way past.
-    */
-    if (!overlayIsOnTheWall) return;
-
-    const root = document.documentElement;
-    // A rail of either kind, or a viewport with no pointer to speak of: nothing
-    // to hide from, because the overlay is not on the board there.
-    if (root.dataset.rails !== "off") return;
-    if (!window.matchMedia("(min-width: 641px)").matches) return;
-    if (!window.matchMedia("(hover: hover)").matches) return;
-
-    // The clock starts here rather than with a wake(): the overlay is already
-    // visible when this runs, so there is nothing to set, only something to
-    // wait for.
-    let timer = setTimeout(() => setToolsResting(true), OVERLAY_REST_MS);
-    const wake = () => {
-      setToolsResting(false);
-      clearTimeout(timer);
-      timer = setTimeout(() => setToolsResting(true), OVERLAY_REST_MS);
-    };
-
-    window.addEventListener("pointermove", wake, { passive: true });
-    window.addEventListener("pointerdown", wake, { passive: true });
-    window.addEventListener("keydown", wake);
-    window.addEventListener("focusin", wake);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener("pointermove", wake);
-      window.removeEventListener("pointerdown", wake);
-      window.removeEventListener("keydown", wake);
-      window.removeEventListener("focusin", wake);
-    };
-  }, [overlayIsOnTheWall]);
 
   const walletNeeded = selection?.buyable === true && walletMissing;
 
@@ -710,6 +636,9 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
               print. It is a landing now — what this is, how buying works, where
               the idea came from — with the questions at the end, so the link
               says what a reader clicking it is going to find. */}
+          <Link href="/how-to-buy" className="btn-quiet shrink-0 px-2.5 py-1.5 text-[12.5px]">
+            How to buy
+          </Link>
           <Link href="/faq" className="btn-quiet shrink-0 px-2.5 py-1.5 text-[12.5px]">
             What this is
           </Link>
@@ -743,6 +672,17 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
         every child inside them keeps the fixed position it has always had and
         this element adds nothing at all to that layout.
       */}
+      {/*
+        THE STRIP, and the two rails inside it.
+
+        One element, two layouts. Where the rails are on it is `display:
+        contents` and adds nothing: the rails keep the fixed positions the
+        stylesheet gives them and this measures a row of zeros, which is how the
+        chrome effect below tells the layouts apart. Where they are off it IS the
+        chrome along the bottom — tools, panel, register, one row — and the board
+        is fitted above it.
+      */}
+      <div ref={stripRef} className="board-strip">
       <div ref={rightRailRef} className="board-side board-side--right">
         <PurchaseTape ref={tapeRef} rows={board.tape} asOf={board.asOf}>
           {/*
@@ -762,16 +702,12 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
 
       <div ref={leftRailRef} className="board-side board-side--left">
         {/*
-          THE BOARD'S OWN OVERLAY, and it is two rows now: the controls that
-          MAKE a selection, and the one line that says how. They are one element
-          because they are one exemption — see DESIGN.md, which allows exactly
-          this overlay on the board's own margin and attaches a condition to it.
+          THE TOOLS: the controls that MAKE a selection. A segment of the strip
+          along the bottom now, or the head of the left rail where there is one.
+          Not an overlay in either — see the stylesheet's strip block for the
+          exemption this replaced and what it used to cost the wall.
         */}
-        <div
-          className={`board-tools${
-            toolsResting && overlayIsOnTheWall ? " board-tools--resting" : ""
-          }`}
-        >
+        <div className="board-tools">
           <BoardRail
             perPixel={board.pricePerPixelBaseUnits}
             activePreset={activePreset}
@@ -782,59 +718,73 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
             onZoomOut={zoomOut}
             onZoomFit={zoomFit}
           />
+        </div>
 
+        <div ref={controlsRef} className="board-controls">
           {/*
             HOW TO START, IN ONE LINE, AND ONLY UNTIL SOMEBODY HAS STARTED.
 
             A drag on a canvas is not discoverable and nothing else on this page
-            is: the presets are buttons, the zoom is buttons, and the board itself
-            announces its keys to a screen reader the moment focus lands on it.
-            What had no home at all — since the batch that floated the panel
-            deleted the interaction legend's last caller — was the sentence that
-            says a pointer can draw here. DESIGN.md recorded that as an open gap;
-            this is it closed.
+            is: the presets are buttons, the zoom is buttons, and the board
+            itself announces its keys to a screen reader the moment focus lands
+            on it. The wheel and shift-drag are deliberately absent — a line
+            that lists every gesture is a line nobody finishes.
 
-            THE WHEEL AND SHIFT-DRAG ARE DELIBERATELY ABSENT. A line that lists
-            every gesture is a line nobody finishes, and both of those are things
-            a reader reaches for rather than things they have to be told exist.
-            The presets are absent for a different reason: they are four labelled
-            buttons on screen, and a sentence pointing at a button is a sentence
-            about the interface rather than about the wall. The keyboard's own
-            three keys stay where they already were, on the canvas's
-            `aria-describedby`, read to the people who need them and nobody else.
-
-            IT IS ONE LINE AT EVERY WIDTH, and that is what picked the wording:
-            at 390 the sheet is 366px wide and this sets at about 250, so it never
-            becomes the two-line block the legend was.
-
-            It docks exactly where the purchase panel docks, and the two are never
-            both on screen: this is what that corner says before there is a
-            rectangle, and the panel is what it says after.
+            IT SHARES THE PANEL'S BOX, which is what keeps the strip the same
+            height whether or not anything is selected. That is not tidiness: the
+            strip is measured into the chrome the board is fitted against, so a
+            panel that appeared on selection would refit the wall under the
+            rectangle somebody was drawing.
           */}
-          {selection === null && (
-            <p className="board-hint">Drag on the wall to choose your pixels</p>
-          )}
-        </div>
+          <div className="board-hint" hidden={selection !== null}>
+            <p className="board-hint__lead">Drag on the wall to choose your pixels</p>
+            {/*
+              THE SECOND LINE IS NOT PADDING. The panel beside it is two lines —
+              the readout, and the Buy button with what it costs — and this box
+              has to be exactly as tall or the strip changes height when a
+              rectangle is drawn, which would refit the wall under the pointer
+              that drew it. Rather than reserve blank paper, the space says the
+              offer: `unitOfSale` is the same sentence the selector uses, from
+              the one place either of them is worded.
+            */}
+            <p className="board-hint__offer">
+              {unitOfSale(board.pricePerPixelBaseUnits)}
+              {/*
+                FIRST TIME? IN THE IDLE HALF, not beside the readout.
 
-        {/*
-          THE PANEL IS PRESENT ONLY WHILE THERE IS SOMETHING TO BUY.
+                It belongs on this strip — somebody who does not know what a
+                wallet is finds out at the moment they are looking at the thing
+                they cannot buy yet — and it belongs in the half that has room.
+                Measured at 1440: with the link beside the readout the panel is
+                690px and the line `10 × 10 at (625, 431) · $1 a pixel` is
+                clipped; here it costs the readout nothing, because the readout
+                is not on screen while this is.
+              */}
+              <Link href="/how-to-buy" className="board-hint__link">
+                First time? →
+              </Link>
+            </p>
+          </div>
 
-          `hidden` rather than unmounting, so the wallet's connection and every
-          piece of state inside it survive a reader clearing a selection and
-          drawing another — and so a screen reader is not read a purchase panel
-          for a purchase nobody has started. It is not measured into the chrome
-          either way: the board does not resize when this appears.
-        */}
-        <div ref={controlsRef} className="board-controls" hidden={selection === null}>
-          <SelectionPanel
-            selection={selection}
-            perPixel={board.pricePerPixelBaseUnits}
-            canBuy={buyState.canBuy && purchaseSelection === null}
-            hint={buyState.hint}
-            hintTone={buyState.tone}
-            onBuy={handleBuy}
-          />
+          {/*
+            `hidden` rather than unmounting, so nothing inside the panel is torn
+            down and rebuilt each time a reader clears a selection and draws
+            another — and so a screen reader is not read a purchase panel for a
+            purchase nobody has started.
+          */}
+          <div hidden={selection === null} className="flex min-w-0 flex-1 items-center">
+            <SelectionPanel
+              selection={selection}
+              perPixel={board.pricePerPixelBaseUnits}
+              canBuy={buyState.canBuy && purchaseSelection === null}
+              hint={buyState.hint}
+              hintTone={buyState.tone}
+              onBuy={handleBuy}
+            />
+          </div>
+
         </div>
+      </div>
       </div>
 
       {hovered && (

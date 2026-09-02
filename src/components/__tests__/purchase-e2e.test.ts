@@ -173,13 +173,20 @@ const OVERLAY_VS_SALE = `(() => {
     : null;
   const covers = !!tools && tools.left < sold.right && sold.left < tools.right &&
     tools.top < sold.bottom && sold.top < tools.bottom;
-  // Anything inside a rail that is wider than the rail paints over the wall: a
-  // box of the right size whose content spills covers as much artwork as a box
-  // of the wrong size, and nothing here hides overflow.
+  /*
+    Content wider than its box paints over the wall — unless the box CLIPS it.
+    The first version of this check did not ask, and the strip made the
+    difference matter: the register's scroller is deliberately wider than its
+    own box, because that is what a ticker is, and it hides the excess with
+    overflow-x. A box that scrolls or hides is a box that paints nothing
+    outside itself, so only a visible overflow is a finding here.
+  */
   const overflow = [];
   for (const root of document.querySelectorAll(".board-side")) {
     for (const node of root.querySelectorAll("*")) {
-      if (node.scrollWidth > node.clientWidth + 1 && node.clientWidth > 0) {
+      const style = getComputedStyle(node);
+      const clips = style.overflowX !== "visible" || style.overflowY !== "visible";
+      if (!clips && node.scrollWidth > node.clientWidth + 1 && node.clientWidth > 0) {
         overflow.push((node.className.toString().split(" ")[0] || node.tagName) +
           ": " + node.scrollWidth + " wide in " + node.clientWidth);
       }
@@ -1155,22 +1162,28 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
   );
 
   /**
-   * THE CONDITION ON THE OVERLAY'S EXEMPTION, in the half where it is absolute:
-   * where there is a rail, nothing covers artwork.
+   * NOTHING STANDS ON THE WALL, AT ANY WIDTH.
    *
-   * DESIGN.md lets one overlay stand on the board — the preset pill and, under
-   * it, the line that says how to start. Where a rail exists it does not stand
-   * on the board at all, and that is a hard claim with no conditions on it: the
-   * full rails at 2560, the tools-only rail at 1920, and a phone, where the
-   * board is letterboxed clear of the overlay above it.
+   * Settled by the owner on 2026-09-02, and it replaced an exemption plus a
+   * mitigation: the preset pill used to stand on the board wherever the
+   * letterbox was too narrow for a rail — which is every viewport here except
+   * the ultrawide — and faded itself after two still seconds to make that
+   * bearable. There is no exemption left, so this asks the same question at
+   * every width instead of at the three that had a rail.
    *
    * It seeds a sale straight across the top-centre of the wall — the strip the
-   * overlay stands on where there is no rail — and derives where that purchase
-   * landed on screen from the rectangle the renderer reports, so this is not the
-   * fit maths checking itself.
+   * old overlay stood on — and derives where that purchase landed on screen
+   * from the rectangle the renderer reports, so this is not the fit maths
+   * checking itself.
+   *
+   * AND IT VALIDATES ITSELF IN THE NEGATIVE. A geometry test that has never
+   * been seen to fail is a test that might be comparing two empty boxes, so the
+   * last pass puts the tools back over the board by hand and requires the same
+   * detector to say so. `~/.claude/GATES.md`: a guard is not a guard until it
+   * has been seen to fail.
    */
   it(
-    "never covers a sold pixel where the overlay has a rail to stand in",
+    "never stands on a sold pixel, at any width",
     async () => {
       await execute(
         `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
@@ -1182,9 +1195,12 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
       const covered: string[] = [];
 
       for (const [width, height, why] of [
+        [1280, 800, "the strip"],
+        [1440, 900, "the strip"],
+        [1920, 1080, "the strip"],
+        [2495, 1484, "the strip"],
+        [390, 844, "the stacked strip"],
         [3440, 1440, "the rails"],
-        [3840, 2160, "the rails"],
-        [390, 844, "a letterboxed board"],
       ] as const) {
         const at = `${width}x${height}`;
         await browser.resize(width, height);
@@ -1199,7 +1215,7 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
 
         const reading = JSON.parse(await browser.evaluate<string>(OVERLAY_VS_SALE)) as OverlayReading;
 
-        expect(reading.tools, `the board's overlay is missing at ${at}`).not.toBeNull();
+        expect(reading.tools, `the board's tools are missing at ${at}`).not.toBeNull();
         /*
           AND NOTHING INSIDE EITHER RAIL OVERFLOWS IT. A box of the right size
           whose content paints outside it covers exactly as much artwork as a
@@ -1213,89 +1229,43 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
         ).toEqual([]);
         // And the layout really is the one this row is about: a rail that
         // silently failed to appear would pass the coverage check by putting
-        // the overlay somewhere else entirely.
-        if (width > 3000) expect(reading.rails, `${at} should have the rails`).toBe("full");
+        // the chrome somewhere else entirely.
+        expect(reading.rails, `${at} should be ${width > 3000 ? "railed" : "banded"}`).toBe(
+          width > 3000 ? "full" : "off",
+        );
 
         if (reading.covers) {
-          covered.push(`${at} (${why}): overlay ${edges(reading.tools!)}, sale ${edges(reading.sold)}`);
+          covered.push(`${at} (${why}): tools ${edges(reading.tools!)}, sale ${edges(reading.sold)}`);
         }
       }
 
       expect(
         covered,
-        "the overlay is standing on artwork somebody bought:\n  " + covered.join("\n  "),
+        "chrome is standing on artwork somebody bought:\n  " + covered.join("\n  "),
       ).toEqual([]);
-    },
-    240_000,
-  );
 
-  /**
-   * And the other half: where there is NO rail, the overlay stands on the wall,
-   * and what is guaranteed instead is that it gets out of the way.
-   *
-   * 1440×900 leaves 69.4px of letterbox and 1280×800 leaves 67.5, against the
-   * 108 a column of controls needs. There is nowhere to put the overlay at
-   * those widths that does not cost the wall height, so the promise is a
-   * different one: two seconds without the pointer moving and it is gone, and
-   * the first movement brings it back. DESIGN.md says so plainly rather than
-   * repeating the claim about a margin that was never there.
-   *
-   * WHAT THIS WOULD CATCH. A resting rule that never fires, which is the
-   * failure that leaves chrome parked on a purchase forever; and a resting rule
-   * that fires while somebody is buying, which is worse.
-   */
-  it(
-    "hides the overlay at rest where it stands on the wall, and never mid-purchase",
-    async () => {
-      for (const [width, height] of [
-        [1440, 900],
-        [2495, 1484],
-      ] as const) {
-        const at = `${width}x${height}`;
-        await browser.resize(width, height);
-        await browser.goto(`${server.origin}/?resting=${at}`);
-        await waitFor(`the board at ${at}`, async () =>
-          browser.evaluate<string | null>(`document.querySelector('canvas')?.dataset.boardRect ?? null`),
-        );
-
-        expect(
-          await browser.evaluate<string | null>(`document.documentElement.dataset.rails`),
-          `${at} should have no rail of either kind — this test is about the widths that cannot have one`,
-        ).toBe("off");
-
-        const resting = `document.querySelector(".board-tools").classList.contains("board-tools--resting")`;
-        const nudge = `(() => { dispatchEvent(new PointerEvent("pointermove",
-          { clientX: 40, clientY: 400, bubbles: true, pointerId: 1, isPrimary: true })); return true; })()`;
-
-        // 1. Awake to begin with, and still awake before the two seconds are up.
-        await browser.evaluate(nudge);
-        await sleep(400);
-        expect(await browser.evaluate<boolean>(resting), `the overlay rested early at ${at}`).toBe(false);
-
-        // 2. Gone, once the pointer has been still for its two seconds.
-        await waitFor(`the overlay to rest at ${at}`, () => browser.evaluate<boolean>(resting), 8_000);
-
-        // 3. Back, on the first movement.
-        await browser.evaluate(nudge);
-        await sleep(120);
-        expect(
-          await browser.evaluate<boolean>(resting),
-          `the overlay stayed hidden after the pointer moved at ${at}`,
-        ).toBe(false);
-
-        /*
-          4. AND NEVER MID-PURCHASE. With a rectangle selected the clock does
-          not run at all — a size preset that fades while somebody is reaching
-          for it is a worse defect than the one this whole mechanism exists to
-          fix.
-        */
-        await selectARectangle(browser);
-        await sleep(2_600);
-        expect(
-          await browser.evaluate<boolean>(resting),
-          `the overlay hid itself with a rectangle selected at ${at}`,
-        ).toBe(false);
-      }
+      /*
+        THE NEGATIVE. Put the tools back where they used to be — fixed, over the
+        middle of the board — and the same reading must report a cover. If it
+        does not, every assertion above was measuring nothing.
+      */
+      await browser.resize(1440, 900);
+      await browser.goto(`${server.origin}/?overlay=negative`);
+      await waitFor("the board at 1440x900", async () =>
+        browser.evaluate<string | null>(`document.querySelector('canvas')?.dataset.boardRect ?? null`),
+      );
+      await browser.evaluate(
+        `(() => { const el = document.querySelector(".board-tools");
+          el.style.position = "fixed"; el.style.top = "60px"; el.style.left = "40%";
+          el.style.zIndex = "50"; return true; })()`,
+      );
+      await sleep(200);
+      const forced = JSON.parse(await browser.evaluate<string>(OVERLAY_VS_SALE)) as OverlayReading;
+      expect(
+        forced.covers,
+        "the detector said nothing was covered with the tools parked on the sale — " +
+          "every pass above was measuring nothing",
+      ).toBe(true);
     },
     240_000,
   );
@@ -1311,21 +1281,28 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
    * asserted in both registers, because a line whose colour is only defined in
    * one theme is a line that is invisible in the other.
    *
-   * At 1440 it is in the dock the purchase panel floats in; at 2560 it is at
-   * the foot of the left rail. Both, because those are two different rules and
-   * the second one only exists on monitors nobody develops on.
+   * IT SHARES THE PANEL'S BOX NOW rather than being a pill of its own. That is
+   * a layout requirement rather than a tidy-up: the strip along the bottom is
+   * measured into the chrome the board is fitted against, so the idle box and
+   * the selected box have to be the same height or the wall refits under the
+   * rectangle somebody has just drawn. So this asserts `hidden` rather than
+   * absence — the box stays, its contents swap — and reads the colour off the
+   * line itself and the ground off the panel that holds it.
+   *
+   * At 1440 and 390 it is in the strip; at 3440 it is at the foot of the left
+   * rail. Both, because those are two different rules and the second one only
+   * exists on monitors nobody develops on.
    */
   it(
     "shows one line of instruction until a rectangle is drawn, in both themes",
     async () => {
       const LINE = "Drag on the wall to choose your pixels";
-      const grounds = new Map<string, string>();
+      const grounds = new Map<string, { line: string; body: string }>();
 
       /*
-        ALL THREE PLACEMENTS, because they are three rules. 1440 is the overlay
-        on the board's own margin, 2560 is the head of the left rail, and 390 is
-        the same overlay on a phone, where the board is letterboxed above and
-        below and the pill sits clear of it.
+        ALL THREE PLACEMENTS, because they are three rules. 1440 is the strip
+        along the bottom, 3440 is the foot of the left rail, and 390 is the
+        strip stacked into rows.
       */
       for (const [width, height] of [
         [1440, 900],
@@ -1350,11 +1327,13 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
             await waitFor(`the instruction line ${at}`, async () =>
               browser.evaluate<string | null>(
                 `(() => { const el = document.querySelector(".board-hint");
-                   if (!el) return null;
+                   const lead = document.querySelector(".board-hint__lead");
+                   const box = document.querySelector(".board-controls");
+                   if (!el || !lead || !box || el.hasAttribute("hidden")) return null;
                    const b = el.getBoundingClientRect();
-                   const s = getComputedStyle(el);
-                   return JSON.stringify({ text: el.textContent.trim(), w: b.width, h: b.height,
-                     colour: s.color, ground: s.backgroundColor,
+                   return JSON.stringify({ text: lead.textContent.trim(), w: b.width, h: b.height,
+                     colour: getComputedStyle(lead).color,
+                     ground: getComputedStyle(box).backgroundColor,
                      bodyGround: getComputedStyle(document.body).backgroundColor }); })()`,
               ),
             ),
@@ -1374,31 +1353,44 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
           // not the other is exactly how a line goes missing in one theme.
           expect(idle.colour, `the line's colour, ${at}`).not.toBe("rgba(0, 0, 0, 0)");
           expect(idle.ground, `the line's ground, ${at}`).not.toBe("rgba(0, 0, 0, 0)");
-          grounds.set(at, `${idle.colour} on ${idle.ground}`);
+          grounds.set(at, { line: `${idle.colour} on ${idle.ground}`, body: idle.bodyGround });
 
-          // And the panel is NOT up: the two share a dock and must never share
+          // And the readout is NOT up: the two share a box and must never share
           // a moment.
           expect(
             await browser.evaluate<boolean>(
-              `!!document.querySelector(".board-controls:not([hidden])")`,
+              `!!document.querySelector(".board-controls .selection-panel")
+                 && !document.querySelector(".board-controls .selection-panel")
+                      .closest("[hidden]")`,
             ),
-            `the purchase panel is open with nothing selected, ${at}`,
+            `the purchase readout is up with nothing selected, ${at}`,
           ).toBe(false);
 
-          // 2. GONE, the moment there is a rectangle.
+          // 2. GONE, the moment there is a rectangle — hidden rather than
+          // removed, because the box it is in is what holds the strip's height.
           await selectARectangle(browser);
           expect(
-            await browser.evaluate<boolean>(`!!document.querySelector(".board-hint")`),
+            await browser.evaluate<boolean>(
+              `document.querySelector(".board-hint").hasAttribute("hidden")`,
+            ),
             `the instruction line survived a selection, ${at}`,
-          ).toBe(false);
+          ).toBe(true);
         }
       }
 
       /*
-        AND THE TWO PASSES WERE REALLY TWO REGISTERS. Headless Chrome follows
-        the machine's own preference, and this one prefers dark — a pair of
-        assertions that both ran in dark would pass while saying nothing about
-        light. Same guard the capture script makes, for the same reason.
+        AND THE TWO PASSES WERE REALLY TWO REGISTERS — asked of the BODY, not of
+        the line.
+
+        This used to require the line's own colours to differ between themes,
+        and that stopped being true when it moved inside the purchase panel:
+        `DECISIONS.md`, "the purchase panel is white in both registers, because
+        it is the receipt". The line is dark-on-white in both, deliberately. So
+        the sameness is asserted as the exception it is, and the proof that two
+        registers really ran comes from the page's own ground, which does
+        differ. Headless Chrome follows the machine's preference — this one
+        prefers dark — so a pair of passes that both ran dark would otherwise
+        say nothing about light.
       */
       for (const [width, height] of [
         [1440, 900],
@@ -1408,9 +1400,15 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
         const light = grounds.get(`light at ${width}x${height}`);
         const dark = grounds.get(`dark at ${width}x${height}`);
         expect(
-          light,
-          `both themes resolved the instruction line to ${light} at ${width} — this compared a register with itself`,
-        ).not.toBe(dark);
+          light?.body,
+          `both passes at ${width} painted the same page ground (${light?.body}) — ` +
+            "this compared a register with itself",
+        ).not.toBe(dark?.body);
+        expect(
+          light?.line,
+          `the instruction line reads ${light?.line} in light and ${dark?.line} in dark at ` +
+            `${width} — it is inside the receipt, which is white in both registers`,
+        ).toBe(dark?.line);
       }
     },
     240_000,

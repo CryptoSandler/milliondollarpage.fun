@@ -231,6 +231,20 @@ export function sideRailWidth(screen: Size, board: Size): number {
 export const TAPE_H_PX = 26;
 
 /**
+ * The strip along the bottom, nominally, in CSS pixels.
+ *
+ * The tools, the purchase panel and the register in one row, plus the strip's
+ * own padding and border. It is what `BOTTOM` means in every layout without
+ * side rails, and it replaced a 26px register plus a purchase panel that
+ * floated over the artwork — see DESIGN.md, "Nothing stands on the wall".
+ *
+ * Like `BAR_TOP_PX` this is only ever the assumption the FIRST paint makes:
+ * `BoardView` measures the real box the moment there is one, and the strip's
+ * height is set by its tallest segment rather than by this number.
+ */
+export const STRIP_H_PX = 46;
+
+/**
  * Which pair of rails this viewport gets, and how wide they are.
  *
  * WHO CALLS THIS: the boot script in `layout.tsx`, and `rails-boot.test.ts`.
