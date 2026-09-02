@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GET } from "../../go/[id]/route";
 import { clicksFor } from "../../../lib/board/audience";
-import { execute, queryOne } from "../../../lib/db";
+import { queryOne } from "../../../lib/db";
 
 /**
  * The counting redirect, and the one property that makes it safe to have.
