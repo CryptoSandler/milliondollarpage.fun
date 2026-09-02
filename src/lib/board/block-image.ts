@@ -146,3 +146,15 @@ export function blockImageUrl(id: string): string {
 export function shareCardUrl(id: string): string {
   return `/api/blocks/${id}/card`;
 }
+
+/**
+ * Where a block's badge lives — the small SVG a buyer pastes on their own site.
+ *
+ * Beside the other two because it is the third URL for the same rectangle, and
+ * because `src/app/b/[id]/page.tsx` prints this one into markup somebody else
+ * hosts: a path built by hand there is a path that can be wrong on a page we
+ * cannot fix.
+ */
+export function badgeUrl(id: string): string {
+  return `/api/blocks/${id}/badge`;
+}

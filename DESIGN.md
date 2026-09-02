@@ -1462,6 +1462,20 @@ real number rather than a decoration.
 **The card it unfurls into is the one that already existed.** `og:image` points
 at `/api/blocks/<id>/card`; nothing new draws an image and nothing is stored.
 
+**And it hands over a badge.** A small SVG, drawn and served by us, that the
+buyer pastes where their picture already lives — an `<a>` and an `<img>`, shown
+as text on the page for them to select, with no copy button and no second
+client component. **Nothing on the badge is user-authored**: no caption, no
+link, no name, no signature, so the question of whether a stranger's text is
+escaped correctly into markup we hand somebody is a question this design does
+not have. It references nothing and runs nothing, and the route says so in a
+`Content-Security-Policy` as well as in the document.
+
+**Nothing will ever say whether the badge worked**, because there is no
+referrer in this schema and `migrations/014_visits_and_clicks.sql` puts one on
+the list of columns that may not be added without a decision the owner takes on
+purpose. That cost is written here rather than discovered later.
+
 **A takedown removes this page and never the sale.** It publishes exactly what
 the card publishes, so a hold has no page and neither has a rectangle whose
 content is gone — a page whose card is a permanent 404 is a link that unfurls

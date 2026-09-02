@@ -1367,6 +1367,26 @@ h3 {
   }
 
   /*
+   * The markup a buyer copies off `/b/<id>` and pastes on their own site.
+   *
+   * Mono because it is code, and code is the one kind of text on this site that
+   * is neither a measurement nor a sentence. It scrolls sideways inside its own
+   * box rather than wrapping: a pasted line that has been re-wrapped by a
+   * stylesheet is a line somebody has to repair before it works.
+   */
+  .embed-snippet {
+    overflow-x: auto;
+    padding: 12px 16px;
+    border: 1px solid var(--hairline-strong);
+    border-radius: var(--radius-md);
+    background: var(--card-lift);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.7;
+    color: var(--ink-soft);
+  }
+
+  /*
    * A page that is prose rather than a board.
    *
    * The document still never scrolls — `overflow: hidden` on html and body is

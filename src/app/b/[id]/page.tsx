@@ -2,11 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import ThemeToggle from "../../../components/ThemeToggle";
-import { blockImageUrl, shareCardUrl } from "../../../lib/board/block-image";
+import { badgeUrl, blockImageUrl, shareCardUrl } from "../../../lib/board/block-image";
 import { blockPageUrl } from "../../../lib/board/block-details";
+import { renderBadge } from "../../../lib/board/badge";
 import { getBlockPage, type BlockPage } from "../../../lib/board/blocks";
 import { formatUsdc, pixelCount } from "../../../lib/board/pricing";
 import { isUuid } from "../../../lib/http";
+import { absoluteUrl } from "../../../lib/site";
 
 export const dynamic = "force-dynamic";
 
@@ -166,7 +168,15 @@ export default async function BlockPageRoute({ params }: { params: Promise<{ id:
           aria-label={`The artwork on this ${block.w} by ${block.h} rectangle`}
         />
 
-        <dl className="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-hairline-strong bg-hairline-strong md:grid-cols-4">
+        {/*
+          ONE COLUMN ON A PHONE, and it is a measured fix rather than a
+          preference. At 390 in two columns a cell is 138px of text and the
+          settlement date is 10 monospace characters at 26px — it broke as
+          "2026-09-" / "02", which is a measurement split mid-token and the one
+          thing DESIGN.md's numeric role exists to prevent. Dropping the figure
+          size instead would make this page's numbers disagree with `/stats`.
+        */}
+        <dl className="mt-8 grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-hairline-strong bg-hairline-strong sm:grid-cols-2 md:grid-cols-4">
           <Figure term="Pixels" value={block.pixels.toLocaleString("en-US")} note="one dollar each" />
           <Figure term="Paid" value={formatUsdc(block.totalBaseUnits)} note="USDC, on Solana" />
           <Figure
@@ -218,7 +228,29 @@ export default async function BlockPageRoute({ params }: { params: Promise<{ id:
         )}
 
         <section className="mt-10">
-          <h2 className="font-display text-[22px] font-semibold tracking-tight">Share it</h2>
+          <h2 className="font-display text-[22px] font-semibold tracking-tight">
+            Put it on your own site
+          </h2>
+          <p className="mt-2 text-[15px] leading-relaxed text-body">
+            A small badge, drawn and served by us, linking back to this page. Paste this where your
+            picture already lives.
+          </p>
+          {/*
+            THE SNIPPET IS TEXT, AND THERE IS NO COPY BUTTON. One would need a
+            second client component on a page that has one; selecting three
+            lines is a thing every browser already does. The lazier half of that
+            trade is named rather than hidden: if the owner wants the button it
+            is one component, and nothing else here changes.
+
+            ABSOLUTE URLs, from `src/lib/site.ts`. A relative path is useless the
+            moment it is pasted anywhere, which is the only place this string is
+            ever going.
+          */}
+          <pre className="embed-snippet mt-4">
+            <code>{embedSnippet(block)}</code>
+          </pre>
+
+          <h2 className="mt-10 font-display text-[22px] font-semibold tracking-tight">Share it</h2>
           <p className="mt-2 text-[15px] leading-relaxed text-body">
             This page unfurls as a card carrying the rectangle, the amount and the signature that
             settled it. It names nobody — no address, no wallet, no holder — here or anywhere else
@@ -235,6 +267,27 @@ export default async function BlockPageRoute({ params }: { params: Promise<{ id:
         </section>
       </div>
     </main>
+  );
+}
+
+/**
+ * The three lines a buyer pastes on their own page.
+ *
+ * An anchor, an image, and the two attributes that stop the badge reflowing the
+ * page while it loads. Built here rather than in `badge.ts` because that module
+ * draws the picture and this is the markup around it — and because the width
+ * comes from the drawing, so the snippet has to ask for it rather than guess.
+ *
+ * `alt` says what the badge says, for the reader who does not get the picture.
+ */
+function embedSnippet(block: BlockPage): string {
+  const badge = renderBadge(block);
+  const alt = `${block.w} × ${block.h} pixels on milliondollarpage.fun`;
+  return (
+    `<a href="${absoluteUrl(blockPageUrl(block.id))}">\n` +
+    `  <img src="${absoluteUrl(badgeUrl(block.id))}"\n` +
+    `       alt="${alt}" width="${badge.width}" height="${badge.height}">\n` +
+    `</a>`
   );
 }
 
@@ -260,7 +313,9 @@ function Figure({ term, value, note }: { term: string; value: string; note: stri
   return (
     <div className="flex flex-col gap-1 bg-card px-4 py-4">
       <dt className="label-caps">{term}</dt>
-      <dd className="tabular font-display text-[26px] font-bold leading-none text-ink">{value}</dd>
+      <dd className="tabular whitespace-nowrap font-display text-[26px] font-bold leading-none text-ink">
+        {value}
+      </dd>
       <p className="text-[12.5px] leading-tight text-body">{note}</p>
     </div>
   );

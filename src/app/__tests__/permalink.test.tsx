@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { execute, query } from "../../lib/db";
+import { renderBadge } from "../../lib/board/badge";
 import { getBlockPage } from "../../lib/board/blocks";
 import BlockPageRoute, { generateMetadata } from "../b/[id]/page";
 
@@ -135,6 +136,32 @@ describe("the page for one rectangle", () => {
     const html = await render(id);
 
     expect(html).toContain("there is no link on this one");
+  });
+});
+
+describe("the badge a buyer pastes elsewhere", () => {
+  it("hands over a snippet with absolute URLs and the badge's own size", async () => {
+    const id = await seed();
+    const html = await render(id);
+
+    expect(html).toContain(`https://milliondollarpage.fun/b/${id}`);
+    expect(html).toContain(`https://milliondollarpage.fun/api/blocks/${id}/badge`);
+    // The width comes from the drawing rather than from a guess in the markup,
+    // so a wider figure cannot end up in a box that crops it.
+    // Escaped, because the snippet is TEXT on this page rather than markup —
+    // which is the assertion worth making as much as the number is.
+    expect(html).toContain(`width=&quot;${renderBadge({ w: 50, h: 20 }).width}&quot;`);
+    expect(html).toContain("height=&quot;40&quot;");
+  });
+
+  /**
+   * A relative path is useless the moment it is pasted anywhere, and that is
+   * the only place this string is ever going.
+   */
+  it("never offers a relative path in the snippet", async () => {
+    const html = await render(await seed());
+    expect(html).not.toContain('&lt;a href=&quot;/b/');
+    expect(html).not.toContain('src=&quot;/api/blocks/');
   });
 });
 

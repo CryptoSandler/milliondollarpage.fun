@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { RAILS_BOOT } from "../lib/canvas/rails-boot";
+import { SITE_ORIGIN } from "../lib/site";
 import { Bricolage_Grotesque, IBM_Plex_Mono, Karla, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
@@ -63,13 +64,12 @@ export const metadata: Metadata = {
    * without this falls back to `http://localhost:3000`, which is a card that
    * works on a laptop and is blank everywhere else.
    *
-   * Hard-coded rather than read from an environment variable. This site has one
-   * production origin, it is in the repository's name, and a variable that is
-   * missing in one environment produces exactly the localhost failure above,
-   * silently. Preview deployments therefore advertise the production card,
-   * which is right: a preview's card is not a thing anybody should be sharing.
+   * The origin itself is `src/lib/site.ts`, which the embed snippet on
+   * `/b/<id>` also builds its absolute URLs from — a card and a badge that
+   * disagreed about which site they came from would be two bugs wearing one
+   * constant.
    */
-  metadataBase: new URL("https://milliondollarpage.fun"),
+  metadataBase: new URL(SITE_ORIGIN),
   title: "milliondollarpage.fun",
   // A dollar a pixel is both the strapline and the offer now: the pixel is
   // the unit, so this sentence and the one beside the Buy button finally say
@@ -119,6 +119,23 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
+      /*
+        THE TWO BOOT SCRIPTS BELOW WRITE TO THIS ELEMENT BEFORE REACT HYDRATES,
+        WHICH IS THE POINT AND WHICH REACT CALLS AN ERROR.
+
+        `data-theme`, `data-rails` and `--rail-w` are stamped by blocking
+        scripts so the first paint is already in the reader's register and at
+        the right layout. The server rendered none of them, so hydration finds
+        three attributes it did not write and logs "a tree hydrated but some
+        attributes of the server rendered HTML didn't match" on every page load
+        — and then, correctly, leaves them alone.
+
+        This says the difference is expected. It is scoped to this element's own
+        attributes and reaches nothing inside it, so a real mismatch in the page
+        still reports. Found by the console capture in
+        `scripts/block-page-shot.mts`, which is what that capture is for.
+      */
+      suppressHydrationWarning
       className={`${displayLight.variable} ${bodyLight.variable} ${display.variable} ${mono.variable} h-full antialiased`}
     >
       <head>

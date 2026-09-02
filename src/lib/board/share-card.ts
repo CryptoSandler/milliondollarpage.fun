@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import { queryOne } from "../db";
 import { IMAGE_BEARING_STATUSES, publishesTextSql } from "./block-image";
+import { OFF_SITE as CARD } from "./off-site";
 import { formatUsdc, pixelCount } from "./pricing";
 import { SIGNATURE_KEPT } from "./tape";
 
@@ -54,25 +55,14 @@ export const CARD_HEIGHT = 630;
 const ART = { x: 660, y: 135, w: 480, h: 360 } as const;
 
 /**
- * The card's palette, and it is DESIGN.md's — `canvas`, `ink`, `body`,
- * `hairline-strong` and `primary`, at the values the stylesheet currently sets.
+ * The card's palette lives in `./off-site.ts` now, with the badge's.
  *
- * COPIED RATHER THAN READ, and the reason is the one `schema-version.ts`
- * already wrote down: `DESIGN.md` is not traced into the serverless bundle, so
- * a runtime read would work on a laptop and find nothing in production. So
- * these are constants, and **they move with the register or the card stops
- * matching the wall it advertises.** The guard that catches that is
- * `design-tokens.test.ts`, which reads the document and checks the files that
- * paint outside CSS; this file belongs on its list.
+ * They are the same object seen at two sizes — the two things this site sends
+ * to other people's pages — and two files carrying the same six hexes are two
+ * files that come to disagree about them. The argument for copying the values
+ * out of DESIGN.md rather than reading them at runtime is unchanged and is in
+ * that file.
  */
-const CARD = {
-  ground: "#f3ede0",
-  line: "#c9baa0",
-  ink: "#2b241c",
-  body: "#6b6154",
-  quiet: "#827968",
-  accent: "#c2451e",
-} as const;
 
 /**
  * The board's own paper, so the bars a `contain` fit leaves inside the artwork
