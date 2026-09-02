@@ -12,16 +12,49 @@ import { Pool } from "pg";
 
 config({ path: ".env.local" });
 
-const useTest = process.argv.includes("--test");
-const url = useTest ? process.env.TEST_DATABASE_URL : process.env.DATABASE_URL;
+/**
+ * THREE DATABASES, NAMED RATHER THAN GUESSED.
+ *
+ * `DATABASE_URL` is the one the app serves from, `TEST_DATABASE_URL` is the one
+ * the suite truncates, and `PREVIEW_DATABASE_URL` is the one every Vercel
+ * preview deployment reads. The third was invisible until a migration landed
+ * and preview started answering 500 on a column that did not exist there: it is
+ * a genuinely separate Neon branch, and `vercel env pull --environment=preview`
+ * returns its URL as an empty string, so it has to be fetched from the Neon CLI
+ * and kept in `.env.local` beside the other two.
+ *
+ * A flag per target and no default beyond the app's. A fallback here would mean
+ * migrating the wrong database rather than failing, which is the one thing a
+ * migration tool must never do quietly.
+ */
+const TARGETS = {
+  app: "DATABASE_URL",
+  test: "TEST_DATABASE_URL",
+  preview: "PREVIEW_DATABASE_URL",
+} as const;
+
+const target: keyof typeof TARGETS = process.argv.includes("--test")
+  ? "test"
+  : process.argv.includes("--preview")
+    ? "preview"
+    : "app";
+const variable = TARGETS[target];
+const url = process.env[variable];
 
 if (!url) {
   console.error(
-    `${useTest ? "TEST_DATABASE_URL" : "DATABASE_URL"} is not set. There is no default: ` +
-      "a fallback would mean migrating the wrong database rather than failing.",
+    `${variable} is not set. There is no default: a fallback would mean ` +
+      "migrating the wrong database rather than failing.\n" +
+      (target === "preview"
+        ? "It is the Vercel Preview deployment's own Neon branch. `vercel env pull` " +
+          "returns it empty; get it with `neonctl connection-string <preview branch> " +
+          "--project-id <project>` and put it in .env.local.\n"
+        : ""),
   );
   process.exit(1);
 }
+
+console.log(`migrating the ${target} database (${variable})`);
 
 const pool = new Pool({ connectionString: url });
 const dir = join(process.cwd(), "migrations");

@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "db:migrate": "tsx scripts/migrate.mts",
     "db:migrate:test": "tsx scripts/migrate.mts --test",
-    "db:up": "npm run db:migrate && npm run db:migrate:test",
+    "db:migrate:preview": "tsx scripts/migrate.mts --preview",
+    "db:up": "npm run db:migrate && npm run db:migrate:test && npm run db:migrate:preview",
     "check:secrets": "tsx scripts/check-build-secrets.mts"
   },
   "dependencies": {
