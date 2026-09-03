@@ -634,6 +634,49 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
         expect(x + w, `the board's right edge at ${at}`).toBeLessThanOrEqual(width);
         expect(y + h, `the board's bottom edge at ${at}`).toBeLessThanOrEqual(height);
 
+        /*
+          1b. AND THE HEADER IS INSIDE IT TOO, WITHOUT CUTTING ITSELF.
+
+          The board's right edge was guarded here and the bar above it was not,
+          and the failure that produced this took the second form rather than
+          the first: at 390 the header did NOT overflow the window — its
+          children measured 10..380 inside 390 — while the counter clipped
+          INSIDE its own box and printed `989,200 PIXELS LE`. So both are asked:
+          nothing paints past the right edge, and nothing in there is wider than
+          the box it is in. The second is what an ellipsis and a cut word look
+          like from the outside.
+        */
+        const header = JSON.parse(
+          await browser.evaluate<string>(`(() => {
+            const h = document.querySelector("header.board-bar");
+            const cut = [];
+            if (h.getBoundingClientRect().right > innerWidth + 1) cut.push("the bar itself is past the right edge");
+            for (const n of h.querySelectorAll("*")) {
+              /*
+                A BOX THAT IS SHOWING NOTHING CANNOT BE CUTTING ANYTHING, and at
+                390 the header has one on purpose: the wallet's label goes
+                visually-hidden — 1x1, clipped — so the button is icon-only and
+                a screen reader still has a name to read. The first version of
+                this check reported that label as 87 wide in 1 and failed a
+                correct page. Same lesson as the rails' overflow detector next
+                door: ask whether the box is displaying the content before
+                accusing it of cutting it.
+
+                (No backticks anywhere in this comment: it lives inside a
+                template literal that is evaluated in the browser, and one
+                closes the string. That has cost this repository five parse
+                errors now.)
+              */
+              if (n.clientWidth > 1 && n.clientHeight > 1 && n.scrollWidth > n.clientWidth + 1) {
+                cut.push((n.className.toString().split(" ")[0] || n.tagName) +
+                  ": " + n.scrollWidth + " wide in " + n.clientWidth);
+              }
+            }
+            return JSON.stringify(cut);
+          })()`),
+        ) as string[];
+        expect(header, `the header is cutting itself at ${at}:\n  ` + header.join("\n  ")).toEqual([]);
+
         // 2. Clear of the chrome, which is the other half of "visible": a
         //    board whose edge is under the side panel is inside the window and
         //    still cut off.

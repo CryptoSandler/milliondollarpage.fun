@@ -16,6 +16,9 @@
 # next.js
 /.next/
 /.next-e2e/
+# The local preview server's own dist dir — see scripts and
+# `check-build-secrets`, which scans `.next` and every `.next-*`.
+/.next-preview/
 /out/
 
 # production

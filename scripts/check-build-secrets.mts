@@ -60,6 +60,16 @@ function secretValues(names: string[]): Map<string, string> {
 /**
  * Every build output directory, not just the one `next build` writes.
  *
+ * ## The dev caches, and the one the cleanup used to miss
+ *
+ * `npm run build` deletes the caches this scan would otherwise find, and until
+ * 2026-09-03 its list was `.next/cache`, `.next-e2e/cache` and
+ * `.next-e2e/dev/cache` — every dev cache except the one a dev server on the
+ * DEFAULT dist dir writes, `.next/dev/cache`. A local preview server started
+ * for the owner to look at put `RATE_LIMIT_SALT` and `ADMIN_TOKEN` there and
+ * the next build failed, correctly, on a directory nothing was cleaning. The
+ * list now names `.next/dev/cache` and both halves of `.next-preview` as well.
+ *
  * The end-to-end suite runs its own `next dev` under `NEXT_DIST_DIR=.next-e2e`
  * so its turbopack cache cannot collide with the real build's. That cache holds
  * the same secrets for the same reason, and scanning only `.next` would have

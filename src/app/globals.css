@@ -812,6 +812,14 @@ h3 {
       and fails if it ever reads two.
     */
     min-height: var(--bar-bottom-h);
+    /*
+      IT TAKES WHAT IT NEEDS, NOT WHAT IS LEFT. `flex: 1 1 auto` gave the panel
+      the strip's whole slack, which at 2495×1484 is 835px of receipt-white
+      holding two short lines while the register beside it ran at its 200px
+      floor. The register is the segment that gets longer usefully — more rows
+      of it are legible — so the slack goes there and this sizes to its content.
+    */
+    flex: 0 1 auto;
     padding: 0 12px;
     border: 1px solid var(--control-line);
     border-radius: var(--radius-md);
@@ -873,6 +881,35 @@ h3 {
     color: var(--body);
   }
 
+  /*
+   * THE EXACT RECTANGLE READOUT SHEDS ITS COORDINATES BEFORE IT CLIPS.
+   *
+   * DESIGN.md's order of what gives way is explicit — the zoom trio first, then
+   * the exact rectangle readout, then the per-preset prices — and an ellipsis
+   * is not that line giving way, it is that line being cut. Measured at
+   * 1280×800: the readout gets about 300px and `10 × 10 at (625, 436) · $1 a
+   * pixel` needs about 330, so it printed `· $1 …`.
+   *
+   * A CONTAINER QUERY RATHER THAN A BREAKPOINT, because what decides is the
+   * panel's own width and that depends on the strip's other two segments, not
+   * on the window. `.selection-readout` is `flex: 1 1 0%` inside the panel, so
+   * its inline size comes from its parent and never from its contents, which is
+   * what makes `inline-size` containment safe on it.
+   */
+  .selection-readout {
+    container-type: inline-size;
+  }
+
+  .selection-coords {
+    display: none;
+  }
+
+  @container (min-width: 330px) {
+    .selection-coords {
+      display: inline;
+    }
+  }
+
   .board-hint__link {
     flex: 0 0 auto;
     font-weight: 600;
@@ -902,6 +939,38 @@ h3 {
     align-items: baseline;
     gap: 8px;
     white-space: nowrap;
+  }
+
+  /*
+   * THE COUNT GIVES WAY BEFORE IT CLIPS, and at 390 that means the unit drops
+   * to its own line.
+   *
+   * Measured: the header's counter gets 164px there, and the number at 20px
+   * mono plus `PIXELS LEFT` at 11px tracked needs about 178. The header does
+   * not overflow the window — the counter clips inside its own box, which
+   * printed `989,200 PIXELS LE` and is the failure this fixes.
+   *
+   * A SECOND LINE COSTS THE WALL NOTHING HERE, which is why it is the answer
+   * rather than a compact `989.2K`. At 390 the board is fitted by its WIDTH —
+   * 370px of free width against 844 of height — so the header may grow and the
+   * board does not move a pixel. `BoardView` measures the real box, so the
+   * fit maths sees the growth without being told about it. A compact number
+   * would have bought that room by making the one figure the whole offer turns
+   * on approximate, which is the trade this design does not take.
+   */
+  @media (max-width: 640px) {
+    .board-bar--top {
+      height: auto;
+      min-height: var(--bar-top-h);
+      padding-block: 4px;
+    }
+
+    .pixels-left {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0;
+      line-height: 1.1;
+    }
   }
 
   .pixels-left__n {

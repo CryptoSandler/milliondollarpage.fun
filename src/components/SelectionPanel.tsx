@@ -90,9 +90,16 @@ export default function SelectionPanel({
               <span className="text-hairline-strong"> · </span>
               {formatUsdc(selection.totalBaseUnits)}
             </p>
+            {/* The coordinates are their own span so they can leave without
+                taking the line with them — see `.selection-coords`, and
+                DESIGN.md's order of what gives way. `truncate` stays as the
+                last resort rather than the first. */}
             <p className="tabular hidden truncate text-[12.5px] text-body lg:block">
-              {selection.rect.w} × {selection.rect.h} at ({selection.rect.x}, {selection.rect.y}) ·{" "}
-              {formatUsdc(perPixel)} a pixel
+              {selection.rect.w} × {selection.rect.h}{" "}
+              <span className="selection-coords">
+                at ({selection.rect.x}, {selection.rect.y}){" "}
+              </span>
+              · {formatUsdc(perPixel)} a pixel
             </p>
           </>
         )}
