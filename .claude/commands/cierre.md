@@ -340,13 +340,29 @@ that arrives carrying published `-0300` is left alone and reported.
 turned out not to exist:
 
 - **The project skips the build itself. This is the defence.** Every project carries an
-  Ignored Build Step:
+  Ignored Build Step. It compares against the **last successful deployment**, never against
+  `HEAD^`, and in this repository it lives in `vercel.json` so it is reviewed like code
+  rather than typed into a dashboard field nobody can diff:
 
-      git diff --quiet HEAD^ HEAD -- ":(exclude)docs" ":(exclude).claude" ":(exclude,glob)*.md"
+      base="$VERCEL_GIT_PREVIOUS_SHA"; if [ -n "$base" ] && git cat-file -e "$base^{commit}" 2>/dev/null; then git diff --quiet "$base" HEAD -- ':(exclude)docs' ':(exclude).claude' ':(exclude,glob)*.md'; else exit 1; fi
 
-  Exit 0 skips. A missing `HEAD^` builds, which is the safe direction. `,glob` is
-  load-bearing: without it `*` matches `/` and the pattern would exclude every `.md` at every
-  depth instead of the repository's root-level ones.
+  Exit 0 skips, exit 1 builds. `,glob` is load-bearing: without it `*` matches `/` and the
+  pattern would exclude every `.md` at every depth instead of the repository's root-level
+  ones. When the previous sha is missing or is not in Vercel's shallow clone it **builds** —
+  "cannot prove nothing changed" must never resolve to "skip".
+
+  **`HEAD^ HEAD` IS THE VERSION THIS REPLACED, AND IT COST A WHOLE BATCH.** Measured
+  2026-09-03 in `milliondollarpage`: three commits pushed together, the last of them
+  `docs/cierre-2026-09-03.md` and nothing else. `HEAD^..HEAD` saw one documentation file,
+  exited 0, and Vercel reported **CANCELED** for the entire push — the two commits under it,
+  carrying a new header, a new strip, three new routes and the register's label fix, never
+  deployed at all. The gates were green, the push succeeded, and production served none of
+  it. The rule immediately below this one — *one push per batch, never one per commit* — is
+  what makes the tip commit unrepresentative of the push, so the two rules were in direct
+  contradiction until this was fixed.
+
+  **The tell:** `/` answers 200 and every new route answers 404. Always list the deployment
+  after a push and read its state; a push that succeeded is not a deploy that happened.
 
   **The excluded set is aligned with `.vercelignore`, where the repository has one.** A
   directory that is never uploaded cannot change what is served, so it belongs in the
