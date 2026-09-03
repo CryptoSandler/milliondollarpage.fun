@@ -238,11 +238,18 @@ export const TAPE_H_PX = 26;
  * side rails, and it replaced a 26px register plus a purchase panel that
  * floated over the artwork — see DESIGN.md, "Nothing stands on the wall".
  *
+ * 92 IS MEASURED, not guessed: `board-share.mts` reads 127px of chrome at every
+ * landscape viewport, of which 34 is the header and one board inset is counted
+ * separately. It was 46 for one batch, which was the strip before its height
+ * was pinned to the purchase panel's, and the boot script computed the ticker's
+ * gap from it — a wrong number in the safe direction, giving columns narrower
+ * than the letterbox they stand in.
+ *
  * Like `BAR_TOP_PX` this is only ever the assumption the FIRST paint makes:
  * `BoardView` measures the real box the moment there is one, and the strip's
  * height is set by its tallest segment rather than by this number.
  */
-export const STRIP_H_PX = 46;
+export const STRIP_H_PX = 92;
 
 /**
  * Which pair of rails this viewport gets, and how wide they are.
@@ -285,6 +292,85 @@ export function railLayout(screen: Size, board: Size): RailLayout {
 
   if (gap >= SIDE_RAIL_MIN) return { kind: "full", width: Math.min(gap, SIDE_RAIL_MAX) };
   return { kind: "off", width: 0 };
+}
+
+/**
+ * The narrowest side gap the register can run down as a vertical ticker.
+ *
+ * WHO USES IT: `tickerLayout` below, the boot script in `rails-boot.ts`, and
+ * `scripts/board-share.mts`.
+ *
+ * ## A different question from `SIDE_RAIL_MIN`, and a much smaller number
+ *
+ * 200 is what a RAIL needs: preset labels at full length, and a settled row on
+ * one legible line — size, amount, age and proof beside each other. A vertical
+ * ticker asks for none of that. It carries two short lines stacked, `120 × 90`
+ * over `$10,800`, and the widest of those at 11px mono measures 62px. With the
+ * column's own 8px of padding on each side and a hairline, that is **80**.
+ *
+ * ## Which viewports it reaches, MEASURED, and where that disagrees with the
+ * brief
+ *
+ * The gap here is measured against a board fitted under the header AND the
+ * strip, because in this layout the strip is still there — it has lost the
+ * register and kept the presets and the panel. That is a SHORTER board than
+ * `railLayout` measures, so the letterbox beside it is WIDER:
+ *
+ *     2560×1440   259px   sides
+ *     1920×1080   220px   sides
+ *     2495×1484   192px   sides
+ *     1440×900    121px   sides
+ *     1280×800    119px   sides
+ *     390×844       0     strip
+ *     3440×1440     —     the rails are on; the register is already a column
+ *
+ * **The brief asked for 1280 to stay horizontal, "sin huecos laterales", and
+ * the measurement says otherwise: there are 119 pixels there.** The 47px that
+ * number is usually quoted as is the gap beside a board fitted under the header
+ * ALONE — the right question for the rails, and the wrong one here, because the
+ * strip does not go away in this layout. Nothing about the wall changes either
+ * way: the strip keeps the same height whether the register is in it or not, so
+ * the ticker moving to the sides costs the board nothing and uses letterbox
+ * that was dead.
+ *
+ * So the threshold is the measurement, and 1280 gets the sides. **1440 and 1280
+ * are 2px apart**, so no gap threshold can separate them; honouring the brief
+ * literally would need a width breakpoint, which would be a number about a
+ * monitor rather than about the room the ticker needs. Recorded here, and in
+ * the report, as the owner's to reverse.
+ */
+export const TICKER_GAP_MIN = 80;
+
+/**
+ * Whether the register runs down the sides or along the bottom.
+ *
+ * WHO CALLS THIS: the boot script in `rails-boot.ts`, and `viewport.test.ts`.
+ *
+ * ## Three layouts, and this decides between the second and the third
+ *
+ * Where the RAILS are on the register is already out of the strip and standing
+ * in the right-hand column, so this does not reach: `full` wins and nothing
+ * here applies. Below that, the question is whether the letterbox is wide
+ * enough to run the ticker down it — and if it is, the register leaves the
+ * strip, which is left holding the presets and the panel with air between them.
+ *
+ * ## The gap is measured against a DIFFERENT board from `railLayout`'s
+ *
+ * That function measures the letterbox a board fitted under the header ALONE
+ * leaves, because with the rails on the strip disappears entirely. Here the
+ * strip stays, so the board is fitted under the header and the strip both, and
+ * the letterbox beside it is wider. Two layouts, two boards, two gaps — and
+ * using the wrong one would put a ticker in a gap the board is standing in.
+ */
+export type TickerLayout = { kind: "sides" | "strip"; gap: number };
+
+export function tickerLayout(screen: Size, board: Size, stripHeight = STRIP_H_PX): TickerLayout {
+  if (railLayout(screen, board).kind === "full") return { kind: "strip", gap: 0 };
+
+  const free = screen.height - BAR_TOP_PX - stripHeight - 2 * BOARD_INSET;
+  const gap = (screen.width - 2 * BOARD_INSET - (board.width / board.height) * free) / 2;
+
+  return gap >= TICKER_GAP_MIN ? { kind: "sides", gap } : { kind: "strip", gap: Math.max(0, gap) };
 }
 
 /** The hover card's own width: `w-56` on the element in `BoardView`, 14rem. */

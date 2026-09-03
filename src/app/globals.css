@@ -304,6 +304,9 @@
    * the one every rule in this file already describes.
    */
   --rail-w: 0px;
+  /* The clear paper between a ticker column and the window, and between it and
+     the board — one board inset on each side. See the ticker block. */
+  --ticker-pad: 10px;
 }
 
 @media (max-width: 640px) {
@@ -1847,6 +1850,18 @@ h3 {
   display: none;
 }
 
+/*
+ * The parade's picture, its one line and the caption. All three belong to the
+ * layout where the register runs down the letterbox, and to nothing else — the
+ * strip along the bottom and `/stats` render the same rows and must make no
+ * request for a picture they never show.
+ */
+.board-tape__art,
+.board-tape__line,
+.board-tape__caption {
+  display: none;
+}
+
 [data-rails="full"] .board-side {
   position: fixed;
   top: var(--bar-top-h);
@@ -2179,8 +2194,6 @@ h3 {
      where a rectangle has no bytes to serve, which is the same tone the wall
      itself paints there. */
   background-color: var(--sold-fallback);
-  background-position: center;
-  background-repeat: no-repeat;
   background-size: contain;
   image-rendering: pixelated;
 }
@@ -2493,6 +2506,363 @@ h3 {
 
 [data-rails="full"] .board-strip {
   display: contents;
+}
+
+/* ============================================================================
+   THE REGISTER GOES AROUND THE WALL
+   ----------------------------------------------------------------------------
+   Asked for by the owner on 2026-09-03, after the strip along the bottom came
+   out holding three things and reading as three things.
+
+   WHERE THERE IS LETTERBOX, THE REGISTER LEAVES THE STRIP AND RUNS DOWN IT.
+   It falls down the left-hand gap, top to bottom, and climbs the right-hand
+   one, bottom to top — one sequence of purchases going around the wall like a
+   sign, rather than two lists. The strip is left holding the presets and the
+   panel with air between them.
+
+   THE TWO SIDES ARE ONE REGISTER DRAWN TWICE. The left column is the real one:
+   named, focusable, in the accessibility tree. The right is `aria-hidden`, has
+   no head and takes no tab stop, and it renders the rows REVERSED — which is
+   what makes the loop read as continuing rather than restarting. See `echo` in
+   `PurchaseTape`.
+
+   IT NEVER TOUCHES THE WALL. Each column is exactly the letterbox wide — the
+   boot script computes that gap from a board fitted under the header AND the
+   strip, which is the board this layout actually draws — so the column ends
+   where the board's own inset begins. `board-share.mts` asserts it on the box
+   at all seven viewports rather than trusting the arithmetic.
+
+   THE GAP IS THE THRESHOLD, and it is 80px: two short lines stacked, `120 × 90`
+   over `$10,800`. That reaches 1280 and up. At 390 there is no letterbox at all
+   and the register stays along the bottom, as it always was.
+   ========================================================================= */
+
+/*
+ * CENTRED IN THE GAP, not pinned to the window.
+ *
+ * The letterbox runs from the window's edge to the board's own inset, and a
+ * column flush against the glass reads as something that fell off the layout
+ * rather than as part of it. It takes the gap less one board inset on each
+ * side — the same 10px of clear paper the sheet keeps — so the artwork in the
+ * column and the artwork on the wall are separated by the same distance
+ * everywhere.
+ */
+[data-ticker="sides"] .board-tape {
+  position: fixed;
+  top: var(--bar-top-h);
+  /*
+    Down to the strip and not a pixel further. `--strip-h` is written by
+    `BoardView` off the strip's measured box — its height is set by the purchase
+    panel, which is set by its own type, and neither a constant nor a stylesheet
+    can know it.
+  */
+  bottom: var(--strip-h, 92px);
+  left: var(--ticker-pad);
+  width: calc(var(--ticker-w) - 2 * var(--ticker-pad));
+  /*
+    AND NOT A PIXEL WIDER. The strip's own rule gives the register a 200px floor
+    so one row stays legible along the bottom; here that floor is about a
+    different box entirely, and it won. Measured: at 1440 the letterbox is 121px
+    and the column came out 200, standing 70px over the wall — which the
+    sold-pixel guard caught at 1440 and 1280 and nowhere else, because 1920 and
+    up have more than 200px of gap and the clamp never bit.
+  */
+  min-width: 0;
+  max-width: calc(var(--ticker-w) - 2 * var(--ticker-pad));
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  height: auto;
+  /* Flush with the frame at both ends: the route is the whole column. */
+  padding: 0;
+  border: 0;
+  background: var(--canvas);
+}
+
+[data-ticker="sides"] .board-tape--echo {
+  left: auto;
+  right: var(--ticker-pad);
+}
+
+/*
+ * NO HEAD IN THE COLUMN. The LIVE label sat at the top of the left one and cut
+ * the route: the belt started below it on one side and at the frame on the
+ * other, so the two halves were different lengths and the join could not add
+ * up. The column now runs flush from under the header to the strip, exactly as
+ * the right-hand one ends flush at the top.
+ *
+ * The label is not lost — the horizontal layout still carries it, where the
+ * register is a strip rather than a route, and the count of who is here is in
+ * the top bar at every width.
+ */
+[data-ticker="sides"] .board-tape__head {
+  display: none;
+}
+
+[data-ticker="sides"] .board-tape__scroller {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+[data-ticker="sides"] .board-tape__track {
+  width: auto;
+  height: max-content;
+  flex-direction: column;
+  /*
+    LONGHANDS, NOT THE SHORTHAND. `animation: … infinite` resets
+    `animation-play-state` as part of expanding, and this rule sits after the
+    pause rule at equal specificity — which is how the column once ticked
+    straight through a reader's focus while the strip paused correctly.
+  */
+  animation-name: tape-fall;
+  animation-duration: calc(var(--tape-rows, 8) * 3.2s);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+/*
+ * ONE PATH, NOT TWO ANIMATIONS, AND NOT A DELAY EITHER.
+ *
+ * The instant an item finishes leaving the bottom of the left column is the
+ * instant it starts entering the bottom of the right one. A delay between two
+ * animations running in OPPOSITE directions cannot hold that: their offsets
+ * drift apart at twice the speed, so the two sides agree at isolated instants
+ * and nowhere else. Measured, with a delay: 61.3px of an item visible at the
+ * bottom left and 0.0 at the bottom right, against an item 180.7 tall.
+ *
+ * So the right-hand column is not a second animation. It is the SAME belt,
+ * drawn one column-height further along, and REFLECTED — `scaleY(-1)` on the
+ * scroller, with each row flipped back so its picture and its line read the
+ * right way up. A point at distance s along the route is at y = s while
+ * s < C and at y = 2C − s after that, which is exactly what a reflection plus a
+ * constant offset of C gives. A constant offset survives over time; a delay
+ * between opposite directions does not.
+ *
+ * `--tape-c` is the column's measured height, published by `PurchaseTape`.
+ */
+/*
+ * THE SAME ROUTE LENGTH ON BOTH SIDES, and with the head gone that is what they
+ * naturally are: two scrollers filling two identical columns. It was not true
+ * while the left one carried the LIVE label, and the join was short by exactly
+ * the label's height.
+ */
+[data-ticker="sides"] .board-tape--echo .board-tape__scroller {
+  transform: scaleY(-1);
+}
+
+[data-ticker="sides"] .board-tape--echo .board-tape__row {
+  transform: scaleY(-1);
+}
+
+[data-ticker="sides"] .board-tape--echo .board-tape__track {
+  animation-name: tape-fall-echo;
+}
+
+@keyframes tape-fall-echo {
+  from {
+    transform: translateY(calc(-50% - var(--tape-c, 0px)));
+  }
+  to {
+    transform: translateY(calc(0px - var(--tape-c, 0px)));
+  }
+}
+
+@keyframes tape-fall {
+  from {
+    transform: translateY(-50%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+[data-ticker="sides"] .board-tape__track > ol {
+  height: auto;
+  flex-direction: column;
+}
+
+/*
+ * A PARADE OF PURCHASES, NOT A LOG. Each item is the artwork itself at the
+ * column's full width, with one small line under it. Bigger items mean fewer of
+ * them on screen at once, and that is the trade the owner asked for: what goes
+ * past should be recognisable as somebody's picture rather than legible as a
+ * row in a table.
+ */
+[data-ticker="sides"] .board-tape__row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  padding: 10px 0;
+  white-space: nowrap;
+  border-bottom: 0;
+}
+
+/*
+ * THE ITEM IS THE RECTANGLE'S OWN SHAPE. Not cropped, not squared, not
+ * stretched — a 173×16 purchase is wide and short, a 31×169 one is tall and
+ * narrow and centred, and a 6×40 one is scaled up until it can be seen.
+ *
+ * Two caps and a floor, and between them they do all of it:
+ *
+ *   width  = min(the column, the width this ratio needs at the height cap)
+ *   height = whatever the ratio then gives
+ *
+ * 160px of height cap, so a tall rectangle does not take the column to itself;
+ * `min-width` so an extreme landscape is still a band rather than nothing. A
+ * 6×40 comes out 24×160 — scaled up by four, because the height cap is what
+ * binds for a portrait — which is the legible minimum the owner asked for
+ * arriving from the same two rules rather than from a special case.
+ *
+ * ONE HONEST LIMIT: a 1250×1 purchase is 0.1px tall in a 119px column, which
+ * rounds to nothing. `min-height: 2px` makes it a visible line. That is the one
+ * place the ratio is not kept, it is kept to two pixels rather than to none,
+ * and the line of text under it still says 1250 × 1.
+ */
+[data-ticker="sides"] .board-tape__art {
+  display: block;
+  aspect-ratio: var(--art-w) / var(--art-h);
+  width: min(100%, calc(160px * var(--art-w) / var(--art-h)));
+  min-width: 24px;
+  min-height: 2px;
+  margin-inline: auto;
+  border: 1px solid var(--hairline-strong);
+  background-color: var(--sold-fallback);
+  /*
+    THE ARTWORK IS AN OVERLAY, NOT THIS ELEMENT'S OWN BACKGROUND, and that is
+    what lets the size label live underneath it with no flag in the payload
+    saying whether there are bytes. A background image paints above the
+    background colour and BELOW the element's children, so a label as a child
+    would sit on top of the artwork; as a pseudo-element the artwork sits on top
+    of the label. A rectangle with bytes covers its size; one without leaves its
+    own tone showing with the size written across it.
+  */
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+[data-ticker="sides"] .board-tape__art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--art-src);
+  background-position: center;
+  background-repeat: no-repeat;
+  /* The box already IS the rectangle's shape, so the bitmap fills it exactly
+     and nothing is cropped — and nearest neighbour, like the wall and like the
+     card, because these are pixels. */
+  background-size: 100% 100%;
+  image-rendering: pixelated;
+}
+
+[data-ticker="sides"] .board-tape__bare-size {
+  font-family: var(--font-numeric);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--body);
+}
+
+/*
+ * IT WRAPS RATHER THAN CUTS. `120 × 90 · $10,800 · 57m ago` is 27 characters,
+ * about 170px at 10.5px mono, against a column that is 172 wide at 2495 and
+ * **101 at 1440** — so at the width most people are on it was being cut to
+ * `120 × 90 · $10,8` with no ellipsis to show for it. There is vertical room
+ * under a picture and none beside it, so the line takes two lines when it needs
+ * them. Nothing is shed, because nothing has to be.
+ */
+[data-ticker="sides"] .board-tape__line {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  font-family: var(--font-numeric);
+  font-size: 10.5px;
+  line-height: 1.3;
+  color: var(--body);
+  text-align: center;
+  white-space: normal;
+}
+
+[data-ticker="sides"] .board-tape__line-size {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/*
+ * The caption appears when the roll has stopped for a reader. It is the one
+ * thing here written by somebody else, so it gets room to wrap rather than a
+ * line to be cut off in.
+ */
+[data-ticker="sides"] .board-tape__caption {
+  display: none;
+  text-align: center;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--ink-soft);
+  white-space: normal;
+}
+
+[data-ticker="sides"] .board-tape__scroller:hover .board-tape__caption,
+[data-ticker="sides"] .board-tape__scroller:focus-within .board-tape__caption {
+  display: block;
+}
+
+/*
+ * And the old row's three groups go: the picture and its line say all of it,
+ * and the proof lives on the rectangle's own page.
+ */
+[data-ticker="sides"] .board-tape__numbers,
+[data-ticker="sides"] .board-tape__meta {
+  display: none;
+}
+
+/* The strip keeps two things and gives them room. */
+[data-ticker="sides"] .board-strip {
+  gap: 24px;
+}
+
+/*
+ * AND THE PANEL TAKES THE SLACK AGAIN HERE, because there is no register in the
+ * strip to take it from.
+ *
+ * `flex: 0 1 auto` was right when the strip held three segments — it stopped
+ * 835px of receipt-white sprawling beside a register at its floor. With the
+ * register gone to the letterbox it is wrong in a way that cost the panel its
+ * readout: `.selection-readout` is `flex: 1 1 0%`, so with the panel sized to
+ * its content the readout had a basis of nothing and no slack to grow into, and
+ * `100 pixels · $100` vanished from the strip at 1440 entirely.
+ *
+ * The cap is what the old floating panel had: past 980px a receipt is not
+ * getting more readable, it is just getting wider.
+ */
+[data-ticker="sides"] .board-controls {
+  flex: 1 1 auto;
+  max-width: 980px;
+}
+
+[data-ticker="sides"] .board-strip .board-tape {
+  border-left: 0;
+  padding-left: 0;
+}
+
+/* Where the register is still in the strip, the echo does not exist at all. */
+[data-ticker="strip"] .board-tape--echo,
+[data-rails="full"] .board-tape--echo {
+  display: none;
+}
+
+/*
+ * A SECOND STILL COPY IS NOT A LOOP, it is the same list printed twice. With
+ * the motion off, the echo goes: the left column stays as the register, and the
+ * right-hand gap is empty paper.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .board-tape--echo {
+    display: none;
+  }
 }
 
 /*

@@ -1000,6 +1000,78 @@ in both passes and fails if it ever reads two.
 The idle half spends that space on the offer — `unitOfSale`, the same sentence
 the selector uses — rather than on blank paper.
 
+### The register goes around the wall
+
+**Settled 2026-09-03 by the owner**, after the strip came out holding three
+things and reading as three things.
+
+**Where there is letterbox, the register leaves the strip and runs down it.** It
+falls down the left-hand gap, top to bottom, and climbs the right-hand one,
+bottom to top: one sequence of purchases going around the wall like a sign. The
+strip is left with the presets and the panel, and 24px of air between them.
+
+**It is ONE ROUTE, and the continuity is arithmetic rather than two rolls
+synchronised by eye.** The instant an item finishes leaving the bottom of the
+left column is the instant it starts entering the bottom of the right one. A
+point at distance `s` along the route is at `y = s` while `s < C` and at
+`y = 2C − s` after that, where `C` is the column's height — which is a
+REFLECTION plus a constant offset, not a delay.
+
+**A delay was the first answer and it cannot work.** Two animations running in
+opposite directions separate at twice the speed, so a delay makes them agree at
+isolated instants and nowhere else. Measured, in that order: with a half-cycle
+offset the join was `61.3 + 0.0` against an item 180.7px tall; with the
+reflection and the offset, `68.6 + 86.6 = 155.2`; and once the LIVE label came
+out of the column, `117.6 + 63.0 = 180.7` — exact.
+
+**The label had to go, and that was a length problem rather than a taste one.**
+It sat at the top of the left column and the right had none, so the two halves
+of the route were different lengths and the join could not close by
+construction. The columns now run flush from under the header to the strip. The
+horizontal layout still carries the label, where the register is a strip rather
+than a route.
+
+**The right-hand column is the same belt, not a second one.** Same rows, same
+order, `aria-hidden`, no head, no tab stop: one register drawn twice. The
+reflection is `scaleY(-1)` on the scroller with each row flipped back, so the
+pictures and their lines read the right way up.
+
+**Each item is the purchase itself, at its own proportion.** Not cropped, not
+squared: the column's width is the cap and a height cap of 160px keeps a tall
+rectangle from taking the column to itself. A 173×16 is wide and short, a 31×169
+is tall and narrow and centred, a 6×40 comes out 24×160 — scaled up because for
+a portrait the height cap is what binds, which is the legible minimum arriving
+from the same two rules rather than from a special case. **One honest limit:** a
+1250×1 purchase is 0.1px tall in a 119px column, so it is held to 2px. That is
+the one place the ratio is not kept, and the line under it still says 1250 × 1.
+
+**The size is written under the artwork rather than beside a flag.** The board's
+payload may not say whether a rectangle has bytes — `board.test.ts` refuses such
+a flag by name — so the picture is painted as an overlay and the size sits
+beneath it: a rectangle with artwork covers its size, one without leaves its own
+tone showing with the size across it. **The caption is not on the ticker for the
+same reason**: a caption is content, and content is fetched on demand. The hover
+pause is built; the words are one `/api/blocks/<id>` away and are a batch of
+their own.
+
+**The threshold is 80px of gap**, measured against a board fitted under the
+header AND the strip, because in this layout the strip stays. It reaches **1280
+and up**; at 390 there is no letterbox and the register stays along the bottom.
+Where the RAILS are on, the register is already a column and none of this
+applies.
+
+**1280 has 119 pixels there, not the 47 usually quoted** — that is the gap
+beside a board fitted under the header alone, the right question for the rails
+and the wrong one here. Nothing about the wall changes either way: the strip is
+the same height with the register in it or out of it.
+
+**What the guards say.** `board-share.mts` asserts at all seven viewports that
+nothing overlaps the board's box and that each column is inside its own gap. At
+2495 it also adds the join up: what is visible of one item at the bottom left
+plus what is visible of it at the bottom right must equal its own height, within
+two pixels. Three captures a second and a half apart are what a person looks at;
+the arithmetic is what fails a build.
+
 ### The vertical chrome budget
 
 **≤ 130px without rails**, measured at 127: a 34px header, a 92px strip, and the

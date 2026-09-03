@@ -25,6 +25,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { config } from "dotenv";
 import { Pool } from "pg";
+import sharp from "sharp";
 import { launchChrome, sleep, waitFor } from "../src/components/__tests__/cdp";
 import { startDevServer } from "../src/components/__tests__/dev-server";
 import { acquireHarnessLock, releaseHarnessLock } from "../src/components/__tests__/harness-lock";
@@ -121,7 +122,7 @@ const VIEWPORTS = [
 const MEASURE = `(() => {
   const board = document.querySelector("canvas")?.dataset.boardRect ?? null;
   const parts = [];
-  for (const selector of ["header.board-bar", ".board-strip", ".board-tape", ".board-tools", ".board-controls"]) {
+  for (const selector of ["header.board-bar", ".board-strip", ".board-tape", ".board-tape--echo", ".board-tools", ".board-controls"]) {
     const el = document.querySelector(selector);
     if (!el) continue;
     const box = el.getBoundingClientRect();
@@ -150,7 +151,45 @@ const MEASURE = `(() => {
     vw: innerWidth,
     vh: innerHeight,
     rails: document.documentElement.getAttribute("data-rails") ?? "off",
+    ticker: document.documentElement.getAttribute("data-ticker") ?? "strip",
   });
+})()`;
+
+/**
+ * What is visible, at the bottom of each column, of the one item that is
+ * crossing from the left-hand column to the right-hand one.
+ *
+ * It finds the row clipped by the bottom of the left column, looks for the SAME
+ * rectangle clipped by the bottom of the right one, and reports how much of
+ * each is on screen. Two numbers that add up to the item's height are one path;
+ * anything else is two.
+ */
+const JOIN_AT_THE_BOTTOM = `(() => {
+  const columns = [...document.querySelectorAll(".board-tape")];
+  const left = columns.find((c) => !c.classList.contains("board-tape--echo"));
+  const right = columns.find((c) => c.classList.contains("board-tape--echo"));
+  if (!left || !right) return "null";
+
+  const cut = (column) => {
+    const edge = column.getBoundingClientRect().bottom;
+    for (const row of column.querySelectorAll(".board-tape__row")) {
+      const box = row.getBoundingClientRect();
+      if (box.top < edge && box.bottom > edge) return { row, box, visible: edge - box.top };
+    }
+    return null;
+  };
+
+  const a = cut(left);
+  if (!a) return "null";
+  const id = a.row.dataset.block;
+  const edge = right.getBoundingClientRect().bottom;
+  let b = null;
+  for (const row of right.querySelectorAll(".board-tape__row")) {
+    if (row.dataset.block !== id) continue;
+    const box = row.getBoundingClientRect();
+    if (box.top < edge && box.bottom > edge) { b = edge - box.top; break; }
+  }
+  return JSON.stringify({ id, left: a.visible, right: b === null ? 0 : b, height: a.box.height });
 })()`;
 
 type Part = {
@@ -170,6 +209,8 @@ type Reading = {
   vh: number;
   /** "full" or "off" — the word the boot script stamped. */
   rails: string;
+  /** "sides" or "strip" — where the register is drawn. */
+  ticker: string;
 };
 
 /**
@@ -226,11 +267,77 @@ async function main(): Promise<void> {
     const pool = new Pool({ connectionString: DATABASE });
     try {
       await pool.query("TRUNCATE blocks, hold_meter CASCADE");
-      await pool.query(
-        `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
-                             payment_signature, caption)
-         VALUES (0, 0, 120, 90, 'paid', 1000000, 10800000000, now(), 'share-fixture', 'A rectangle')`,
-      );
+      /*
+        TWENTY PURCHASES, NOT ONE, because twenty is what the register carries
+        — `TAPE_ROWS` — and since 2026-09-03 it runs down both letterboxes as a
+        ticker. One row in a 1300px column is a column that is empty in every
+        capture, which is exactly the thing the join at 2495 has to be judged
+        on. Twenty is the production case rather than a flattering one.
+      */
+      /*
+        AND HALF OF THEM CARRY ARTWORK. The register draws the picture now, so a
+        fixture with no bytes shows twenty copies of the no-image state and says
+        nothing about the case that matters. Half and half puts both on screen
+        in the same capture: the artwork, and the tone-with-its-size a one-pixel
+        purchase or a takedown gets instead.
+      */
+      const art = await sharp({
+        create: { width: 24, height: 18, channels: 3, background: { r: 0xc2, g: 0x45, b: 0x1e } },
+      })
+        .png()
+        .toBuffer();
+
+      /*
+        AND THREE OF THE TWENTY ARE THE SHAPES THAT BREAK A GRID: an extreme
+        landscape, an extreme portrait and a tiny one. The parade keeps each
+        rectangle's real proportion, so a fixture of twenty identical 120×90s
+        would show a column of identical boxes and prove nothing about the rule.
+      */
+      const SHAPES: [number, number][] = [
+        [173, 16],
+        [31, 169],
+        [6, 40],
+      ];
+
+      let x = 0;
+      let y = 0;
+      let rowTall = 0;
+      for (let i = 0; i < 20; i += 1) {
+        const [w, h] = SHAPES[i] ?? [120, 90];
+        // A shelf: wrap when the next one would leave the wall, and drop by the
+        // tallest thing on the shelf. `blocks_in_bounds` and `blocks_no_overlap`
+        // are both real, and a fixture that trips either one tells you nothing.
+        if (x + w > 1250) {
+          x = 0;
+          y += rowTall + 10;
+          rowTall = 0;
+        }
+        const at = { x, y };
+        x += w + 10;
+        rowTall = Math.max(rowTall, h);
+
+        await pool.query(
+          // Nine to a row, so twenty rectangles fit inside a 1250×800 wall —
+          // `blocks_in_bounds` refuses anything that does not, which is the
+          // constraint being right and the first draft of this loop being wrong.
+          `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
+                               payment_signature, caption, pending_image, pending_image_mime)
+           VALUES ($1, $2, $3, $4, 'paid', 1000000, $5,
+                   now() - ($6 || ' minutes')::interval, $7, $8, $9, $10)`,
+          [
+            at.x,
+            at.y,
+            w,
+            h,
+            w * h * 1000000,
+            i * 3,
+            `share-fixture-${i}`,
+            `Rectangle ${i + 1}`,
+            i % 2 === 0 ? art : null,
+            i % 2 === 0 ? "image/png" : null,
+          ],
+        );
+      }
     } finally {
       await pool.end();
     }
@@ -279,6 +386,23 @@ async function main(): Promise<void> {
         if (SHOTS) {
           const name = `${view.name.replace("×", "x")}-${selected ? "selected" : "idle"}.png`;
           writeFileSync(join(SHOTS, name), await browser.screenshot());
+
+          /*
+            AND THREE OF THEM AT 2495, a second and a half apart. The join is a
+            claim about MOTION — that what leaves the bottom of one column is
+            entering the bottom of the other — and one frame cannot show it
+            travelling. The arithmetic beside this proves it holds; the sequence
+            is what a person can look at.
+          */
+          if (view.width === 2495 && !selected) {
+            for (let frame = 1; frame <= 3; frame += 1) {
+              await sleep(1_500);
+              writeFileSync(
+                join(SHOTS, `join-2495-${frame}.png`),
+                await browser.screenshot(),
+              );
+            }
+          }
         }
 
         const reading = JSON.parse(await browser.evaluate<string>(MEASURE)) as Reading;
@@ -313,6 +437,71 @@ async function main(): Promise<void> {
           and a thing on top of it differ in exactly this.
         */
         const [bx, by, bw, bh] = (reading.board ?? "0,0,0,0").split(",").map(Number);
+
+        /*
+          AND THE TICKER IS INSIDE ITS OWN GAP. Where the register runs down the
+          letterbox, "not overlapping the board" is necessary and not
+          sufficient: a column that reached past the board's far edge would also
+          satisfy it. So each side is checked against the side it belongs to —
+          the left column ends before the board begins, the right one begins
+          after the board ends.
+        */
+        if (reading.ticker === "sides") {
+          const columns = reading.parts.filter((part) => part.what.startsWith(".board-tape"));
+          if (columns.length !== 2) {
+            failures.push(
+              `${view.name}: the ticker should be two columns and ${columns.length} were measured`,
+            );
+          }
+          const [left, right] = [...columns].sort((a, b) => a.left - b.left);
+          if (left && left.right > bx) {
+            failures.push(
+              `${view.name}: the left ticker reaches ${left.right.toFixed(0)}, past the board's ` +
+                `left edge at ${bx.toFixed(0)}`,
+            );
+          }
+          if (right && right.left < bx + bw) {
+            failures.push(
+              `${view.name}: the right ticker starts at ${right.left.toFixed(0)}, inside the ` +
+                `board, whose right edge is ${(bx + bw).toFixed(0)}`,
+            );
+          }
+        }
+
+        /*
+          THE JOIN IS ONE PATH, AND THIS IS THE ARITHMETIC THAT SAYS SO.
+
+          The two columns are one route: down the left, up the right. The claim
+          is that the instant an item finishes leaving the bottom of the left
+          column is the instant it starts entering the bottom of the right — so
+          for the item straddling that join, what is visible of it at the bottom
+          left plus what is visible at the bottom right is exactly its own
+          height. Anything else is two rolls that happen to look similar.
+
+          Measured at the widest viewport with a full register, because that is
+          where an item is tall enough for a pixel of error to be visible.
+        */
+        if (reading.ticker === "sides" && view.width === 2495 && !selected) {
+          const join = JSON.parse(
+            await browser.evaluate<string>(JOIN_AT_THE_BOTTOM),
+          ) as { id: string; left: number; right: number; height: number } | null;
+
+          if (join === null) {
+            failures.push(`${view.name}: no item was straddling the join to measure`);
+          } else if (Math.abs(join.left + join.right - join.height) > 2) {
+            failures.push(
+              `${view.name}: the join does not add up — ${join.left.toFixed(1)}px visible bottom ` +
+                `left plus ${join.right.toFixed(1)} bottom right is ${(join.left + join.right).toFixed(1)}, ` +
+                `and the item is ${join.height.toFixed(1)} tall`,
+            );
+          } else {
+            console.log(
+              `\n  the join at 2495: ${join.left.toFixed(1)} + ${join.right.toFixed(1)} = ` +
+                `${(join.left + join.right).toFixed(1)}px against an item ${join.height.toFixed(1)}px tall\n`,
+            );
+          }
+        }
+
         for (const part of reading.parts) {
           const meets =
             part.left < bx + bw && bx < part.right && part.top < by + bh && by < part.bottom;
@@ -335,7 +524,9 @@ async function main(): Promise<void> {
         }
 
         console.log(
-          `  ${`${view.name}${reading.rails === "off" ? "" : ` ·${reading.rails}`}`.padEnd(20)}${(selected ? "open" : "none").padEnd(11)}` +
+          `  ${`${view.name}${reading.rails === "off" ? "" : ` ·${reading.rails}`}${
+            reading.ticker === "sides" ? " ·sides" : ""
+          }`.padEnd(26)}${(selected ? "open" : "none").padEnd(11)}` +
             `${chrome.toFixed(0).padStart(6)}px${String(budget).padStart(6)}px` +
             `${`${bw.toFixed(0)}×${bh.toFixed(0)}`.padStart(14)}${share.toFixed(1).padStart(8)}%` +
             (over ? "   OVER" : ""),

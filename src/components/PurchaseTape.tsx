@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { type ReactNode, type Ref, useEffect, useState } from "react";
+import { type ReactNode, type Ref, useEffect, useRef, useState } from "react";
 import type { TapeRow } from "../lib/board/tape";
 import { blockImageUrl } from "../lib/board/block-image";
 import { formatUsdc, pixelCount } from "../lib/board/pricing";
@@ -109,9 +109,25 @@ export default function PurchaseTape({
   asOf,
   ref,
   children,
+  echo = false,
 }: {
   rows: TapeRow[];
   asOf: string;
+  /**
+   * The second copy, drawn down the other side of the wall.
+   *
+   * IT IS THE SAME REGISTER SEEN TWICE, NOT TWO REGISTERS. The first copy is
+   * the real one — named, focusable, in the accessibility tree — and this one
+   * is `aria-hidden`, has no head and takes no tab stop. A second focusable
+   * copy would be a second tab stop and a second region announcing the same
+   * purchases, which is the mistake DESIGN.md already refuses for the wallet
+   * control and for Buy.
+   *
+   * It also reverses the rows, and that is what makes the two sides read as one
+   * loop rather than two lists: going down the left and then up the right, the
+   * sequence continues instead of starting again.
+   */
+  echo?: boolean;
   /**
    * Whatever else belongs beside the LIVE label. The right rail puts the count
    * of who else is here there, because "this register is running" and "there
@@ -148,11 +164,53 @@ export default function PurchaseTape({
     return () => clearInterval(timer);
   }, []);
 
+  /*
+    ONE BELT, ONE ORDER. The echo used to render the list reversed, which was
+    the right answer to a different design — two rolls made to look like a loop.
+    They are one path now: the same list, drawn twice, with the right-hand
+    column showing the slice of the belt that is one column-height further
+    along. The reflection is in the stylesheet, not in the data.
+  */
+  const shown = rows;
+
+  /*
+    THE ROUTE'S LENGTH, MEASURED ON THE REAL COLUMN AND PUBLISHED FOR BOTH.
+
+    The two columns are one route: down the left, up the right. What the right
+    one has to show is the belt one ROUTE-LENGTH further along — a constant
+    offset, which survives over time in a way a delay between two
+    opposite-running animations cannot.
+
+    IT IS THE SCROLLER'S HEIGHT, NOT THE COLUMN'S, and that distinction cost a
+    guard: the left column carries the LIVE head and the right does not, so
+    their columns are the same height and their scrollers are not. Measured with
+    the column's height, the join came out 68.6 + 86.6 = 155.2 against an item
+    180.7 tall — short by exactly the head. The stylesheet gives the echo's
+    scroller this height so both routes are the same length.
+  */
+  const scrollerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (echo) return;
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+
+    function measure() {
+      document.documentElement.style.setProperty("--tape-c", `${scroller!.clientHeight}px`);
+    }
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(scroller);
+    return () => observer.disconnect();
+  }, [echo]);
+
   return (
     <aside
       ref={ref}
-      className="board-tape"
-      aria-label="Recently settled purchases"
+      aria-hidden={echo || undefined}
+      className={echo ? "board-tape board-tape--echo" : "board-tape"}
+      aria-label={echo ? undefined : "Recently settled purchases"}
       /*
         The rail's second line — "newest first · on chain" — was two lines of
         type in a 26px strip and the lower one was clipped at the bottom of the
@@ -165,6 +223,7 @@ export default function PurchaseTape({
           : "Settled purchases, newest first, on chain."
       }
     >
+      {!echo && (
       <div className="board-tape__head">
         <p className="board-tape__live">
           {/* The pip is aria-hidden and the word carries the meaning: a pulsing
@@ -174,6 +233,7 @@ export default function PurchaseTape({
         </p>
         {children}
       </div>
+      )}
 
       {/*
         A scrolling region is reachable by keyboard or it is a region some
@@ -183,9 +243,10 @@ export default function PurchaseTape({
         and this is the same overflow that clipped the wallet's Connect button.
       */}
       <div
-        tabIndex={0}
-        role="group"
-        aria-label="The most recent settled purchases, newest first"
+        ref={scrollerRef}
+        tabIndex={echo ? undefined : 0}
+        role={echo ? undefined : "group"}
+        aria-label={echo ? undefined : "The most recent settled purchases, newest first"}
         className="board-tape__scroller scrollbar-none"
       >
         {rows.length === 0 ? (
@@ -208,7 +269,11 @@ export default function PurchaseTape({
           */
           <div
             className="board-tape__track"
-            style={{ "--tape-rows": rows.length } as React.CSSProperties}
+            style={
+              {
+                "--tape-rows": rows.length,
+              } as React.CSSProperties
+            }
           >
             {/* Two copies, so the roll has no seam. Only the first is read. */}
             {[false, true].map((duplicate) => (
@@ -217,7 +282,7 @@ export default function PurchaseTape({
                 aria-hidden={duplicate || undefined}
                 className="flex h-full items-stretch"
               >
-                {rows.map((row, at) => (
+                {shown.map((row, at) => (
                   /*
                     THE NEWEST SALE IS MARKED, and only in the first copy. The
                     second copy exists so the roll has no seam and is
@@ -226,6 +291,14 @@ export default function PurchaseTape({
                   */
                   <li
                     key={row.id}
+                    /*
+                      The rectangle this row is about, for the guard that checks
+                      the join: it has to find the SAME purchase in both columns
+                      to add up what is visible of it at the bottom of each. It
+                      is an id the payload already publishes, on an element that
+                      already exists.
+                    */
+                    data-block={row.id}
                     className={`board-tape__row${
                       at === 0 && !duplicate ? " board-tape__row--newest" : ""
                     }`}
@@ -250,6 +323,86 @@ export default function PurchaseTape({
                       className="board-tape__thumb"
                       style={{ backgroundImage: `url(${blockImageUrl(row.id)})` }}
                     />
+
+                    {/*
+                      THE PARADE'S OWN ITEM: the artwork at the column's width.
+
+                      It exists only where the register runs down the letterbox,
+                      and it is a background for the same reason the thumbnail
+                      beside it is — a `display: none` `<img>` is still fetched
+                      and a `display: none` background is not, so the horizontal
+                      strip and `/stats` make no request for it at all.
+
+                      THE BOX IS THE RECTANGLE'S OWN SHAPE, never cropped and
+                      never squared. The stylesheet sizes it from these two
+                      numbers: the column's width is the cap, a height cap keeps
+                      a tall rectangle from taking the whole column, and a small
+                      one is scaled UP rather than left as a speck. The parade is
+                      therefore a column of different shapes rather than a grid.
+
+                      A RECTANGLE WITH NO BYTES GETS ITS TONE AND ITS SIZE, not
+                      an empty frame: a one-pixel purchase has no picture to show
+                      and a takedown has had its taken away, and both are true
+                      things to say rather than gaps to hide.
+                    */}
+                    <span
+                      className="board-tape__art"
+                      style={
+                        {
+                          // The rectangle's own two numbers, handed to the
+                          // stylesheet as plain numbers so it can both set the
+                          // ratio and divide by it — see `.board-tape__art`.
+                          "--art-w": row.w,
+                          "--art-h": row.h,
+                          "--art-src": `url(${blockImageUrl(row.id)})`,
+                        } as React.CSSProperties
+                      }
+                    >
+                      {/*
+                        THE SIZE SITS UNDER THE PICTURE RATHER THAN BESIDE A
+                        FLAG SAYING THERE IS NONE.
+
+                        The board's payload may not carry a flag for that —
+                        `board.test.ts` refuses one by name, and its words are
+                        exact: "a flag saying it had a bitmap of its own to go
+                        and fetch" belongs to the on-demand route now. So the
+                        artwork is painted by an overlay in the stylesheet and
+                        this label is UNDERNEATH it: a rectangle with bytes
+                        covers it, and one without — a one-pixel purchase, a
+                        takedown — leaves its own tone showing with its size
+                        written across it. No flag, no second request, and
+                        nothing in the payload that is not four numbers.
+                      */}
+                      <span className="board-tape__bare-size">
+                        {row.w} × {row.h}
+                      </span>
+                    </span>
+
+                    {/*
+                      ONE SMALL LINE UNDER THE PICTURE, and the seed is not on
+                      it: eight characters of signature are a proof a buyer
+                      checks once, and they live on the rectangle's own page.
+                      What a parade owes is what it is, what it cost and how
+                      long ago.
+                    */}
+                    <span className="board-tape__line">
+                      <span className="board-tape__line-size">
+                        {row.w} × {row.h}
+                      </span>
+                      {" · "}
+                      {formatUsdc(row.totalBaseUnits)}
+                      {" · "}
+                      {sinceLabel(now - Date.parse(row.paidAt))}
+                    </span>
+
+                    {/*
+                      THE CAPTION IS NOT HERE, and that is the payload's rule
+                      rather than an omission. `board.test.ts`: this response
+                      "ships no content whatsoever", and a caption is content.
+                      The hover pause is built and the words it would show are
+                      one on-demand fetch away — the same `/api/blocks/<id>` the
+                      hover card already uses — which is a batch of its own.
+                    */}
                     <span className="board-tape__numbers">
                       <span className="board-tape__size">
                         {row.w} × {row.h}

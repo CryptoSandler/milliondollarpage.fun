@@ -523,6 +523,15 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
       const left = leftEl!.getBoundingClientRect().width;
       const right = rightEl!.getBoundingClientRect().width;
 
+      /*
+        THE STRIP'S HEIGHT, PUBLISHED FOR CSS. The two ticker columns run from
+        under the header to the top of the strip, and neither the stylesheet nor
+        a constant can know how tall the strip actually is — it is set by the
+        purchase panel, which is set by its own type. This is the measured
+        number, written where a `bottom:` can read it.
+      */
+      document.documentElement.style.setProperty("--strip-h", `${strip}px`);
+
       setChrome({
         top: top + BOARD_INSET,
         right: right + BOARD_INSET,
@@ -698,6 +707,17 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           />
         </PurchaseTape>
         <BoardStandings rows={board.standings} />
+
+        {/*
+          THE SECOND FACE OF THE REGISTER, down the other side of the wall.
+
+          It is `aria-hidden`, headless and untabbable — see `echo` in
+          `PurchaseTape` — so this is one register drawn twice rather than two
+          registers. Where the ticker is in the strip the stylesheet hides it
+          entirely; where it runs down the gaps this is the half that climbs the
+          right-hand one.
+        */}
+        <PurchaseTape rows={board.tape} asOf={board.asOf} echo />
       </div>
 
       <div ref={leftRailRef} className="board-side board-side--left">
