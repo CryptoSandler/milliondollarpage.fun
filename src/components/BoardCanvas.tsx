@@ -393,6 +393,19 @@ type Props = {
   boardRef: RefObject<HTMLCanvasElement | null>;
   onSelectionChange: (selection: Selection | null) => void;
   onHoverChange: (rect: BoardRect | null, at: Point | null) => void;
+  /**
+   * A CLICK on a rectangle, which is a different question from resting on one.
+   *
+   * Since 2026-09-03 the two are separate gestures with separate answers:
+   * hovering shows a small tooltip with the caption, and CLICKING opens the
+   * full card. `DECISIONS.md` carries the reversal — the day before, hover was
+   * to show nothing at all.
+   *
+   * Null means "close whatever is open": a click that lands on bare wall. The
+   * canvas decides that rather than BoardView, because the canvas is the only
+   * thing that knows what a click landed on.
+   */
+  onBlockOpen: (rect: BoardRect | null, at: Point | null) => void;
   /** Reports which ends of the ladder still have a rung, so the buttons can be disabled at the ends. */
   onZoomStateChange: (state: ZoomState) => void;
   /**
@@ -433,6 +446,7 @@ export default function BoardCanvas({
   boardRef,
   onSelectionChange,
   onHoverChange,
+  onBlockOpen,
   onZoomStateChange,
   onActivate,
   activateHint,
@@ -1213,6 +1227,28 @@ export default function BoardCanvas({
       return;
     }
 
+    /*
+      A CLICK ON A RECTANGLE OPENS ITS CARD, AND STARTS NO SELECTION.
+
+      Nothing is lost by refusing the drag: a rectangle that CONTAINS a live
+      pixel collides wherever it ends, so a selection begun on a sold block was
+      never a selection anybody could buy — it was a click that produced a
+      refusal instead of an answer. Now it produces the answer.
+
+      A preset is the exception and it is handled above: a preset placed over
+      sold pixels is a real gesture with a real refusal, and it keeps it.
+    */
+    const under = rects.find((candidate) => rectContains(candidate, at));
+    if (under) {
+      const box = event.currentTarget.getBoundingClientRect();
+      onBlockOpen(under, { x: event.clientX - box.left, y: event.clientY - box.top });
+      drag.current = { kind: "none" };
+      return;
+    }
+
+    // Bare wall: whatever card is open is being dismissed by this click, which
+    // is the same gesture as starting a new selection and not a second one.
+    onBlockOpen(null, null);
     drag.current = { kind: "select", from: at, to: at, movement: 0 };
     publish(selectionFromDrag(at, at, rects, perPixel));
   }
@@ -1321,10 +1357,22 @@ export default function BoardCanvas({
     // fit scale, so a one-pixel tap target would be a lottery rather than a
     // choice. Drag or zoom in to buy fewer.
     if (current.touch) {
+      // A touchscreen has no hover, so a tap is the ONLY gesture it has: a tap
+      // on a rectangle has to be the one that reads it, exactly as a click is
+      // on a mouse. A tap on bare wall still places the selection, which is how
+      // anything gets bought on a phone at all.
+      const under = rects.find((candidate) => rectContains(candidate, current.from));
+      if (under) {
+        const box = event.currentTarget.getBoundingClientRect();
+        onBlockOpen(under, { x: event.clientX - box.left, y: event.clientY - box.top });
+        return;
+      }
+      onBlockOpen(null, null);
       presetPlaced.current = true;
       publish(selectionFromPreset(current.from, activePreset ?? RULE_PIXELS, rects, perPixel));
       return;
     }
+    onBlockOpen(null, null);
     publish(null);
   }
 

@@ -8,7 +8,7 @@ import type { BlockDetails, BoardRect, BoardStats, Standing } from "../lib/board
 import type { Wall } from "../lib/board/composite";
 import type { Point } from "../lib/board/geometry";
 import { holdMinutes } from "../lib/board/hold-clock";
-import { offerLine, unitOfSale } from "../lib/board/pricing";
+import { formatUsdc, offerLine, unitOfSale } from "../lib/board/pricing";
 import { walletSigner } from "../lib/board/purchase-client";
 import type { Selection } from "../lib/board/selection";
 import type { TapeRow } from "../lib/board/tape";
@@ -88,6 +88,22 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
   const [selection, setSelection] = useState<Selection | null>(null);
   const [activePreset, setActivePreset] = useState<number | null>(null);
   const [hovered, setHovered] = useState<{ rect: BoardRect; at: Point } | null>(null);
+  /**
+   * The rectangle whose FULL card is open, which is a different thing from the
+   * one under the pointer.
+   *
+   * Two gestures, two answers, settled 2026-09-03 and reversing the day
+   * before's decision that hover would show nothing at all: resting on a
+   * rectangle shows a small tooltip with its caption, the way the original page
+   * did, and clicking it opens the card. `DECISIONS.md` has both.
+   *
+   * WHY THEY ARE SEPARATE STATE rather than one with a mode: they can be two
+   * different rectangles at once — a card is open on one while the pointer
+   * travels over others — and collapsing them would make moving the mouse
+   * close a card nobody dismissed.
+   */
+  const [opened, setOpened] = useState<{ rect: BoardRect; at: Point } | null>(null);
+  const openedCardRef = useRef<HTMLDivElement>(null);
   const [chrome, setChrome] = useState<Chrome>(FALLBACK_CHROME);
   /**
    * The connected wallet, and with it the buyer's address.
@@ -250,6 +266,54 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
       setDetails((current) => new Map(current).set(id, found));
     });
   }, []);
+
+  /**
+   * A click on a rectangle, or on bare wall.
+   *
+   * It asks for the words itself rather than relying on the hover having asked:
+   * a touchscreen has no hover, so on a phone this is the FIRST thing that ever
+   * mentions the rectangle, and a card that waited for a pointer that does not
+   * exist would sit empty for ever.
+   */
+  const openBlock = useCallback(
+    (rect: BoardRect | null, at: Point | null) => {
+      setOpened(rect && at ? { rect, at } : null);
+      if (rect) requestDetails(rect.id);
+    },
+    [requestDetails],
+  );
+
+  /*
+    ESCAPE CLOSES THE CARD, and it is a separate listener from the canvas's own
+    because it answers a different question: the canvas clears the SELECTION on
+    Escape, and a reader who has opened a card and presses Escape means the
+    card. So this one runs first in the sense that matters — it stops there if a
+    card is open, leaving the selection alone, which is what somebody who was
+    mid-purchase and glanced at a neighbour's rectangle expects.
+  */
+  useEffect(() => {
+    if (!opened) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      setOpened(null);
+      boardRef.current?.focus();
+    }
+    // Capture, so this runs before the canvas's window listener and can stop it
+    // from also clearing a selection the reader still wants.
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [opened]);
+
+  /*
+    THE CARD TAKES FOCUS WHEN IT OPENS, so Escape reaches the listener above
+    wherever the reader's focus happened to be, and so a keyboard reaching the
+    card's link does not first have to tab through the whole board. Focus goes
+    back to the board when it closes, which is where the reader was.
+  */
+  useEffect(() => {
+    if (opened) openedCardRef.current?.focus();
+  }, [opened]);
 
   const rememberOwnHold = useCallback((orderId: string) => {
     setOwnHoldIds((current) => (current.includes(orderId) ? current : [orderId, ...current]));
@@ -577,81 +641,76 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
         boardRef={boardRef}
         onSelectionChange={setSelection}
         onHoverChange={handleHover}
+        onBlockOpen={openBlock}
         onZoomStateChange={handleZoomStateChange}
         onActivate={handleBuy}
         activateHint={buyState.hint}
       />
 
+      {/*
+        THE HEADER IN THREE ZONES, settled by the owner 2026-09-03.
+
+        Left is the product's NAME and nothing else. Centre is the one figure
+        this whole page turns on — how many pixels are left — with the share
+        sold as a small suffix rather than a second number competing with it.
+        Right is everything a reader REACHES FOR, in the order they reach: what
+        this is, how to buy it, the register they read it in, and the wallet
+        they buy with, hard against the edge.
+
+        IT IS A GRID AND NOT A FLEX ROW, and that is the whole reason the middle
+        zone can be trusted. `1fr auto 1fr` centres the figure on the WINDOW; a
+        flex row with `ml-auto` centres it on whatever the two sides left over,
+        so the figure drifted left every time the wallet control changed from
+        "Connect wallet" to an address. A number that moves when something else
+        changes is a number a reader stops reading.
+      */}
       <header ref={topBarRef} className="board-bar board-bar--top">
-        <h1
-          className="flex shrink-0 items-center gap-2 font-display text-[15px] font-bold tracking-tight"
-          title={offerLine(board.pricePerPixelBaseUnits)}
-        >
-          <span
-            aria-hidden
-            className="size-2.5 rounded-full bg-ink"
-          />
+        <h1 className="board-bar__mark" title={offerLine(board.pricePerPixelBaseUnits)}>
+          <span aria-hidden className="size-2.5 rounded-full bg-ink" />
           milliondollarpage.fun
         </h1>
 
-        <div className="ml-auto min-w-0">
+        <div className="board-bar__figure">
           <BoardCounters stats={board.stats} />
         </div>
-        {/*
-          Who else is here. It sits after the counters in the shed order, which
-          puts it among the first things to go as the bar narrows — the offer
-          and the count are what the bar is for, and this is context. It is
-          also the only thing in the bar that is about people rather than
-          pixels, which is why it carries a dot and not a number alone.
-        */}
-        <OnlineBanner online={board.online} views={board.views} className="online-banner--bar" />
-        {/*
-          The way to the answers, in the bar rather than buried in the
-          checkout. What losing a key costs and what a takedown does are things
-          somebody should be able to read BEFORE they have a rectangle held and
-          a clock running — the confirmation screen carries the short form and
-          links to the same page.
 
-          It is a real link and not a dialog, so it can be opened in a tab,
-          read at length and sent to somebody else. Below `sm` it gives way
-          with everything else the bar sheds.
-        */}
-        {/* Beside the questions link, because both are things a reader
-            reaches for rather than things the board is about. */}
         {/*
-          THE WALLET CONTROL AND THE SWITCH, TOGETHER ON THE RIGHT.
-
-          It sat after the wordmark for one deploy and the owner saw it at 2495:
-          the left of this bar is the product's name and nothing else, and the
-          things a reader reaches FOR belong together at the end of the row. It
-          is OUTSIDE the `sm:flex` span beside it on purpose — the switch and the
-          questions give way on a phone and this does not.
+          WHO ELSE IS HERE HAS LEFT THIS BAR. It was the only thing in the
+          header about people rather than pixels, and the header is now three
+          zones with nothing spare in any of them. It is still on the page — the
+          register carries it, in both layouts — and `/stats` has the history.
+          The copy in the register is the one that BEATS now: exactly one copy
+          on the page tells the server this browser is here, and the one that
+          used to do it was this.
         */}
-        <WalletConnect
-        ref={walletRef}
-        wallets={wallet.wallets}
-        connected={wallet.connected}
-        connecting={wallet.connecting}
-        notice={wallet.notice}
-        disabled={purchaseSelection !== null}
-        needed={walletNeeded}
-        onConnect={wallet.connect}
-        onDisconnect={wallet.disconnect}
-        />
-
-        <span className="ml-3 hidden shrink-0 items-center gap-2 sm:flex">
-          <ThemeToggle />
-          {/* "Questions" was the right word when the page behind it was the small
-              print. It is a landing now — what this is, how buying works, where
-              the idea came from — with the questions at the end, so the link
-              says what a reader clicking it is going to find. */}
-          <Link href="/how-to-buy" className="btn-quiet shrink-0 px-2.5 py-1.5 text-[12.5px]">
-            How to buy
-          </Link>
-          <Link href="/faq" className="btn-quiet shrink-0 px-2.5 py-1.5 text-[12.5px]">
-            What this is
-          </Link>
-        </span>
+        <div className="board-bar__tools">
+          <span className="board-bar__links">
+            <Link href="/faq" className="btn-quiet shrink-0 px-2.5 py-1.5 text-[12.5px]">
+              What this is
+            </Link>
+            <Link href="/how-to-buy" className="btn-quiet shrink-0 px-2.5 py-1.5 text-[12.5px]">
+              How to buy
+            </Link>
+            <ThemeToggle />
+          </span>
+          {/*
+            LAST, AND HARD AGAINST THE EDGE. It is outside the span beside it on
+            purpose: the two links and the switch give way on a phone and the
+            wallet does not — a board somebody cannot connect to is a board
+            somebody cannot buy from.
+          */}
+          <WalletConnect
+            ref={walletRef}
+            wallets={wallet.wallets}
+            connected={wallet.connected}
+            connecting={wallet.connecting}
+            notice={wallet.notice}
+            disabled={purchaseSelection !== null}
+            needed={walletNeeded}
+            onConnect={wallet.connect}
+            onDisconnect={wallet.disconnect}
+          />
+        </div>
       </header>
 
       {/*
@@ -695,14 +754,16 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
       <div ref={rightRailRef} className="board-side board-side--right">
         <PurchaseTape ref={tapeRef} rows={board.tape} asOf={board.asOf}>
           {/*
-            The second copy of the count, and the one the rail shows. It does
-            not beat: exactly one copy on the page tells the server this browser
-            is here, and it is the one in the bar. See `OnlineBanner`.
+            THE ONLY COPY ON THE PAGE NOW, and therefore the one that beats: it
+            is what tells the server this browser is here. It moved out of the
+            header on 2026-09-03 when the header became three zones — see there
+            — and it lands here because the register is the one part of the
+            chrome that exists in every layout, so the count never has a width
+            at which it has nowhere to be.
           */}
           <OnlineBanner
             online={board.online}
             views={board.views}
-            beat={false}
             className="online-banner--rail"
           />
         </PurchaseTape>
@@ -807,9 +868,23 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
       </div>
       </div>
 
-      {hovered && (
+      {/*
+        RESTING ON A RECTANGLE SHOWS ONE SMALL LINE, AND CLICKING IT SHOWS THE
+        CARD. Two gestures, two answers, decided 2026-09-03 — see `DECISIONS.md`,
+        which also records the day-before decision this reverses (hover was to
+        show nothing at all) and the original page this is borrowed from, where
+        resting on a rectangle has always produced a tooltip.
+
+        WHAT THE TOOLTIP MAY COST THE READER IS ITS OWN AREA AND NOT A PIXEL
+        MORE. It is one line, it never grows past the width of the card it
+        replaces, and it has no pointer events — so it cannot swallow the click
+        that opens the card underneath it. There is no delay either way: a
+        tooltip that waits is a tooltip that arrives after the reader has moved
+        on, and a wall of a million pixels is read by sweeping across it.
+      */}
+      {hovered && opened?.rect.id !== hovered.rect.id && (
         <div
-          className="floating-card pointer-events-none fixed z-20 w-56 p-3"
+          className="floating-card pointer-events-none fixed z-20 max-w-[224px] truncate px-2.5 py-1.5 text-[12.5px] font-semibold text-ink"
           style={{
             /* Inside the board's own free region, never merely inside the
                window — see `hoverCardLeft`, and the rails it exists for. */
@@ -818,16 +893,60 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
               typeof window === "undefined" ? 1200 : window.innerWidth,
               chrome,
             ),
-            top: Math.max(chrome.top + 8, hovered.at.y - 96),
+            top: Math.max(chrome.top + 8, hovered.at.y - 34),
           }}
         >
+          {tooltipLine(
+            hovered.rect,
+            details.get(hovered.rect.id)?.caption ?? null,
+            board.pricePerPixelBaseUnits,
+          )}
+        </div>
+      )}
+
+      {opened && (
+        <div
+          ref={openedCardRef}
+          /*
+            IT TAKES POINTER EVENTS, WHICH THE HOVER CARD NEVER DID — and that
+            is most of the reason clicking is worth having. The card carries the
+            buyer's link, and for as long as it only existed under a pointer
+            that was passing over it, that link could not be followed by
+            anybody. Now it can.
+          */
+          className="floating-card fixed z-30 w-56 p-3"
+          role="dialog"
+          aria-label="This rectangle"
+          tabIndex={-1}
+          style={{
+            left: hoverCardLeft(
+              opened.at.x,
+              typeof window === "undefined" ? 1200 : window.innerWidth,
+              chrome,
+            ),
+            top: Math.max(chrome.top + 8, opened.at.y - 96),
+          }}
+        >
+          <button
+            type="button"
+            /* A close of its own, because Escape is not discoverable and a
+               touchscreen has no Escape at all. */
+            className="btn-quiet absolute right-1.5 top-1.5 px-1.5 py-0.5 text-[12px] leading-none"
+            onClick={() => {
+              setOpened(null);
+              boardRef.current?.focus();
+            }}
+          >
+            <span aria-hidden>×</span>
+            <span className="sr-only">Close</span>
+          </button>
           {/*
             The rectangle and its state come off the board payload and are
-            there the instant the pointer arrives. The caption and the link do
-            not: they are fetched for this one rectangle, so the card says what
-            it knows first and fills the words in when they land. A hold
-            publishes neither, and never will — and it has no picture either,
-            so it gets no frame rather than an empty one.
+            there the instant the card opens. The caption and the link do not:
+            they are fetched for this one rectangle, so the card says what it
+            knows first and fills the words in when they land. A hold publishes
+            neither, and never will — and it has no picture either, so it gets
+            no frame rather than an empty one.
 
             The card itself is BlockCard, which the checkout also renders. That
             is the whole point: what a buyer is shown before paying and what a
@@ -835,18 +954,18 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
             to disagree about how a rectangle looks.
           */}
           <BlockCard
-            id={hovered.rect.id}
-            imageSrc={hovered.rect.status === "reserved" ? null : blockImageUrl(hovered.rect.id)}
-            caption={details.get(hovered.rect.id)?.caption ?? null}
-            link={details.get(hovered.rect.id)?.link ?? null}
-            clicks={details.get(hovered.rect.id)?.clicks}
-            rect={hovered.rect}
+            id={opened.rect.id}
+            imageSrc={opened.rect.status === "reserved" ? null : blockImageUrl(opened.rect.id)}
+            caption={details.get(opened.rect.id)?.caption ?? null}
+            link={details.get(opened.rect.id)?.link ?? null}
+            clicks={details.get(opened.rect.id)?.clicks}
+            rect={opened.rect}
             state={
-              hovered.rect.status === "reserved"
-                ? { kind: "held", own: ownHoldIds.includes(hovered.rect.id) }
+              opened.rect.status === "reserved"
+                ? { kind: "held", own: ownHoldIds.includes(opened.rect.id) }
                 : { kind: "sold" }
             }
-                      perPixel={board.pricePerPixelBaseUnits}
+            perPixel={board.pricePerPixelBaseUnits}
           />
         </div>
       )}
@@ -884,4 +1003,24 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
       )}
     </div>
   );
+}
+
+/**
+ * The one line a tooltip says about a rectangle somebody is resting on.
+ *
+ * THE CAPTION IF THERE IS ONE, because that is what the buyer wrote and what
+ * the original page showed. Its size and its price when there is not — never
+ * "No caption", which spends a reader's attention telling them about an absence
+ * rather than about the rectangle. A hold says it is held and nothing else: a
+ * reservation publishes no words at all, and thirty minutes of somebody's
+ * unfinished purchase is not a thing to advertise.
+ *
+ * It lives here rather than inside BlockCard because it is the SHORT answer and
+ * that card is the long one; folding both into one component would be a card
+ * with a mode, and the two are read at different moments for different reasons.
+ */
+function tooltipLine(rect: BoardRect, caption: string | null, perPixel: number): string {
+  if (rect.status === "reserved") return "On hold mid-purchase";
+  if (caption && caption.trim() !== "") return caption;
+  return `${rect.w} × ${rect.h} · ${formatUsdc(rect.w * rect.h * perPixel)}`;
 }

@@ -54,7 +54,19 @@ export default function SelectionPanel({
   onBuy: () => void;
 }) {
   return (
-    <section className="selection-panel flex min-w-0 flex-1 items-center gap-x-4">
+    <section className="selection-panel">
+      {/*
+        ONE ROW: the readout on the left, the button on the right, and the
+        warning underneath BOTH of them rather than under the button.
+
+        Settled with the strip's three zones on 2026-09-03. The hint used to
+        hang off the bottom of `.selection-buy`, right-aligned under the button
+        and capped at 19rem — which meant a refusal ("these pixels are taken")
+        set the width of the button's column, and the whole panel grew sideways
+        to carry a sentence. On its own line it is as wide as the panel already
+        is and the box does not move when the sentence changes.
+      */}
+      <div className="selection-panel__row">
       {/*
         The same four pixels as the wallet row, for the same reason and found the
         same way. `overflow-x: auto` clips at the padding box, so without `p-1`
@@ -105,7 +117,7 @@ export default function SelectionPanel({
         )}
       </div>
 
-      <div className="selection-buy flex shrink-0 flex-col items-end gap-1">
+      <div className="selection-buy">
         <button
           type="button"
           onClick={onBuy}
@@ -115,15 +127,26 @@ export default function SelectionPanel({
           Buy<span className="hidden sm:inline"> these pixels</span>
           {selection && canBuy && <span className="tabular"> — {formatUsdc(selection.totalBaseUnits)}</span>}
         </button>
-        <p
-          className={`line-clamp-2 max-w-[10rem] text-right text-[11.5px] leading-tight sm:max-w-[19rem] ${
-            hintTone === "refused" ? "font-semibold text-danger" : "hidden text-body sm:block"
-          }`}
-          title={hint}
-        >
-          {hint}
-        </p>
       </div>
+      </div>
+
+      {/*
+        THE WARNING, ON ITS OWN LINE AND INSIDE THE SAME BOX.
+
+        `line-clamp-2` is what keeps it from being a third line: two lines is
+        what the strip's height allows, and a hint that could take three would
+        move the wall. Info-toned hints still give way below `sm`; a REFUSAL
+        never does — a phone that hides the reason a button is dead is a phone
+        showing somebody a dead button.
+      */}
+      <p
+        className={`selection-hint line-clamp-2 text-[11.5px] leading-tight ${
+          hintTone === "refused" ? "font-semibold text-danger" : "hidden text-body sm:block"
+        }`}
+        title={hint}
+      >
+        {hint}
+      </p>
     </section>
   );
 }

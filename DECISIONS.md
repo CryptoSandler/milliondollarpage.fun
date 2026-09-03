@@ -445,3 +445,113 @@ mechanism — the buyer who resumed still gets it at `/content`.
 **The property that had to survive:** a resume must not mint a NEW fraction, or
 a payment already in flight becomes unattributable. That is still tested, now
 read off the database row instead of the response.
+
+---
+
+## Reversed: resting on a rectangle shows a tooltip again
+
+**Status: settled 2026-09-03, reversing 2026-09-02.**
+
+On 2026-09-02 the owner ruled that **nothing** appears when the pointer passes
+over a sold rectangle, and that the card opens on a CLICK. The reasoning was
+sound and is worth keeping written down: a card that appears under a moving
+pointer covers artwork somebody paid for, and it covers a different rectangle
+every time the mouse moves.
+
+On 2026-09-03 the owner reversed the first half and kept the second. Resting on
+a rectangle shows **one small line** — the caption, or `W × H · $price` when
+there is no caption, or "on hold" for a reservation. Clicking still opens the
+full card.
+
+**What changed the answer:** the original page does this, and it is the gesture
+every visitor arrives already knowing. Showing nothing on hover makes a wall of
+a million pixels feel inert — a reader sweeping across it learns nothing until
+they commit to a click, and most of them will not.
+
+**What survives from the decision it reverses**, and this is the part that made
+the reversal cheap: the objection was about AREA, not about hover. So the
+tooltip is one line, never wider than the card it replaced, carries no pointer
+events, and appears with no delay. What may be covered is the tooltip's own
+footprint and nothing beyond it.
+
+**Where it lives:** `tooltipLine` in `src/components/BoardView.tsx` writes the
+line; `onBlockOpen` in `src/components/BoardCanvas.tsx` is the click. A tap on a
+touchscreen is a click, because a touchscreen has no hover at all.
+
+---
+
+## Reversed: `/buyers` exists, and it lists rectangles
+
+**Status: settled 2026-09-03, reversing 2026-09-02.**
+
+A public list of everything sold was refused on 2026-09-02, on the grounds that
+a list of purchases is a list of buyers and this site names nobody. That
+objection is correct about a list of BUYERS and it is the reason this page is
+built the way it is.
+
+On 2026-09-03 the owner reversed it. `/buyers` lists every paid rectangle in the
+order it was bought: a small picture at the rectangle's real proportion, the
+caption, the link through `/go/<id>`, the size, the date, and a link to its own
+page. Fifty to a page.
+
+**The subtraction is the whole design, and it is the same one `tape.ts` makes
+for the register.** `buyer_pubkey`, `owner_wallet` and `payment_signature` are
+not selected. `src/lib/board/buyers.ts` states that as the rule, and
+`src/app/__tests__/buyers.test.tsx` renders the page over a row whose wallet is
+a recognisable string, asserts the string is absent, and then asserts that
+nothing SHAPED like a base58 address is present either — because the fixture's
+own string is not what a column added next year would carry.
+
+**Why it is worth having:** it is the only page on the site where a buyer's
+rectangle is a row somebody can link to, and it is the answer to "is anybody
+actually buying this" that a percentage cannot give.
+
+**Ascending order, permanently.** Purchase #1 is the first pixel ever sold and
+stays #1. Newest-first would renumber every row on every sale and make a link to
+page 3 point somewhere different every day.
+
+---
+
+## Settled: the contact address is printed, and is not a link yet
+
+**Status: settled 2026-09-03.**
+
+`contact@milliondollarpage.fun` appears at the foot of every page that carries
+prose, and in the FAQ's invitation to report a mismatch. It is rendered as
+**text and not as a `mailto:` link**.
+
+**Why:** the mailbox does not exist. The domain is at Namecheap and the owner
+has decided to put Private Email on it at the end of the build rather than now.
+A `mailto:` on an address that bounces spends somebody's message without ever
+telling them it failed; text invites them to copy it, and a copied address that
+bounces at least bounces where they can see it.
+
+**The door, and it is one line:** when the mailbox is live, wrap the address in
+an `<a>` in `src/components/SiteFooter.tsx` and in the FAQ answer, and delete the
+`mailto:` assertion in `src/app/__tests__/contact.test.tsx`. Nothing else
+changes. Forwarding at the registrar is the cheaper first step and reaches the
+same address; Private Email is what is needed for a reply to come FROM it.
+
+---
+
+## Settled: the register's items are clipped to their own box
+
+**Status: settled 2026-09-03, chosen from two versions side by side.**
+
+Each item in the vertical register keeps `overflow: hidden` and `flex-shrink: 0`.
+
+**What it fixes, measured rather than argued.** A bare item paints its size
+across its own colour, and the label is centred in a box that can be narrower
+than the label — a 6×28 purchase comes out 34px wide at the height cap. At
+2495×1484 with the twenty-purchase fixture, **24 of 80 items had their label
+outside their box**, by up to 29px, painting over the artwork of the item below.
+The artwork overlay covers the box; it cannot cover what leaves the box.
+
+**How it was decided.** Both versions ran on a local server behind `?ticker=v1`
+and `?ticker=v2` so the owner could hold one against the other. v2 won. **The
+switch is deleted**, along with the attribute that gated it — a switch left in
+after a decision is a second layout nobody is testing.
+
+**What was NOT a defect:** the left column already started flush with the frame
+at y=34, on both sides, at every width. The gap at the top of it was Next's own
+dev-mode badge sitting over the page.

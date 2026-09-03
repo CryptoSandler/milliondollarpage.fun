@@ -1722,4 +1722,165 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
     },
     120_000,
   );
+
+  /**
+   * TWO GESTURES ON A SOLD RECTANGLE, and the only place they can be told
+   * apart is a real browser.
+   *
+   * `DECISIONS.md`, "Reversed: resting on a rectangle shows a tooltip again":
+   * hovering shows ONE LINE and clicking opens the FULL CARD. Everything about
+   * that lives in pointer events, React state and CSS at once — the canvas
+   * decides what a click landed on, BoardView decides which of the two is
+   * showing, and the stylesheet decides whether the thing that is showing can
+   * be clicked through. A unit test of any one of those three passes while the
+   * feature is broken.
+   *
+   * IT ASKS THE RENDERER WHERE THE BOARD IS rather than sweeping the canvas for
+   * it. `data-board-rect` is the box the canvas just painted with — the same
+   * number the fit guard above reads — so a board coordinate becomes a screen
+   * coordinate without a second copy of `viewport.ts` living in a test, and a
+   * second copy that agreed with the first would prove nothing about the first.
+   *
+   * The sweep this replaced worked and was unusable: two animation frames per
+   * probe over a grid of a thousand points is half a minute of wall clock
+   * before it reaches a rectangle at board y=200, and it spent the whole 120s
+   * budget the first time it ran here.
+   *
+   * `setPointerCapture` is stubbed because a synthetic pointer has no capture
+   * to take and the real one throws `NotFoundError` on it. Nothing else about
+   * the events is faked.
+   */
+  it(
+    "shows one line on hover, the whole card on a click, and closes on Escape",
+    async () => {
+      await execute(
+        `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
+                             buyer_pubkey, payment_signature, caption)
+         VALUES (200, 200, 300, 200, 'paid', $1, $2, now(), $3, $4, $5)`,
+        [1_000_000, 300 * 200 * 1_000_000, testWallet().address, "sig-hover", "A caption to read"],
+      );
+
+      await browser.goto(`${server.origin}/`);
+      await waitFor("the board to report where it painted", () =>
+        browser.evaluate<boolean>("!!document.querySelector('canvas')?.dataset.boardRect"),
+      );
+
+      await browser.evaluate(`(() => {
+        Element.prototype.setPointerCapture = function () {};
+        Element.prototype.releasePointerCapture = function () {};
+        // A board coordinate, as a point on the glass. The canvas publishes the
+        // box it painted; 1250x800 is the board's own size.
+        window.__board = function (bx, by) {
+          const c = document.querySelector("canvas");
+          const box = c.getBoundingClientRect();
+          const [x, y, w, h] = c.dataset.boardRect.split(",").map(Number);
+          return { c, clientX: box.left + x + (bx / 1250) * w, clientY: box.top + y + (by / 800) * h };
+        };
+        window.__at = function (type, bx, by) {
+          const p = window.__board(bx, by);
+          p.c.dispatchEvent(new PointerEvent(type, {
+            bubbles: true, cancelable: true, composed: true, pointerId: 1,
+            pointerType: "mouse", isPrimary: true, button: 0,
+            buttons: type === "pointerup" ? 0 : 1,
+            clientX: p.clientX, clientY: p.clientY,
+          }));
+        };
+        window.__frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      })()`);
+
+      // The middle of the rectangle seeded above, and a corner of bare wall.
+      const ON = "350, 300";
+      const OFF = "40, 40";
+
+      await browser.evaluate(`(async () => { window.__at("pointermove", ${ON}); await window.__frame(); })()`);
+
+      await waitFor("a tooltip on the rectangle under the pointer", () =>
+        browser.evaluate<boolean>(`!!document.querySelector(".floating-card")`),
+      );
+
+      /*
+        THE CAPTION ARRIVES AFTER THE TOOLTIP DOES, and waiting for it is the
+        difference between this test and a flake. The board's payload carries no
+        words at all — resting on a rectangle is what asks for them — so the
+        first frame of the tooltip says the size and the price, and the caption
+        replaces it one request later. The pointer has not moved, so nothing but
+        that request is outstanding.
+      */
+      await waitFor("the caption to reach the tooltip", () =>
+        browser.evaluate<boolean>(
+          `document.querySelector(".floating-card")?.textContent === "A caption to read"`,
+        ),
+      );
+
+      const settled = await browser.evaluate<{
+        text: string;
+        width: number;
+        pointerEvents: string;
+        isCard: boolean;
+      }>(`(() => {
+        const tip = document.querySelector(".floating-card");
+        return { text: tip.textContent,
+                 width: Math.round(tip.getBoundingClientRect().width),
+                 pointerEvents: getComputedStyle(tip).pointerEvents,
+                 isCard: !!tip.querySelector(".block-card-thumb") };
+      })()`);
+
+      // The caption the buyer wrote, and nothing else.
+      expect(settled.text).toBe("A caption to read");
+      // NOT the card: no thumbnail, and it cannot be clicked through to.
+      expect(settled.isCard).toBe(false);
+      expect(settled.pointerEvents).toBe("none");
+      // Never wider than the card it replaced. `HOVER_CARD_W` is 224.
+      expect(settled.width).toBeLessThanOrEqual(224);
+
+      const card = await browser.evaluate<{
+        thumb: boolean;
+        link: boolean;
+        pointerEvents: string;
+        focused: boolean;
+        text: string;
+      } | null>(`(async () => {
+        window.__at("pointerdown", ${ON});
+        window.__at("pointerup", ${ON});
+        await window.__frame(); await window.__frame();
+        const card = document.querySelector('[role="dialog"]');
+        if (!card) return null;
+        return { thumb: !!card.querySelector(".block-card-thumb"),
+                 link: !!card.querySelector('a[href^="/go/"]'),
+                 pointerEvents: getComputedStyle(card).pointerEvents,
+                 focused: document.activeElement === card,
+                 text: card.textContent };
+      })()`);
+
+      expect(card).not.toBeNull();
+      expect(card!.thumb).toBe(true);
+      expect(card!.text).toContain("A caption to read");
+      expect(card!.text).toContain("Sold");
+      // The whole reason a click is worth having: the card can be reached.
+      expect(card!.pointerEvents).toBe("auto");
+      expect(card!.focused).toBe(true);
+
+      const afterEscape = await browser.evaluate<boolean>(`(async () => {
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        await window.__frame(); await window.__frame();
+        return !!document.querySelector('[role="dialog"]');
+      })()`);
+      expect(afterEscape).toBe(false);
+
+      // And a click on bare wall closes it too, which is the gesture most
+      // people will actually use.
+      const afterBareWall = await browser.evaluate<{ opened: boolean; closed: boolean }>(`(async () => {
+        window.__at("pointerdown", ${ON});
+        window.__at("pointerup", ${ON});
+        await window.__frame(); await window.__frame();
+        const opened = !!document.querySelector('[role="dialog"]');
+        window.__at("pointerdown", ${OFF});
+        window.__at("pointerup", ${OFF});
+        await window.__frame(); await window.__frame();
+        return { opened, closed: !document.querySelector('[role="dialog"]') };
+      })()`);
+      expect(afterBareWall).toEqual({ opened: true, closed: true });
+    },
+    120_000,
+  );
 });

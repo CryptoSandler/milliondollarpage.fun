@@ -1074,17 +1074,74 @@ the arithmetic is what fails a build.
 
 ### The vertical chrome budget
 
-**≤ 130px without rails**, measured at 127: a 34px header, a 92px strip, and the
-board's own inset counted separately. **≤ 34px with the rails on**, which is the
-header alone. **≤ 260px at 390**, which is a different question wearing the same
-units — the board there is fitted by its WIDTH, 370px of free width against 844
-of height, so vertical chrome costs it nothing at all and the number is a sanity
-ceiling rather than a claim about the wall's share.
+**≤ 127px without rails, set 2026-09-03 and it is a measurement rather than a
+round number.** A 34px header plus a 93px strip, with the board's own inset
+counted separately. **≤ 34px with the rails on**, which is the header alone. **≤
+256px at 390**, which is a different question wearing the same units — the board
+there is fitted by its WIDTH, 370px of free width against 844 of height, so
+vertical chrome costs it nothing at all and the number is a sanity ceiling
+rather than a claim about the wall's share.
+
+**Why the number changed, and why it did not change further.** It was 130 with
+four pixels of slack in it. The header and the strip were both rebuilt on
+2026-09-03 into three zones each, and the measurement afterwards is 127 — the
+same as before, because the reorder moved things rather than removing them. The
+owner's estimate going in was ~98. It is not 98, and the arithmetic says why:
+the strip's height is the purchase panel's, and the panel is a 46px readout over
+a refusal that is allowed **two lines**. Clipping the refusal to one line buys
+14px of wall and costs a buyer the reason their Buy button is dead. That is the
+trade this design does not take, so the budget is the honest 127 and the guard's
+ceiling is exactly it — no slack, so the next thing that grows the chrome has to
+say so out loud.
+
+**The rule that outranks the number** is *nothing stands on the wall, at any
+width*, settled 2026-09-02. The old ≤60 idle belonged to the regime where the
+preset pill and the instruction line stood ON the board between selections. It
+does not survive that rule and it is not what this budget is measured against.
 
 **It is one number now where there were two.** The old budget was 60 idle and
 140 with the panel open, because the panel came and went. Idle and selected
 measure the same, and a difference between them is a bug rather than a second
 budget.
+
+### The header and the strip, in three zones each
+
+**Settled 2026-09-03.** Both bands are grids of `1fr auto 1fr` rather than flex
+rows, and that is what makes the middle of each trustworthy.
+
+**The header.** Left is the wordmark and nothing else. Centre is the one figure
+the page turns on — `712,872` in 22px mono with `PIXELS LEFT` under its own
+tracking and `· 28.71% sold` as a small suffix, so the share qualifies the count
+instead of arguing with it. Right is what a reader reaches for, in the order
+they reach: *What this is*, *How to buy*, the theme switch, and **Connect
+wallet** hard against the edge with the accent's own weight. `1 online · N
+views` has left the bar — the count is on `/stats` with its history, and the
+element that beats to say this browser is here rides in the register, which is
+the one piece of chrome that exists in every layout.
+
+Measured before: in a 2495 window the counter sat at x=1617, because a flex row
+with `ml-auto` centres on what the two sides left over, and the wallet control
+changes width the moment it holds an address. After: x=1115, width 271, centre
+1250 against a window centre of 1247.
+
+**The strip.** Presets and zoom on the left, the purchase panel centred, and
+nothing else on it. The panel is **560px** — the width its own widest content
+needs, `1,000,000 pixels · $1,000,000.00` beside `Buy these pixels —
+$1,000,000.00` — down from the 980px it took at 2495 when it was given the
+strip's slack. Inside it the readout is left, the Buy button right, and the red
+refusal is **on its own line under both**, which is what stops a long sentence
+setting the panel's width.
+
+**Where the centring gives way, and the arithmetic that decides it.** Centring a
+560px panel on the window needs `(V − 560) / 2 ≥ 534` — the tools are 510 wide
+and the strip's padding and gap are the rest. That holds from **1920 up** and
+fails at 1440 and 1280, where the panel sits to the right of the tools instead,
+still 560 and still not truncating. The alternative was a panel narrow enough to
+centre at 1440, which is 372px, and at 372 the readout the panel exists to show
+is clipped. **Nothing wraps and the strip stays 93px at every width**, which is
+the property that actually matters: the tools carry `min-width: max-content`
+above 640 because a `1fr` track's automatic minimum is min-content, and the
+preset pill wraps by design — without it the strip grew to 123px at 1280.
 
 ### What it cost the wall, measured before and after
 
@@ -1465,13 +1522,43 @@ artwork.
 | State | How it reads |
 | --- | --- |
 | Free | The paper's own near-black. Ruled, but only above the zoom where a wall pixel is about eight screen pixels; at fit it is plain paper |
-| Hovered | A one-step lift towards `ground-lift` and the caption card, no colour change |
+| Hovered | A one-step lift towards `ground-lift` and a one-line TOOLTIP, no colour change. The full card is a CLICK — see *Two gestures* below |
 | Selecting | `signal` outline with marching ants over a dark core and a `paper` ring, so a drag never looks like a placed block and never depends on the artwork under it |
 | Refused | The offending block outlined in `danger`, the selection outlined in `danger`, Buy disabled |
 | Held | **Its own value, not a variation on the sale's, and drawn by the canvas rather than baked into the wall.** Opaque like a sale, because those pixels are genuinely not for sale right now — `hold` `#5a6779`, **3.45:1 against the paper**, plainly lighter than the paper and plainly cooler and flatter than artwork, so the two are told apart at a glance and not by inspection. Over it, a `paper` hatch at 45° — the one angle neither tier of the ruling uses — and a broken `paper` edge where a sale carries an unbroken one. Wherever the block is big enough to read one it carries its own chip, **On hold**, in `text` on `hold` at **5.12:1**, in the place a sold block puts its caption. A hold **you** started adds the `signal` ring, because it is still your selection and the only held rectangle you can act on. The countdown stays live in the control it gates. A hold never shows an upload |
 | Sold | **The buyer's bitmap, nearest-neighbour at every zoom** — out of the wall at the overview, and out of its own stored bytes once the zoom is close enough for the ruling — with a 1px `paper` edge wherever there is room for one. The artwork is the treatment. The bitmap is composed into the wall at the size the rectangle was bought at: enlarged with nearest neighbour so pixel art stays hard-edged, reduced with a real filter so a photograph stays the photograph the buyer approved |
 | Sold, loading or missing | Solid `#1b2230`, edge to edge, 1px `paper` edge. This is the **fallback**, not the sold treatment: what the rectangle shows before the wall arrives, and what it keeps if its own bytes never decode. It is deliberately *lighter* than the paper rather than darker, because on a near-black wall a darker fallback is indistinguishable from a hole. Every sold rectangle gets it under the wall on every frame until the wall has decoded, so a sale reads as taken from the first paint. An upload with an alpha channel is composited onto the paper inside its own rectangle rather than onto this, and never onto the ruling — a sold rectangle is never ruled |
 | Taken down | Exactly like free, and it is **not** free. The content is gone from the wall and from every endpoint; the rectangle is still sold, still its owner's, and the selector still refuses it. Nothing on the board says a takedown happened, because a takedown is about what is displayed and the board is not a moderation log |
+
+## Two gestures on a sold rectangle, and they say different amounts
+
+**Since 2026-09-03, and it reverses 2026-09-02.** Resting on a sold rectangle
+shows **one line**: the buyer's caption, or `W × H · $price` where there is no
+caption, or *on hold mid-purchase* for a reservation. Clicking it opens the
+**full card** — picture, caption, link, size, price, state.
+
+The day before, hover was to show nothing at all, on the correct grounds that a
+card floating under a moving pointer covers artwork somebody paid for and covers
+a different rectangle every time the mouse moves. What changed is the reading of
+the objection: it is about **area**, not about hovering. The original page has
+always answered a hover, it is the gesture every visitor arrives knowing, and a
+wall that answers nothing until you commit to a click reads as inert.
+
+So the tooltip is held to what the objection allows. **One line, never wider
+than the 224px card it replaced, no pointer events, no delay in either
+direction.** What it may cover is its own footprint and nothing past it. A
+tooltip that waited would arrive after a reader sweeping the wall had already
+moved on.
+
+**The card takes pointer events, which the hover card never did**, and that is
+most of what clicking buys: the card carries the buyer's link, and for as long
+as it only existed under a pointer passing over it, that link could not be
+followed by anybody. It closes on Escape, on a click on bare wall, on its own
+close button, and it hands focus back to the board when it goes.
+
+**A tap is a click.** A touchscreen has no hover, so a tap on a rectangle opens
+the card and a tap on bare wall places the selection — which is the only way
+anything gets bought on a phone.
 
 **Empty is a state, and it is the one this wall spends its first day in.**
 

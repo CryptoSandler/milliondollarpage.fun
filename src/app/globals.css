@@ -667,11 +667,89 @@ h3 {
     border-color: var(--hairline-strong);
   }
 
+  /*
+   * THREE ZONES, AND ONLY A GRID CAN HOLD THE MIDDLE ONE.
+   *
+   * Settled 2026-09-03: the name on the left, the one figure the page turns on
+   * in the middle, and everything a reader reaches for on the right.
+   *
+   * `1fr auto 1fr` centres the figure on the WINDOW. The flex row this replaced
+   * centred it on whatever the two sides left over, so it drifted several
+   * hundred pixels the moment the wallet control changed from "Connect wallet"
+   * to a truncated address — and a number that moves when something unrelated
+   * changes is a number a reader stops trusting. Measured before: the counter
+   * sat at x=1617 in a 2495 window, which is not the middle of anything.
+   */
   .board-bar--top {
     top: 0;
     height: var(--bar-top-h);
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 12px;
+    /* The wallet control sits hard against this edge, which is why the right
+       padding is smaller than the left. The wordmark does not need to. */
+    padding-right: 10px;
     border-bottom-width: 1px;
     box-shadow: 0 1px 0 rgba(122, 138, 160, 0.06);
+  }
+
+  .board-bar__mark {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    justify-self: start;
+    overflow: hidden;
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+  }
+
+  .board-bar__figure {
+    justify-self: center;
+    min-width: 0;
+  }
+
+  .board-bar__tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-self: end;
+    min-width: 0;
+  }
+
+  /* The two links and the switch give way on a phone. The wallet control does
+     not, which is why it is outside this span. */
+  .board-bar__links {
+    display: none;
+  }
+
+  @media (min-width: 640px) {
+    .board-bar__links {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+  }
+
+  /*
+   * A PHONE HAS NO ROOM FOR THREE ZONES, and pretending it does put the
+   * wordmark under the figure: measured at 390, the mark ran to x=178 and the
+   * centred figure started at 149. So below 640 the bar is a row again — the
+   * name, then the figure pushed to the right, then the wallet — which is the
+   * layout that has always worked at that width and costs the band nothing.
+   */
+  @media (max-width: 640px) {
+    .board-bar--top {
+      display: flex;
+    }
+
+    .board-bar__figure {
+      margin-left: auto;
+    }
   }
 
   /*
@@ -823,9 +901,62 @@ h3 {
       of it are legible — so the slack goes there and this sizes to its content.
     */
     flex: 0 1 auto;
+    /*
+      NARROWER, AND THE NUMBER IS MEASURED RATHER THAN CHOSEN. At 2495 the panel
+      was 980px wide holding two short lines, because it took the strip's whole
+      slack; at 1440 it was 882. 560 is what the widest content actually needs —
+      `1,000,000 pixels · $1,000,000.00` beside `Buy these pixels — $1,000,000.00`
+      — so nothing in it truncates that did not truncate before, and the strip
+      stops looking like a receipt with a button on the end of it.
+    */
+    /*
+      560 AS A WIDTH AND NOT A CEILING, because a grid track sized `auto` around
+      a `min(560px, 100%)` item resolves the percentage against the track the
+      item is sizing — and the panel came out 376px wide, which truncates the
+      readout it exists to show. `max-width: 100%` is what keeps it inside a
+      narrow window: the side tracks are `1fr`, whose automatic minimum is their
+      own min-content, so at 1280 the panel gives way and the tools do not.
+    */
+    width: 560px;
+    max-width: 100%;
     padding: 0 12px;
     border: 1px solid var(--control-line);
     border-radius: var(--radius-md);
+  }
+
+  /*
+   * THE PANEL IS A COLUMN OF TWO: the row, and the warning under it.
+   *
+   * The warning is on its own line since 2026-09-03 — see `SelectionPanel` for
+   * why a refusal hanging under the button used to set the panel's width.
+   */
+  .selection-panel {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+  }
+
+  .selection-panel__row {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .selection-buy {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+  }
+
+  /* Full width of the panel, and it never widens it: `min-width: 0` in a flex
+     column is what stops a long sentence pushing the box out. */
+  .selection-hint {
+    min-width: 0;
+    max-width: 100%;
   }
 
   /* Both states live in the same box, so the strip cannot change height. */
@@ -976,9 +1107,14 @@ h3 {
     }
   }
 
+  /*
+   * THE ONE NUMBER THIS PAGE TURNS ON, and since 2026-09-03 it is sized like
+   * it. 22px against a 34px bar, which is as large as the band holds with the
+   * line boxes it already has — the header does not grow to carry it.
+   */
   .pixels-left__n {
     font-family: var(--font-numeric);
-    font-size: 20px;
+    font-size: 22px;
     font-weight: 700;
     line-height: 1;
     color: var(--ink);
@@ -991,6 +1127,38 @@ h3 {
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--body);
+  }
+
+  /*
+   * THE SHARE SOLD IS A SUFFIX, NOT A SECOND FIGURE.
+   *
+   * It was a pill of its own beside the count, which read as two numbers
+   * competing — and the two say the same thing from opposite ends. As a small
+   * suffix it qualifies the figure instead of arguing with it. It gives way
+   * first, below `sm`, because the count is the one that never leaves.
+   */
+  /* A middot before it, so the suffix reads as a second clause rather than as
+     more of the same sentence. The separator is the hairline's own tone, which
+     is the one this design uses everywhere two facts share a line. */
+  .pixels-left__pct::before {
+    content: "·";
+    margin-right: 7px;
+    color: var(--hairline-strong);
+  }
+
+  .pixels-left__pct {
+    display: none;
+    font-family: var(--font-numeric);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--body);
+  }
+
+  @media (min-width: 640px) {
+    .pixels-left__pct {
+      display: inline;
+    }
   }
 
   .pixels-left--ticked .pixels-left__n {
@@ -2005,8 +2173,7 @@ h3 {
   flex: 0 0 auto;
 }
 
-[data-rails="full"] .board-controls .selection-buy {
-  align-items: stretch;
+[data-rails="full"] .board-controls .selection-buy button {
   width: 100%;
 }
 
@@ -2037,7 +2204,18 @@ h3 {
   padding-right: 12px;
 }
 
-[data-rails="full"] .board-controls .selection-buy p {
+/* In a column the row is a column too, and the button stretches across it. */
+[data-rails="full"] .board-controls .selection-panel__row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+[data-rails="full"] .board-controls .selection-buy {
+  align-items: stretch;
+}
+
+[data-rails="full"] .board-controls .selection-hint {
   max-width: none;
   text-align: left;
 }
@@ -2312,20 +2490,6 @@ h3 {
   display: none;
 }
 
-.online-banner--bar {
-  display: none;
-}
-
-@media (min-width: 1024px) {
-  .online-banner--bar {
-    display: flex;
-  }
-}
-
-[data-rails="full"] .online-banner--bar {
-  display: none;
-}
-
 [data-rails="full"] .online-banner--rail {
   display: flex;
 }
@@ -2495,7 +2659,22 @@ h3 {
   right: 0;
   bottom: 0;
   z-index: 12;
-  display: flex;
+  /*
+   * THREE ZONES, LIKE THE HEADER, AND FOR THE SAME REASON.
+   *
+   * Settled 2026-09-03: the presets and the zoom on the left, the purchase
+   * panel CENTRED, and nothing else on the strip. `1fr auto 1fr` centres the
+   * panel on the WINDOW; the flex row this replaced started the panel wherever
+   * the tools happened to end, so it sat at x=546 in a 2495 window — 250px left
+   * of centre — and moved whenever a preset label changed.
+   *
+   * The register is not a zone here because it is not in the strip at any width
+   * this design is measured at: it runs down the letterboxes from 1280 up, and
+   * at 390 there is no letterbox and it is hidden. Where it IS in the strip it
+   * takes the third zone, which is the empty one.
+   */
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: stretch;
   gap: 12px;
   padding: 6px 12px;
@@ -2598,6 +2777,23 @@ h3 {
  */
 [data-ticker="sides"] .board-tape__head {
   display: none;
+}
+
+/*
+ * THE EMPTY LINE WRAPS IN A COLUMN, and this is the wall's own first day.
+ *
+ * `Nothing sold yet` is one nowrap line, which is right in a strip and wrong in
+ * a 101px column at 1440: the scroller clips it, so a wall with nothing on it
+ * would advertise `Nothing sold ye`. It wraps to two centred lines instead. It
+ * cannot reach the wall either way — the scroller is `overflow: hidden` and the
+ * column is exactly the letterbox wide — so this is legibility rather than
+ * safety.
+ */
+[data-ticker="sides"] .board-tape__empty {
+  align-self: center;
+  white-space: normal;
+  text-align: center;
+  text-wrap: balance;
 }
 
 [data-ticker="sides"] .board-tape__scroller {
@@ -2721,6 +2917,24 @@ h3 {
  * and the line of text under it still says 1250 × 1.
  */
 [data-ticker="sides"] .board-tape__art {
+  /*
+    CLIPPED TO ITS OWN BOX, and this is a bug it fixed rather than a precaution.
+    The size label inside is centred, and on a NARROW item — a 6×28 is 34px wide
+    at the height cap — it is wider than the box it is centred in, so it spilled
+    outside and painted over the artwork of the item below it and over its own
+    line. The overlay covers the box; it cannot cover what escapes the box.
+    Measured at 2495 before the fix: 24 of 80 items spilling, by up to 29px.
+
+    AND IT NEVER COMPRESSES. A flex item shrinks by default, so a tall picture
+    in a short column would come out squashed rather than cut. What a column
+    edge does to an item that does not fit is CLIP it — the shape is the thing
+    being shown and a squashed shape is a wrong one.
+
+    Chosen by the owner on 2026-09-03 against the version without them, side by
+    side on a local server. The switch that carried the comparison is gone.
+  */
+  overflow: hidden;
+  flex-shrink: 0;
   display: block;
   aspect-ratio: var(--art-w) / var(--art-h);
   width: min(100%, calc(160px * var(--art-w) / var(--art-h)));
@@ -2759,6 +2973,9 @@ h3 {
 }
 
 [data-ticker="sides"] .board-tape__bare-size {
+  /* Inside the box it is centred in, however narrow that box is. */
+  max-width: 100%;
+  overflow: hidden;
   font-family: var(--font-numeric);
   font-size: 11px;
   font-weight: 700;
@@ -2775,6 +2992,9 @@ h3 {
  */
 [data-ticker="sides"] .board-tape__line {
   display: block;
+  /* Its own row under the picture, and it does not shrink into the picture's
+     space either. */
+  flex-shrink: 0;
   width: 100%;
   min-width: 0;
   max-width: 100%;
@@ -2874,14 +3094,6 @@ h3 {
  * needs it last on the screen.
  */
 @media (max-width: 640px) {
-  .board-strip {
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .board-strip > * {
-    flex: 1 0 100%;
-  }
 
   .board-tape {
     border-left: 0;
@@ -2891,15 +3103,72 @@ h3 {
 
 .board-tools {
   order: 1;
+  grid-column: 1;
+  justify-self: start;
+}
+
+/*
+ * THE TOOLS KEEP THEIR ONE ROW WHEREVER THERE IS ROOM FOR IT.
+ *
+ * A `1fr` track's automatic minimum is its item's MIN-content, and the preset
+ * pill wraps by design — so the symmetric grid squeezed the tools into 336px at
+ * 1280 and they took two rows, which grew the strip from 93 to 123 and cost the
+ * wall 30px of height at the one viewport with the least of it. `max-content`
+ * makes the track's minimum the pill's one-row width instead.
+ *
+ * WHAT GIVES WAY INSTEAD IS THE CENTRING, and that is the right thing to lose:
+ * at 1280 there is not room for 510 of tools, 560 of panel and 510 of empty
+ * paper, so the panel sits to the right of the tools rather than in the middle
+ * of the window. It is still 560 wide and nothing in it truncates. Above 1400
+ * the two side tracks are equal again and the panel is centred on the window.
+ *
+ * Not on a phone: there the strip is one column and the tools are meant to
+ * wrap.
+ */
+@media (min-width: 641px) {
+  .board-tools {
+    min-width: max-content;
+  }
 }
 
 .board-controls {
   order: 2;
+  grid-column: 2;
+  justify-self: center;
 }
 
 .board-tape {
   order: 3;
+  grid-column: 3;
 }
+
+/*
+ * ONE COLUMN ON A PHONE, and it has to come after the zones above rather than
+ * beside the rest of the phone rules: `grid-column: 2` on the panel is a
+ * later, equally specific rule, and a stacked strip whose second item is still
+ * in column two is a strip with two things drawn on top of each other. It was,
+ * for one probe: tools and panel both at y=579, 259px tall.
+ */
+@media (max-width: 640px) {
+  .board-strip {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .board-tools,
+  .board-controls,
+  .board-tape {
+    grid-column: 1;
+    justify-self: stretch;
+  }
+
+  /* The panel is the strip's whole width on a phone; the 560 ceiling is for a
+     window that has slack to spend. */
+  .board-controls {
+    width: 100%;
+  }
+}
+
 
 /*
  * The standings belong to the right rail and to nothing else. Without this they

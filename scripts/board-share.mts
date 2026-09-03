@@ -53,21 +53,33 @@ if (SHOTS) mkdirSync(SHOTS, { recursive: true });
 /**
  * The budget, in CSS pixels of vertical room the chrome may take.
  *
- * ONE NUMBER NOW, WHERE THERE WERE TWO. It was 60 idle and 140 with the
- * purchase panel open, because the panel came and went and the preset pill
- * stood on the wall in between. Since 2026-09-02 nothing stands on the wall at
- * any width: the tools, the panel and the register are one strip along the
- * bottom whose height does not move with the selection — deliberately, because
- * a strip that grew would refit the board under a rectangle somebody was
- * drawing. So idle and selected measure the same, and a difference between them
- * is now a bug rather than a second budget.
+ * ONE NUMBER, WHERE THERE WERE TWO. It was 60 idle and 140 with the purchase
+ * panel open, because the panel came and went and the preset pill stood on the
+ * wall in between. Since 2026-09-02 nothing stands on the wall at any width:
+ * the tools, the panel and the register are one strip along the bottom whose
+ * height does not move with the selection — deliberately, because a strip that
+ * grew would refit the board under a rectangle somebody was drawing. So idle
+ * and selected measure the same, and a difference between them is now a bug
+ * rather than a second budget.
  *
- * 130 is a 34px header plus a strip that measures 92 at the widths this table
- * covers — the purchase panel's own two lines, which the idle box is padded to
- * match — with four pixels of slack for a browser that rounds a border
- * differently. It is a CEILING and not a target.
+ * 127 SINCE 2026-09-03, DOWN FROM 130, AND IT IS THE MEASUREMENT RATHER THAN A
+ * ROUND NUMBER WITH SLACK IN IT. A 34px header plus a 93px strip: the panel's
+ * own two lines (a readout of two, and the Buy button, with the refusal on its
+ * own line under both), padded to 80 so the idle box matches it, plus 6px of
+ * strip padding above and below and one hairline.
+ *
+ * WHY IT DID NOT COME DOWN FURTHER, since the header and the strip were both
+ * rebuilt in the batch that set it: the strip's height is the purchase panel's,
+ * and the panel's is a 46px readout over a refusal that is allowed two lines.
+ * Clipping that refusal to one line would buy 14px of wall and cost a buyer the
+ * reason their Buy button is dead, which is not a trade this design makes. The
+ * owner's estimate going in was ~98; the honest number is 127, and it is here
+ * with the arithmetic rather than the estimate.
+ *
+ * It is a CEILING and not a target, and there is no slack in it on purpose: the
+ * next thing that grows the chrome should have to say so out loud.
  */
-const BUDGET_BANDED = 130;
+const BUDGET_BANDED = 127;
 
 /**
  * And a phone's, which is a different question wearing the same units.
@@ -79,7 +91,7 @@ const BUDGET_BANDED = 130;
  * share, and the table's own percentage column is what says the wall did not
  * move.
  */
-const BUDGET_PHONE = 260;
+const BUDGET_PHONE = 256;
 /**
  * And the budget where a PAIR of rails is on — either pair — which is the
  * header and nothing else, measured at exactly 34px: the same number

@@ -70,7 +70,7 @@ export default function BoardCounters({ stats }: { stats: BoardStats }) {
   }, [left]);
 
   return (
-    <div className="flex min-w-0 items-center gap-x-3 overflow-hidden whitespace-nowrap text-[13px] text-body">
+    <div className="flex min-w-0 items-center overflow-hidden whitespace-nowrap text-[13px] text-body">
       {/*
         THE OFFER LINE HAS LEFT THIS BAR. It was the widest thing in a header
         that is now one 34px line, and the norm is that the wall takes almost
@@ -85,14 +85,17 @@ export default function BoardCounters({ stats }: { stats: BoardStats }) {
       <p className={`pixels-left ${ticked ? "pixels-left--ticked" : ""}`}>
         <span className="pixels-left__n">{left.toLocaleString("en-US")}</span>
         <span className="pixels-left__u">pixels left</span>
+        {/*
+          THE SHARE SOLD IS A SUFFIX NOW, not a pill of its own beside the
+          count. It was two numbers reading as two claims, and they are the same
+          claim from opposite ends — so it qualifies the figure rather than
+          competing with it, and it gives way first on a narrow window. Settled
+          with the three-zone header on 2026-09-03.
+        */}
+        <span className="pixels-left__pct" title="Share of the board sold so far">
+          {formatPercentSold(stats.percentSold)} sold
+        </span>
       </p>
-
-      <span
-        className="tabular hidden shrink-0 rounded-full bg-canvas-deep px-2 py-0.5 text-[12px] font-bold text-ink-soft md:inline"
-        title="Share of the board sold so far"
-      >
-        {formatPercentSold(stats.percentSold)} sold
-      </span>
     </div>
   );
 }
