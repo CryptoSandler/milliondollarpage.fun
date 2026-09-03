@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import ThemeToggle from "../../components/ThemeToggle";
+import SiteFooter from "../../components/SiteFooter";
+import { CONTACT_EMAIL } from "../../lib/site";
 import { Fragment, type ReactNode } from "react";
 import { BOARD_HEIGHT, BOARD_WIDTH, TOTAL_PIXELS } from "../../lib/board/geometry";
 import { BLOCK_PIXEL_SCALE, STORED_MAX_LONG_EDGE } from "../../lib/board/image-plan";
@@ -567,7 +569,14 @@ export default function AboutPage() {
         <p className="mt-10 border-t border-hairline-strong pt-5 text-[15px] leading-relaxed text-body">
           Something here not answered, or answered in a way that does not match what the site does?
           That is a bug in one of the two, and we would rather hear about it than have you find out
-          later.
+          later. Write to{" "}
+          {/*
+            TEXT AND NOT A `mailto:`, on purpose. `src/lib/site.ts` carries the
+            reason: the mailbox is not open yet, and a link to an address that
+            bounces spends somebody's message without telling them it failed.
+          */}
+          <span className="tabular font-semibold text-ink">{CONTACT_EMAIL}</span> — a person reads
+          it.
         </p>
 
         {/*
@@ -588,6 +597,8 @@ export default function AboutPage() {
           </a>{" "}
           under the MIT licence. Every illustration is drawn by this page.
         </p>
+
+        <SiteFooter />
       </div>
     </main>
   );

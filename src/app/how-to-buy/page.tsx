@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import ThemeToggle from "../../components/ThemeToggle";
+import SiteFooter from "../../components/SiteFooter";
 
 export const dynamic = "force-static";
 
@@ -191,6 +192,8 @@ export default function HowToBuyPage() {
           </Link>{" "}
           answers the rest, and a mismatch between the two is a bug in one of them.
         </p>
+
+        <SiteFooter />
       </div>
     </main>
   );

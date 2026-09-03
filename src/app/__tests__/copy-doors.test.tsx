@@ -4,6 +4,9 @@ import { query } from "../../lib/db";
 import BlockPageRoute from "../b/[id]/page";
 import FaqPage from "../faq/page";
 import HowToBuyPage from "../how-to-buy/page";
+import BuyersPage from "../buyers/page";
+import LogPage from "../log/page";
+import PressPage from "../press/page";
 import StatsPage from "../stats/page";
 
 /**
@@ -132,6 +135,18 @@ describe("no page answers whether a rectangle can ever change hands", () => {
     */
     ["how to buy", async () => renderToStaticMarkup(<HowToBuyPage />)],
     ["what the wall has done", async () => renderToStaticMarkup(await StatsPage())],
+    // THREE MORE PAGES CARRYING PROSE, added 2026-09-03 with the pages
+    // themselves. The log is the likeliest of all of them to walk through the
+    // door — it is written in the first person about what the wall is for, and
+    // that is the voice a sentence about what a buyer may do with their pixels
+    // arrives in.
+    ["the log", async () => renderToStaticMarkup(<LogPage />)],
+    ["press", async () => renderToStaticMarkup(<PressPage />)],
+    [
+      "who has bought",
+      async () =>
+        renderToStaticMarkup(await BuyersPage({ searchParams: Promise.resolve({}) })),
+    ],
     [
       "one rectangle's own page",
       async () =>

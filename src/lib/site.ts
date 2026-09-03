@@ -22,3 +22,29 @@ export const SITE_ORIGIN = "https://milliondollarpage.fun";
 export function absoluteUrl(path: string): string {
   return new URL(path, SITE_ORIGIN).toString();
 }
+
+/**
+ * The one address a reader can write to.
+ *
+ * WHO CALLS THIS: `src/components/SiteFooter.tsx`, which prints it at the foot
+ * of every page that carries prose, and `src/app/faq/page.tsx`, which answers
+ * "how do I get in touch" with it. Two places, one string — an address that
+ * disagreed with itself across two pages is an address half the mail goes
+ * nowhere from.
+ *
+ * IT IS PRINTED AS TEXT AND NOT AS A `mailto:` LINK, and that is a decision
+ * with a date on it rather than an oversight. The mailbox does not exist yet:
+ * the domain is at Namecheap and the owner has chosen to put Private Email on
+ * it at the end of the build rather than now. A `mailto:` on an address that
+ * bounces is worse than no link at all — it invites a reader to spend a message
+ * that silently fails, and they never learn it failed. Text invites them to
+ * copy it, and a copied address that bounces at least bounces visibly.
+ *
+ * THE UPGRADE IS ONE LINE, HERE. When the mailbox is live, wrap it in an `<a>`
+ * in `SiteFooter` and in the FAQ answer. Nothing else changes.
+ *
+ * ponytail: forwarding is the cheaper first step — Namecheap forwards the
+ * domain's mail to an existing inbox for nothing, and Private Email is the
+ * upgrade when a reply needs to come FROM this address rather than land in it.
+ */
+export const CONTACT_EMAIL = "contact@milliondollarpage.fun";

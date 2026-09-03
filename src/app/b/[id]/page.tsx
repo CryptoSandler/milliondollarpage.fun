@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import ThemeToggle from "../../../components/ThemeToggle";
+import SiteFooter from "../../../components/SiteFooter";
 import { badgeUrl, blockImageUrl, shareCardUrl } from "../../../lib/board/block-image";
 import { blockPageUrl } from "../../../lib/board/block-details";
 import { renderBadge } from "../../../lib/board/badge";
@@ -265,6 +266,8 @@ export default async function BlockPageRoute({ params }: { params: Promise<{ id:
             Open the card
           </a>
         </section>
+
+        <SiteFooter />
       </div>
     </main>
   );

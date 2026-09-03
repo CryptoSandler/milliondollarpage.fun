@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import ThemeToggle from "../../components/ThemeToggle";
+import SiteFooter from "../../components/SiteFooter";
 import { boardStats, boardStandings, soldToday, soldValueBaseUnits } from "../../lib/board/blocks";
 import { TOTAL_PIXELS } from "../../lib/board/geometry";
 import { formatPercentSold, formatUsdc, pixelCount } from "../../lib/board/pricing";
@@ -201,6 +202,8 @@ export default async function StatsPage() {
             <PurchaseTape rows={settled} asOf={new Date().toISOString()} />
           </div>
         </section>
+
+        <SiteFooter />
       </div>
     </main>
   );
