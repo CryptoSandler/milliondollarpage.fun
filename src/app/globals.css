@@ -2848,7 +2848,16 @@ h3 {
   transform: scaleY(-1);
 }
 
-[data-ticker="sides"] .board-tape--echo .board-tape__row {
+[data-ticker="sides"] .board-tape--echo .board-tape__row,
+/*
+  AND THE EMPTY LINE, which is not a row and was therefore left flipped.
+  Photographed in production on the wall's first day, 2026-09-03: the left
+  column read `Nothing sold yet` and the right one read it upside down and
+  mirrored. The scroller is flipped so the column climbs; everything with words
+  in it has to be flipped back, and until this there was exactly one thing with
+  words in it that was not a row.
+*/
+[data-ticker="sides"] .board-tape--echo .board-tape__empty {
   transform: scaleY(-1);
 }
 
