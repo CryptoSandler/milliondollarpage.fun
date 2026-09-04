@@ -80,18 +80,20 @@ export default function SelectionPanel({
       <div className="selection-readout flex min-w-0 flex-1 flex-col justify-center gap-0.5">
         {selection === null ? (
           <>
-            <p className="truncate font-display text-[15px] font-semibold text-ink sm:text-[17px]">
+            <p className="truncate font-display text-[15px] font-semibold text-ink sm:text-[16px]">
               <span className="sm:hidden">Nothing yet</span>
               <span className="hidden sm:inline">Nothing selected yet</span>
+              {/* The unit, said the same way the header says it, and on the same
+                  line for the same reason the readout is: the panel is one line. */}
+              <span className="hidden text-[12px] font-normal text-body sm:inline">
+                <span className="text-hairline-strong"> · </span>
+                {unitOfSale(perPixel)}
+              </span>
             </p>
-            {/* The unit, said the same way the header says it. A buyer who
-                looks here first and a buyer who looks up there first are told
-                the same thing about what is actually for sale. */}
-            <p className="hidden truncate text-[12.5px] text-body sm:block">{unitOfSale(perPixel)}</p>
           </>
         ) : (
           <>
-            <p className="tabular truncate font-display text-[16px] font-bold leading-tight text-ink sm:text-[20px]">
+            <p className="tabular truncate font-display text-[15px] font-bold leading-tight text-ink sm:text-[17px]">
               {/* "px" is what a phone has room for and "pixels" is what
                   everything else says; both are `display:none` when hidden, so
                   a screen reader is read exactly one of them. The noun agrees
@@ -101,17 +103,20 @@ export default function SelectionPanel({
               <span className="hidden sm:inline">{pixelCount(selection.pixels)}</span>
               <span className="text-hairline-strong"> · </span>
               {formatUsdc(selection.totalBaseUnits)}
-            </p>
-            {/* The coordinates are their own span so they can leave without
-                taking the line with them — see `.selection-coords`, and
-                DESIGN.md's order of what gives way. `truncate` stays as the
-                last resort rather than the first. */}
-            <p className="tabular hidden truncate text-[12.5px] text-body lg:block">
-              {selection.rect.w} × {selection.rect.h}{" "}
-              <span className="selection-coords">
-                at ({selection.rect.x}, {selection.rect.y}){" "}
-              </span>
-              · {formatUsdc(perPixel)} a pixel
+            {/*
+              THE SECOND LINE FOLDED INTO THE FIRST, 2026-09-03. The panel is one
+              line now — readout left, button right, the warning underneath — so
+              the size and the coordinates ride along after the price instead of
+              standing under it. That is 22px off the strip's height, which is
+              22px of wall, and nothing is lost: the same words in the same
+              order, and the coordinates still leave first when the room runs
+              out. `.selection-coords` is that shed step and it is unchanged.
+            */}
+            <span className="tabular hidden text-[12px] font-normal text-body lg:inline">
+              <span className="text-hairline-strong"> · </span>
+              {selection.rect.w} × {selection.rect.h}
+              <span className="selection-coords"> at ({selection.rect.x}, {selection.rect.y})</span>
+            </span>
             </p>
           </>
         )}
@@ -122,7 +127,9 @@ export default function SelectionPanel({
           type="button"
           onClick={onBuy}
           disabled={!canBuy}
-          className="btn-primary shrink-0 whitespace-nowrap px-3 py-2.5 text-[14px] sm:px-6 sm:text-[14.5px]"
+          /* py-2 rather than py-2.5, and that is 5px of wall: the strip's
+             height is this button's, and the pin above it follows. */
+          className="btn-primary shrink-0 whitespace-nowrap px-3 py-2 text-[14px] sm:px-5 sm:text-[14px]"
         >
           Buy<span className="hidden sm:inline"> these pixels</span>
           {selection && canBuy && <span className="tabular"> — {formatUsdc(selection.totalBaseUnits)}</span>}

@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { TOTAL_PIXELS } from "../lib/board/geometry";
 import type { BoardStats } from "../lib/board/blocks";
-import { formatPercentSold } from "../lib/board/pricing";
 
 /**
  * The offer, and how much of it is left.
@@ -29,6 +28,8 @@ import { formatPercentSold } from "../lib/board/pricing";
  * leaves.
  */
 export default function BoardCounters({ stats }: { stats: BoardStats }) {
+  // Still `left`, because the FLASH is about a drop: what a reader sees move is
+  // the sold figure going up, and the thing worth flashing is the same event.
   const left = TOTAL_PIXELS - stats.pixelsSold;
 
   /*
@@ -83,18 +84,24 @@ export default function BoardCounters({ stats }: { stats: BoardStats }) {
         layout reason happens to close that too.
       */}
       <p className={`pixels-left ${ticked ? "pixels-left--ticked" : ""}`}>
-        <span className="pixels-left__n">{left.toLocaleString("en-US")}</span>
-        <span className="pixels-left__u">pixels left</span>
         {/*
-          THE SHARE SOLD IS A SUFFIX NOW, not a pill of its own beside the
-          count. It was two numbers reading as two claims, and they are the same
-          claim from opposite ends — so it qualifies the figure rather than
-          competing with it, and it gives way first on a narrow window. Settled
-          with the three-zone header on 2026-09-03.
+          WHAT IS SOLD, NOT WHAT IS LEFT — and this reverses a rule DESIGN.md
+          argued for. That rule said the headline counts what REMAINS, because a
+          nearly-full board tells a buyer how much chance they have left. The
+          owner reversed it on 2026-09-03: a wall on its first day says
+          `1,000,000 pixels left`, which is the same sentence as `nothing has
+          happened here`, and the number that makes somebody buy is the one that
+          is moving. Sold is the number that moves.
+
+          THE TOTAL RIDES BESIDE IT, SMALL, so the figure is never a bare count
+          without its denominator — `191,847 pixels sold` alone says nothing
+          about how full the wall is. The share went entirely: `of 1,000,000`
+          already says it, and a percentage beside a fraction is the same fact
+          claimed twice.
         */}
-        <span className="pixels-left__pct" title="Share of the board sold so far">
-          {formatPercentSold(stats.percentSold)} sold
-        </span>
+        <span className="pixels-left__n">{stats.pixelsSold.toLocaleString("en-US")}</span>
+        <span className="pixels-left__u">pixels sold</span>
+        <span className="pixels-left__of">of {TOTAL_PIXELS.toLocaleString("en-US")}</span>
       </p>
     </div>
   );

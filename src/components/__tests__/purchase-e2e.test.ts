@@ -223,9 +223,18 @@ const edges = (e: Edges) =>
  * there.
  */
 async function selectARectangle(browser: Browser): Promise<void> {
+  /*
+    FOUND BY ITS ACCESSIBLE NAME, NOT BY ITS VISIBLE LABEL. The presets read
+    `10×10` until 2026-09-03 and read `10` after it — the row is already a row
+    of sizes and the second number was saying the same thing four times. Five
+    tests in this file went red on that one change, all through this helper,
+    which is the helper doing its job. `aria-label` is still `10×10`, it is what
+    somebody operating this control by name would use, and it survives the
+    visible label being shortened again.
+  */
   const armed = await browser.evaluate<boolean>(
     `(() => { const b = [...document.querySelectorAll(".board-rail button")]
-        .find((el) => /^\\d+×\\d+$/.test(el.textContent.trim()));
+        .find((el) => /^\\d+×\\d+$/.test((el.getAttribute("aria-label") || "").trim()));
       if (b) b.click(); return !!b; })()`,
   );
   if (!armed) throw new Error("no size preset on the rail to arm");
@@ -505,8 +514,24 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
         const { data, info } = await sharp(await browser.screenshot())
           .raw()
           .toBuffer({ resolveWithObject: true });
+        /*
+          NAMES THE COORDINATE WHEN IT IS OFF THE IMAGE. Sampling a pixel
+          outside the screenshot used to come back as three `undefined`s and
+          die inside `toString`, which reports a TypeError in a helper and says
+          nothing about which control, which side, or which layout — twenty
+          minutes of a gate to find out that one number was negative.
+        */
         const hex = (x: number, y: number) => {
-          const at = (Math.round(y) * info.width + Math.round(x)) * info.channels;
+          const px = Math.round(x);
+          const py = Math.round(y);
+          if (px < 0 || py < 0 || px >= info.width || py >= info.height) {
+            throw new Error(
+              `sampled (${px}, ${py}) for ${what} in the ${layout}, which is outside the ` +
+                `${info.width}×${info.height} screenshot — the control's box was ` +
+                `${JSON.stringify(box)}`,
+            );
+          }
+          const at = (py * info.width + px) * info.channels;
           return `#${[data[at], data[at + 1], data[at + 2]]
             .map((value) => value.toString(16).padStart(2, "0"))
             .join("")}`;
@@ -833,16 +858,22 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
   );
 
   /**
-   * THE THEME IS TWO STATES, THE SWITCH REMEMBERS, AND THE PANEL IS WHITE IN
-   * BOTH.
+   * THE THEME IS TWO STATES, THE SWITCH REMEMBERS, AND THE PANEL BELONGS TO
+   * WHICHEVER ONE IS ON.
+   *
+   * THE THIRD CLAIM IS THE REVERSED ONE. It used to be "the panel is white in
+   * both registers", which was DESIGN.md's first exception — a receipt is
+   * white — and the owner reversed it on 2026-09-03: against a dark wall the
+   * white box read as a card floating on the page rather than as part of the
+   * strip. So the assertion is now the opposite and it is the stronger one: the
+   * panel takes the REGISTER's own ground, which means it must differ between
+   * the two themes, where the white one was identical in both.
    *
    * Three claims, one page load each, because they are three different things
-   * that can each be true while the others are not: `system` really gone from
-   * the DOM rather than merely unreachable, the choice surviving a reload, and
-   * the purchase panel measuring white against a near-black wall.
+   * that can each be true while the others are not.
    */
   it(
-    "offers two themes, remembers the one chosen, and keeps the panel white in both",
+    "offers two themes, remembers the one chosen, and gives the panel the register it is in",
     async () => {
       await browser.resize(1440, 900);
       await browser.goto(`${server.origin}/?theme=1`);
@@ -913,7 +944,8 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
         await browser.evaluate<string>(`document.querySelector(".theme-switch").getAttribute("aria-checked")`),
       ).toBe("false");
 
-      // 3. THE PANEL IS THE RECEIPT, and a receipt is white in both registers.
+      // 3. THE PANEL IS IN THE REGISTER, not a white island in both of them.
+      const seen: Record<string, { background: string; colour: string; border: string; ground: string }> = {};
       for (const theme of ["light", "dark"] as const) {
         await browser.goto(`${server.origin}/?theme=panel-${theme}`);
         await browser.evaluate(
@@ -928,14 +960,32 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
           const el = document.querySelector(".board-controls:not([hidden])");
           const s = getComputedStyle(el);
           return JSON.stringify({ background: s.backgroundColor, colour: s.color,
+            border: s.borderTopWidth,
             ground: getComputedStyle(document.body).backgroundColor });
-        })()`)) as { background: string; colour: string; ground: string };
+        })()`)) as { background: string; colour: string; border: string; ground: string };
+        seen[theme] = panel;
 
-        expect(panel.background, `the purchase panel in ${theme}`).toBe("rgb(255, 255, 255)");
-        // And its ink is the light register's, not the surrounding one's: a
-        // white panel with near-white text is the failure this would miss.
-        expect(panel.colour, `the panel's ink in ${theme}`).toBe("rgb(43, 36, 28)");
+        /*
+          NO FILL AT ALL: the panel is an outline over the strip since
+          2026-09-03. `transparent` computes as `rgba(0, 0, 0, 0)`, and the
+          thing this asserts is that the panel is NOT painting a ground of its
+          own — which is exactly what the white receipt did.
+        */
+        expect(panel.background, `the purchase panel in ${theme}`).toBe("rgba(0, 0, 0, 0)");
+        // And it carries the hairline that says where it is, since it has no
+        // tone step to say it with.
+        expect(panel.border, `the purchase panel's rule in ${theme}`).toBe("1px");
+        // Legible against the ground it is actually on, whichever that is.
+        expect(panel.colour, `the panel's ink in ${theme}`).not.toBe(panel.ground);
       }
+
+      /*
+        AND THE TWO REGISTERS ARE DIFFERENT, which is the whole of the reversal
+        in one assertion. The white receipt was IDENTICAL in both — that was its
+        argument — so a panel that still measured the same in light and dark
+        would mean the exception had quietly survived.
+      */
+      expect(seen.light.colour).not.toBe(seen.dark.colour);
     },
     240_000,
   );
@@ -1377,6 +1427,7 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
                    return JSON.stringify({ text: lead.textContent.trim(), w: b.width, h: b.height,
                      colour: getComputedStyle(lead).color,
                      ground: getComputedStyle(box).backgroundColor,
+                     stripGround: getComputedStyle(document.querySelector(".board-strip")).backgroundColor,
                      bodyGround: getComputedStyle(document.body).backgroundColor }); })()`,
               ),
             ),
@@ -1386,6 +1437,7 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
             h: number;
             colour: string;
             ground: string;
+            stripGround: string;
             bodyGround: string;
           };
 
@@ -1395,7 +1447,21 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
           // Painted rather than transparent: a rule defined in one register and
           // not the other is exactly how a line goes missing in one theme.
           expect(idle.colour, `the line's colour, ${at}`).not.toBe("rgba(0, 0, 0, 0)");
-          expect(idle.ground, `the line's ground, ${at}`).not.toBe("rgba(0, 0, 0, 0)");
+          /*
+            THE GROUND IS THE STRIP'S NOW, and this assertion was reversed with
+            the panel on 2026-09-03. It used to require the panel to paint a
+            ground of its own — which it did, white, in both registers, as
+            DESIGN.md's first exception. The panel is an outline over the strip
+            since the owner reversed that, so the box under this line is
+            deliberately transparent and the question worth asking moved one
+            element out: the line has to be legible against whatever is actually
+            behind it, which is the strip.
+          */
+          expect(idle.ground, `the line's own fill, ${at}`).toBe("rgba(0, 0, 0, 0)");
+          expect(idle.stripGround, `the strip behind the line, ${at}`).not.toBe(
+            "rgba(0, 0, 0, 0)",
+          );
+          expect(idle.colour, `the line against the strip, ${at}`).not.toBe(idle.stripGround);
           grounds.set(at, { line: `${idle.colour} on ${idle.ground}`, body: idle.bodyGround });
 
           // And the readout is NOT up: the two share a box and must never share
@@ -1447,11 +1513,19 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
           `both passes at ${width} painted the same page ground (${light?.body}) — ` +
             "this compared a register with itself",
         ).not.toBe(dark?.body);
+        /*
+          REVERSED WITH THE PANEL, 2026-09-03. This required the line to read
+          the SAME in both registers, because it sat inside the receipt and a
+          receipt was white in both. The owner reversed that exception, so the
+          line now takes whichever register it is in — and requiring them to
+          MATCH is now the assertion that would catch the exception creeping
+          back.
+        */
         expect(
           light?.line,
-          `the instruction line reads ${light?.line} in light and ${dark?.line} in dark at ` +
-            `${width} — it is inside the receipt, which is white in both registers`,
-        ).toBe(dark?.line);
+          `the instruction line reads ${light?.line} in both registers at ${width} — ` +
+            "the panel is an outline over the strip now, so it should read the register it is in",
+        ).not.toBe(dark?.line);
       }
     },
     240_000,
@@ -1880,6 +1954,106 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
         return { opened, closed: !document.querySelector('[role="dialog"]') };
       })()`);
       expect(afterBareWall).toEqual({ opened: true, closed: true });
+    },
+    120_000,
+  );
+
+  /**
+   * ONE CAPTION AT A TIME, AND NONE WHEN THE POINTER IS OFF THE WALL.
+   *
+   * Photographed on the preview wall on 2026-09-03: `Cape Verde`, `Colombia`
+   * and `Germany` all lit at once with the pointer on none of them. The chip is
+   * drawn by the canvas for any rectangle whose words are in the cache, and the
+   * cache stopped being "the one under the pointer" when `keepDetail` began
+   * asking for every rectangle in view so the composite could know its fit.
+   *
+   * THE ASSERTION IS THE WALL ITSELF, not a count of chips. A canvas exposes
+   * nothing of what it has drawn, so this takes the board's own pixels with the
+   * pointer away, hovers three rectangles in turn, moves away again, and
+   * requires the pixels to be what they were. A chip that stuck would change
+   * them; nothing else on an idle board can. That is a stronger claim than
+   * "at most one" and it is the one that was actually broken.
+   */
+  it(
+    "draws one caption at a time, and leaves none behind when the pointer goes",
+    async () => {
+      const wallet = testWallet().address;
+      const seeded: { x: number; y: number; caption: string }[] = [
+        { x: 100, y: 100, caption: "Cape Verde" },
+        { x: 300, y: 100, caption: "Colombia" },
+        { x: 500, y: 100, caption: "Germany" },
+      ];
+      for (const [i, block] of seeded.entries()) {
+        await execute(
+          `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
+                               buyer_pubkey, payment_signature, caption)
+           VALUES ($1, $2, 140, 100, 'paid', $3, $4, now(), $5, $6, $7)`,
+          [block.x, block.y, 1_000_000, 140 * 100 * 1_000_000, wallet, `sig-chip-${i}`, block.caption],
+        );
+      }
+
+      await browser.goto(`${server.origin}/`);
+      await waitFor("the board to report where it painted", () =>
+        browser.evaluate<boolean>("!!document.querySelector('canvas')?.dataset.boardRect"),
+      );
+
+      await browser.evaluate(`(() => {
+        Element.prototype.setPointerCapture = function () {};
+        Element.prototype.releasePointerCapture = function () {};
+        window.__board = function (bx, by) {
+          const c = document.querySelector("canvas");
+          const box = c.getBoundingClientRect();
+          const [x, y, w, h] = c.dataset.boardRect.split(",").map(Number);
+          return { c, clientX: box.left + x + (bx / 1250) * w, clientY: box.top + y + (by / 800) * h };
+        };
+        window.__at = function (type, bx, by) {
+          const p = window.__board(bx, by);
+          p.c.dispatchEvent(new PointerEvent(type, {
+            bubbles: true, cancelable: true, composed: true, pointerId: 1,
+            pointerType: "mouse", isPrimary: true, button: 0, buttons: 0,
+            clientX: p.clientX, clientY: p.clientY,
+          }));
+        };
+        window.__frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        // Bare wall, well clear of everything seeded above.
+        window.__away = async () => { window.__at("pointermove", 1100, 700); await window.__frame(); await window.__frame(); };
+        window.__wall = () => document.querySelector("canvas").toDataURL("image/png").length
+          + ":" + document.querySelector("canvas").toDataURL("image/png").slice(-256);
+      })()`);
+
+      // The wall with nothing under the pointer, before any hovering at all.
+      await browser.evaluate(`window.__away()`);
+      const before = await browser.evaluate<string>(`window.__wall()`);
+
+      // Each rectangle in turn, waiting for its caption to arrive and be drawn.
+      const lit: string[] = [];
+      for (const block of seeded) {
+        await browser.evaluate(
+          `(async () => { window.__at("pointermove", ${block.x + 70}, ${block.y + 50}); await window.__frame(); })()`,
+        );
+        await waitFor(`the tooltip for ${block.caption}`, () =>
+          browser.evaluate<boolean>(
+            `document.querySelector(".floating-card")?.textContent === ${JSON.stringify(block.caption)}`,
+          ),
+        );
+        lit.push(
+          await browser.evaluate<string>(
+            `String(document.querySelectorAll(".floating-card").length)`,
+          ),
+        );
+      }
+
+      // Never two of them, at any point in that walk.
+      expect(lit).toEqual(["1", "1", "1"]);
+
+      await browser.evaluate(`window.__away()`);
+      // The tooltip goes with the pointer.
+      expect(
+        await browser.evaluate<number>(`document.querySelectorAll(".floating-card").length`),
+      ).toBe(0);
+
+      // And so does every chip: the wall is the wall it was.
+      expect(await browser.evaluate<string>(`window.__wall()`)).toBe(before);
     },
     120_000,
   );

@@ -52,8 +52,20 @@ export default function BoardRail({
   onZoomFit: () => void;
 }) {
   return (
-    <div className="board-rail">
-      <div className="board-rail__presets flex shrink-0 items-center gap-1">
+    /*
+      ONE SEGMENTED CONTROL, NOT NINE PILLS. Settled 2026-09-03: the strip read
+      as a row of loose buttons with no relationship to each other, and these
+      nine are two questions — what size, and how close — so they are two groups
+      inside one control with a rule between them.
+
+      The labels lose their `×`: `10` rather than `10×10`, because the row is
+      already a row of sizes and the second number was saying the same thing
+      four times. What a preset actually is stays in the `aria-label` and the
+      `title`, which is where a person who does not already know can find it —
+      the button's visible text is a label in a set, not a definition.
+    */
+    <div className="board-rail seg" role="group" aria-label="Size and zoom">
+      <div className="board-rail__presets seg__group">
         {/* Freehand is the default and, below `sm`, tapping the active preset
             already returns to it — so this is the one control the phone drops. */}
         <button
@@ -63,7 +75,7 @@ export default function BoardRail({
             onPresetChange(null);
             onClear();
           }}
-          className="btn-quiet hidden shrink-0 px-2.5 py-1.5 text-[12.5px] sm:block"
+          className="seg__btn hidden sm:block"
         >
           Freehand
         </button>
@@ -77,20 +89,23 @@ export default function BoardRail({
             title={`${preset.label} · ${pixelCount(preset.size * preset.size)} · ${formatUsdc(
               preset.size * preset.size * perPixel,
             )}`}
-            className="btn-quiet tabular shrink-0 px-2.5 py-1.5 text-[12.5px]"
+            className="seg__btn tabular"
           >
-            {preset.label}
+            {preset.size}
           </button>
         ))}
       </div>
-      <div className="board-rail__zoom flex shrink-0 items-center gap-1">
+
+      <span aria-hidden className="seg__rule" />
+
+      <div className="board-rail__zoom seg__group">
         <button
           type="button"
           onClick={onZoomOut}
           disabled={!zoom.canZoomOut}
           aria-label="Zoom out one step"
           title="Zoom out one step"
-          className="btn-quiet size-8 shrink-0 text-[16px] font-bold leading-none"
+          className="seg__btn seg__btn--glyph"
         >
           −
         </button>
@@ -100,7 +115,7 @@ export default function BoardRail({
           disabled={!zoom.canZoomOut}
           aria-label="Fit the whole board on screen"
           title="Fit the whole board on screen"
-          className="btn-quiet h-8 shrink-0 px-2 text-[12.5px] leading-none"
+          className="seg__btn"
         >
           Fit
         </button>
@@ -110,7 +125,7 @@ export default function BoardRail({
           disabled={!zoom.canZoomIn}
           aria-label="Zoom in one step"
           title="Zoom in one step"
-          className="btn-quiet size-8 shrink-0 text-[16px] font-bold leading-none"
+          className="seg__btn seg__btn--glyph"
         >
           +
         </button>

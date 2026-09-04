@@ -683,16 +683,37 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           on the page tells the server this browser is here, and the one that
           used to do it was this.
         */}
+        {/*
+          THE TWO LINKS HAVE LEFT THE HEADER, 2026-09-03. The bar is the wall's
+          own line — the name, the figure, and the two controls that act on a
+          purchase — and a pair of destinations sitting among them read as more
+          chrome than they are worth. They are at the foot of the strip now, set
+          in the counter's own face and turned down, which is where somebody
+          looks when they are not buying yet.
+        */}
         <div className="board-bar__tools">
-          <span className="board-bar__links">
-            <Link href="/faq" className="btn-quiet shrink-0 px-2.5 py-1.5 text-[12.5px]">
-              What this is
-            </Link>
-            <Link href="/how-to-buy" className="btn-quiet shrink-0 px-2.5 py-1.5 text-[12.5px]">
-              How to buy
-            </Link>
-            <ThemeToggle />
-          </span>
+          {/*
+            WHO ELSE IS HERE, in the header and to the right of the figure.
+
+            It rode with the tools for one batch and it is up here now: the two
+            numbers are the same kind of thing — a count of the wall's state —
+            and putting them on one line is what makes the header say what is
+            happening rather than only what is for sale. It is still the ONLY
+            copy on the page, so it is the one that beats: exactly one element
+            tells the server this browser is here.
+
+            It links to `/stats`, which is where the same numbers have their
+            history, and it is the only place on the board that offers a way to
+            read more about them.
+          */}
+          <Link
+            href="/stats"
+            className="presence-pill"
+            title="Visitors on the wall in the last two minutes, and every visit it has ever had. Counted anonymously — see /stats."
+          >
+            <OnlineBanner online={board.online} views={board.views} />
+          </Link>
+          <ThemeToggle />
           {/*
             LAST, AND HARD AGAINST THE EDGE. It is outside the span beside it on
             purpose: the two links and the switch give way on a phone and the
@@ -754,18 +775,11 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
       <div ref={rightRailRef} className="board-side board-side--right">
         <PurchaseTape ref={tapeRef} rows={board.tape} asOf={board.asOf}>
           {/*
-            THE ONLY COPY ON THE PAGE NOW, and therefore the one that beats: it
-            is what tells the server this browser is here. It moved out of the
-            header on 2026-09-03 when the header became three zones — see there
-            — and it lands here because the register is the one part of the
-            chrome that exists in every layout, so the count never has a width
-            at which it has nowhere to be.
+            NO COUNT IN HERE ANY MORE. It lived at the head of this rail while
+            the header carried the other copy; there is one copy now and it
+            rides with the tools, which have a home in both layouts. Two copies
+            were two things to keep in step and one of them was always hidden.
           */}
-          <OnlineBanner
-            online={board.online}
-            views={board.views}
-            className="online-banner--rail"
-          />
         </PurchaseTape>
         <BoardStandings rows={board.standings} />
 
@@ -788,6 +802,50 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           Not an overlay in either — see the stylesheet's strip block for the
           exemption this replaced and what it used to cost the wall.
         */}
+        {/*
+          THE WAY OUT OF THE WALL, on the strip's own baseline and at the far
+          left of it. Small, in the mono the counters use, and turned down to
+          `--body`: these are the two things to read BEFORE buying, and a reader
+          who is mid-drag should be able to ignore them without effort.
+        */}
+        {/*
+          WHO BUILT IT, bottom-left, in the corner the genre puts it in.
+
+          IT IS IN THE STRIP AND NOT FLOATING OVER THE CORNER, and that is the
+          rule deciding it rather than the convention: at 1280 and up the
+          bottom-left of the window is the register's left column, running the
+          full height of the letterbox, and nothing may stand on the wall or on
+          the register. The strip's own background is the only bottom-left
+          surface that is neither. On a phone the strip stacks, so it lands at
+          the foot exactly as asked.
+
+          THE MARK IS DRAWN HERE. An avatar fetched from x.com is a request that
+          leaves this page for somebody else's server on every load, and this
+          site draws its own pictures — `/faq` and `/how-to-buy` both say so.
+          What identifies the link is the X glyph and the handle.
+        */}
+        <a
+          href="https://x.com/CryptoSandlerr"
+          target="_blank"
+          rel="noreferrer noopener"
+          className="built-by"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden className="built-by__mark">
+            <path
+              fill="currentColor"
+              d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"
+            />
+          </svg>
+          <span className="built-by__label">Built by </span>
+          <span className="built-by__handle">@CryptoSandlerr</span>
+        </a>
+
+        <nav className="strip-links" aria-label="About this wall">
+          <Link href="/faq">What this is</Link>
+          <span aria-hidden>·</span>
+          <Link href="/how-to-buy">How to buy</Link>
+        </nav>
+
         <div className="board-tools">
           <BoardRail
             perPixel={board.pricePerPixelBaseUnits}
@@ -799,6 +857,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
             onZoomOut={zoomOut}
             onZoomFit={zoomFit}
           />
+
         </div>
 
         <div ref={controlsRef} className="board-controls">

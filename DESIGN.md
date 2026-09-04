@@ -1072,15 +1072,109 @@ plus what is visible of it at the bottom right must equal its own height, within
 two pixels. Three captures a second and a half apart are what a person looks at;
 the arithmetic is what fails a build.
 
+### The strip, and the purchase panel that stopped being a card
+
+**Settled 2026-09-03**, from two candidates shown side by side on a local server
+at both widths the owner judges at.
+
+**One baseline, four things, left to right:** the credit pill, *What this is* ·
+*How to buy* as small quiet links in the counter's own mono, the segmented
+control (`Freehand 10 20 50 100 │ − Fit +`), and the presence pill riding with
+it. Then the purchase panel, at the right.
+
+**The panel's right edge lands on the wall's own right frame.** `--wall-right` is
+published by the canvas — the only thing that knows where it painted — and the
+strip carries it as a grid TRACK rather than as a margin on the panel. That
+distinction is the whole of it: a margin moves the panel after the grid has
+sized every track, so it walked 203px over the tools at 1280. As a track, the
+tools give way for it the way they give way for anything else, by scrolling.
+
+**Measured, after:** the panel's right edge is exactly on the frame at 1920 and
+above, with 24px of clear paper between the tools and the panel at **every**
+width from 1280 up, and the strip is 81px at all of them. Below 1600 the panel
+sits at the strip's own right padding instead — buying the alignment there costs
+the tools 134px of their track, which would scroll the presets down to
+*Freehand* and nothing else.
+
+#### The panel is an outline, and the white receipt is reversed
+
+**This reverses "the first exception, and why the receipt is not a colourway",
+settled earlier and undone 2026-09-03.** That exception made the purchase panel
+white in both registers, re-declaring the light palette on the box itself, on
+the argument that a receipt is white — and it carried its own measured contrast
+table against that white.
+
+Against a dark wall it read as **a card floating on the page** rather than as
+part of the strip, which is the thing the owner asked to be rid of. The panel
+now takes the register's own tokens like every other element: **no fill, one
+`hairline-strong` rule, the strip showing through.** Both contrast tables in this
+document apply to it unchanged, which is the half of the reversal that costs
+nothing — the old exception needed a table of its own precisely because it was
+the one box outside the system.
+
+**What was NOT reversed:** the Buy button stays the register's own accent. It is
+the fifth of the accent's five permitted places, and a green Buy in the dark
+register is the same claim it is everywhere else.
+
+### Buttons: three roles, one shape
+
+**Settled 2026-09-03**, after a count: the site had five different ideas of what
+a button is — the preset pills, the header links, the Buy button, Connect
+wallet, and the theme switch each carried their own radius, height and type
+size. There are three roles now, and they differ by **weight**, never by shape.
+
+| Role | Fill | Border | Weight | Where it is used |
+|---|---|---|---|---|
+| **Primary** | the register's accent | none | 700 | **Buy these pixels**, **Connect wallet** — and nowhere else. One page, one thing being asked for; two of them because a purchase genuinely has two steps |
+| **Secondary** | `--card` | 1px `--control-line` | 600 | The segmented control's presets and zoom, the theme switch, the buttons on the prose pages (*Back to the board*, *Open the card*, the pager) |
+| **Tertiary** | none | none | 600 | *What this is* · *How to buy* at the foot of the strip, and every link inside prose that is not a destination off-site |
+
+**Radius, height and typography are tokens and nothing overrides them** —
+`--btn-h`, `--btn-r`, `--btn-fs`, `--btn-fw`, `--btn-family`, `--btn-tracking`.
+The block that applies them is **unlayered**, so a Tailwind utility in a
+component's class list loses to it: that is what makes "the same button" a fact
+rather than an intention. **Padding is allowed to differ** — a `+` and *Connect
+wallet* cannot carry the same horizontal space and still be the same control.
+
+**Height is 30px for every one of them**, which is why swapping direction moves
+nothing in any bar: the header is 34px and the strip is 81px in both.
+
+#### The shape is the pill, and it was chosen against a printed one
+
+**Settled 2026-09-03.** `--btn-r: 999px`, the UI face at 12.5px, no tracking,
+and a 10px corner on the panel. The candidate it beat was a stamp — 3px corners,
+the numeric face, `0.02em` of tracking — which is arguably closer to the register
+the rest of this design is in, and the owner looked at both at 2495 and 1440 and
+took the pill.
+
+**Both were the same 30px tall**, which is why the choice moved nothing: the
+header is 34px and the strip 81px either way. The loser is deleted, along with
+the attribute that carried it. **A switch left in after a decision is a second
+design nobody is testing.**
+
 ### The vertical chrome budget
 
-**≤ 127px without rails, set 2026-09-03 and it is a measurement rather than a
-round number.** A 34px header plus a 93px strip, with the board's own inset
+**≤ 115px without rails, set 2026-09-03 and it is a measurement rather than a
+round number.** A 34px header plus an 81px strip, with the board's own inset
 counted separately. **≤ 34px with the rails on**, which is the header alone. **≤
-256px at 390**, which is a different question wearing the same units — the board
+220px at 390**, which is a different question wearing the same units — the board
 there is fitted by its WIDTH, 370px of free width against 844 of height, so
 vertical chrome costs it nothing at all and the number is a sanity ceiling
 rather than a claim about the wall's share.
+
+**Every control on this page is 26px tall, and a focus ring is why.** At 30px in
+a 34px header a button sits two pixels from the top of the bar — and a 2px ring
+at a 2px offset needs four, so the Connect button's ring would have been drawn
+at `y = −0.5`, off the top of the window. Not clipped by a container: clipped by
+the screen. The alternative was a 38px header, which is four pixels of wall at
+every width. The phone's strip gave back the same four pixels the segmented
+control had just taken for the same rule, so its budget went 220 → 224 → 220
+inside one batch and neither number was chosen.
+
+**It was 127 earlier the same day and 130 before that.** The twelve came from
+the readout's second row folding into its first when the strip was redrawn on
+one baseline: the panel is one line plus a warning where it was two lines plus a
+warning.
 
 **Why the number changed, and why it did not change further.** It was 130 with
 four pixels of slack in it. The header and the strip were both rebuilt on
@@ -1148,15 +1242,20 @@ preset pill wraps by design — without it the strip grew to 123px at 1280.
 `scripts/board-share.mts`, 2026-09-02, the board's own box as a percentage of
 the viewport:
 
-| Viewport | Before | After | Change |
+| Viewport | Before the rule | After it | After the strip was redrawn, 2026-09-03 |
 |---|---|---|---|
-| 1280×800 | 1129×724 · **79.8%** | 1024×657 · **65.7%** | −14.1 pts |
-| 1440×900 | 1285×824 · **81.7%** | 1181×757 · **69.0%** | −12.7 pts |
-| 1920×1080 | 1567×1004 · **75.9%** | 1462×937 · **66.1%** | −9.8 pts |
-| 2495×1484 | 2198×1408 · **83.6%** | 2093×1341 · **75.8%** | −7.8 pts |
-| 2560×1440 | 2129×1364 · **78.8%** | 2024×1297 · **71.2%** | −7.6 pts |
-| 390×844 | 374×241 · **27.4%** | 374×241 · **27.4%** | none |
-| 3440×1440 (rails) | — | 2170×1390 · **60.9%** | unchanged |
+| 1280×800 | 1129×724 · **79.8%** | 1024×657 · 65.7% | 1043×669 · **68.1%** |
+| 1440×900 | 1285×824 · **81.7%** | 1181×757 · 69.0% | 1199×769 · **71.1%** |
+| 1920×1080 | 1567×1004 · **75.9%** | 1462×937 · 66.1% | 1481×949 · **67.8%** |
+| 2495×1484 | 2198×1408 · **83.6%** | 2093×1341 · 75.8% | 2112×1353 · **77.2%** |
+| 2560×1440 | 2129×1364 · **78.8%** | 2024×1297 · 71.2% | 2043×1309 · **72.5%** |
+| 390×844 | 374×241 · **27.4%** | 374×241 · 27.4% | 374×241 · **27.4%** |
+| 3440×1440 (rails) | — | 2170×1390 · **60.9%** | 2170×1390 · **60.9%** |
+
+**The third column is the twelve pixels coming back**, between 1.3 and 2.4
+points of wall at every banded width, from the purchase panel folding onto one
+line. The phone is unchanged because its board is width-limited, and the rails
+layout never paid anything.
 
 **The phone pays nothing** because its board is width-limited. **Everything else
 pays between 7 and 14 points**, and that is the price of the rule rather than a

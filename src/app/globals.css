@@ -245,7 +245,7 @@
   /* The floating purchase panel's height, which only exists while something is
      selected. It raises the budget to 140px and overlays the letterbox where
      there is one — see `.board-panel`. */
-  --bar-bottom-h: 80px;
+  --bar-bottom-h: 68px;
   /*
    * The settled-purchase rail along the bottom of the wall.
    *
@@ -750,6 +750,7 @@ h3 {
     .board-bar__figure {
       margin-left: auto;
     }
+
   }
 
   /*
@@ -1130,23 +1131,22 @@ h3 {
   }
 
   /*
-   * THE SHARE SOLD IS A SUFFIX, NOT A SECOND FIGURE.
+   * THE DENOMINATOR, SMALL, BESIDE THE FIGURE.
    *
-   * It was a pill of its own beside the count, which read as two numbers
-   * competing — and the two say the same thing from opposite ends. As a small
-   * suffix it qualifies the figure instead of arguing with it. It gives way
-   * first, below `sm`, because the count is the one that never leaves.
+   * `191,847 pixels sold · of 1,000,000`: the number that moves is large and
+   * the number it is out of is quiet. It gives way first below `sm`, because
+   * the count is the one that never leaves.
    */
   /* A middot before it, so the suffix reads as a second clause rather than as
      more of the same sentence. The separator is the hairline's own tone, which
      is the one this design uses everywhere two facts share a line. */
-  .pixels-left__pct::before {
+  .pixels-left__of::before {
     content: "·";
     margin-right: 7px;
     color: var(--hairline-strong);
   }
 
-  .pixels-left__pct {
+  .pixels-left__of {
     display: none;
     font-family: var(--font-numeric);
     font-size: 11px;
@@ -1156,7 +1156,7 @@ h3 {
   }
 
   @media (min-width: 640px) {
-    .pixels-left__pct {
+    .pixels-left__of {
       display: inline;
     }
   }
@@ -2674,8 +2674,7 @@ h3 {
    * takes the third zone, which is the empty one.
    */
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: stretch;
+  align-items: center;
   gap: 12px;
   padding: 6px 12px;
   padding-bottom: max(6px, env(safe-area-inset-bottom));
@@ -3110,40 +3109,508 @@ h3 {
   }
 }
 
-.board-tools {
-  order: 1;
+/* ============================================================================
+   THE STRIP: ONE BASELINE, AND THE PANEL ON THE WALL'S OWN EDGE
+   ----------------------------------------------------------------------------
+   Chosen by the owner on 2026-09-03 from two candidates shown side by side on a
+   local server. The credit pill, the two links and the segmented tools sit at
+   the left in that order, the presence pill rides with the tools, the purchase
+   panel is at the right, and nothing stands on the wall.
+
+   THE PANEL'S RIGHT EDGE LANDS ON THE WALL'S RIGHT FRAME, so the two verticals
+   a reader already sees — the board's edge and the panel's — are one line.
+   `--wall-right` is published by the canvas, which is the only thing that knows
+   where it painted; see `BoardCanvas`. The candidate that centred the panel on
+   the window instead is gone.
+   ========================================================================= */
+
+/*
+ * ABOVE THE PHONE ONLY. Below 641 the strip is one stacked column, and these
+ * rules carry an attribute so they outrank the media query that says so —
+ * which is exactly how the panel ended up in an invented sixth column at 390,
+ * 151px wide beside a 206px-tall pile of tools. Scoping the whole block is the
+ * fix; specificity was never going to be.
+ */
+@media (min-width: 641px) {
+
+/* Everything left of the panel is one group on one baseline. */
+.board-strip {
+  grid-template-columns: auto auto auto 1fr auto;
+}
+
+.built-by {
   grid-column: 1;
-  justify-self: start;
+}
+
+.strip-links {
+  grid-column: 2;
 }
 
 /*
- * THE TOOLS KEEP THEIR ONE ROW WHEREVER THERE IS ROOM FOR IT.
+ * THE PANEL'S RIGHT EDGE ON THE WALL'S RIGHT EDGE.
  *
- * A `1fr` track's automatic minimum is its item's MIN-content, and the preset
- * pill wraps by design — so the symmetric grid squeezed the tools into 336px at
- * 1280 and they took two rows, which grew the strip from 93 to 123 and cost the
- * wall 30px of height at the one viewport with the least of it. `max-content`
- * makes the track's minimum the pill's one-row width instead.
- *
- * WHAT GIVES WAY INSTEAD IS THE CENTRING, and that is the right thing to lose:
- * at 1280 there is not room for 510 of tools, 560 of panel and 510 of empty
- * paper, so the panel sits to the right of the tools rather than in the middle
- * of the window. It is still 560 wide and nothing in it truncates. Above 1400
- * the two side tracks are equal again and the panel is centred on the window.
- *
- * Not on a phone: there the strip is one column and the tools are meant to
- * wrap.
+ * `--wall-right` is the distance from the window's right edge to the board's
+ * own frame, measured by the renderer that drew it. The strip already pads 12,
+ * so the panel gives back the difference. `max()` at zero is what keeps a
+ * viewport with no letterbox — 390, and the rails layout — from pushing the
+ * panel off its own strip.
  */
-@media (min-width: 641px) {
+/*
+ * THE WALL'S INSET IS A TRACK, NOT A MARGIN, and that distinction is the whole
+ * fix. A `margin-right` moves the panel left AFTER the grid has already sized
+ * every track assuming the panel sits at the window's edge — so the panel
+ * walked left over the tools: measured at 1280, 203px of overlap. A sixth track
+ * is part of the sizing, so the tools give way for it the way they give way for
+ * anything else, by scrolling.
+ */
+/*
+ * THE TOOLS ARE THE TRACK THAT GIVES, and putting them there is what finally
+ * held. Five tracks: the credit, the links, the TOOLS as `1fr`, the panel, and
+ * the wall's own inset.
+ *
+ * `1fr` shrinks to its item's automatic minimum, and `min-width: 0` on the
+ * tools makes that minimum zero — so the segment scrolls and the panel keeps
+ * its width, instead of the row overflowing or the panel walking left over the
+ * controls. Both of those were measured on the way here: 203px of overlap at
+ * 1280 with a margin, and a panel running to 1464 in a 1440px window with a
+ * `max-content` floor.
+ *
+ * The inset track is `--wall-right` less the strip's own padding, floored at
+ * zero for the viewports with no letterbox at all.
+ */
+.board-strip {
+  grid-template-columns: auto auto 1fr auto 0px;
+}
+
+/*
+ * AND THE INSET IS ONLY BOUGHT WHERE IT IS AFFORDABLE. It costs the tools their
+ * track: at 1280 the wall's inset is 134px and the tools were left 138 of the
+ * 306 they need, so the segment would be scrolled down to `Freehand` and
+ * nothing else. Alignment is worth a shorter row of presets and it is not worth
+ * that. Measured: at 1600 the tools keep 300+, at 1920 they keep all of it.
+ */
+@media (min-width: 1600px) {
+  .board-strip {
+    grid-template-columns:
+      auto auto 1fr auto max(0px, calc(var(--wall-right, 12px) - 36px));
+  }
+}
+
+/*
+ * STRETCHED, NOT START-ALIGNED, and that one word was the last bug in this row.
+ * `justify-self: start` sizes a grid item to its CONTENT and lets it overflow
+ * its track — so the tools measured 856px inside a 660px track and painted 172px
+ * of themselves over the panel, with `overflow-x` on the element doing nothing
+ * because the element was never the size that would have clipped anything.
+ * Stretched, the item is exactly its track and the scroll inside it is real.
+ */
+.board-tools {
+  grid-column: 3;
+  justify-self: stretch;
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.board-controls {
+  grid-column: 4;
+  justify-self: end;
+}
+
+/*
+ * AND ONLY WHERE THE WALL'S EDGE IS FAR ENOUGH RIGHT TO REACH.
+ *
+ * The arithmetic, not a taste: at 1440 the wall's right frame is at x=1319 and
+ * the left group already ends at 825, so a 560px panel ending on that edge
+ * would start at 759 and sit under the tools. It cannot be done there, and the
+ * first version did not say so — it overflowed the grid and left the panel
+ * seven pixels off the window's edge and 114 past the wall's, which looks like
+ * a bug rather than a fallback.
+ *
+ * IT REACHES EVERY WIDTH WITH A LETTERBOX, now that the tools can shrink. The
+ * margin only ever moves the panel LEFT, and the tools give way ahead of it by
+ * scrolling — so there is no width at which applying it pushes the row past the
+ * window, which is what happened at 1700 and again at 1400 while the tools
+ * refused to shrink.
+ *
+ * `max()` at zero is what keeps a viewport with no letterbox — 390, and the
+ * rails layout — from moving the panel at all.
+ */
+
+
+/* ============================================================================
+   WHAT THE LEFT GROUP SHEDS, AND IN WHICH ORDER
+   ----------------------------------------------------------------------------
+   Everything on one baseline does not fit at every width, and the arithmetic
+   says so rather than a judgement: at 1440 there are 1416 usable pixels, the
+   panel takes 572 of them, and the credit, the links, the segmented control and
+   the presence pill want 908 of the 844 that are left.
+
+   So the order is written down, cheapest first, and it is the order of how much
+   each thing can only be got HERE:
+
+   1. **The credit's words.** `Built by` goes and the glyph and handle stay —
+      the link is still the link.
+   2. **The view total.** `· 187 views` goes and `● 12 online` stays. Who is
+      here NOW cannot be read anywhere else on this page; the total is on
+      `/stats`, which this pill links to.
+   3. **The credit entirely**, below 1400. It comes back at the foot on a phone,
+      where the strip stacks and there is room for it again.
+
+   Nothing sheds the links, the tools or the panel. Those are the things a
+   reader came to use.
+   ========================================================================= */
+
+@media (max-width: 1599px) {
+  .online-banner__views {
+    display: none;
+  }
+
+  .built-by__label {
+    display: none;
+  }
+}
+
+@media (max-width: 1399px) {
+  .built-by {
+    display: none;
+  }
+}
+
+}
+/* ---------------------------------------------------------------- the pieces */
+
+/*
+ * THE SEGMENTED CONTROL: nine buttons that were nine pills are two groups in
+ * one box now, with a rule between the sizes and the zoom. It reads as one
+ * control because it is one question asked twice — what size, and how close.
+ */
+.seg {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid var(--control-line);
+  border-radius: var(--radius-md);
+  background: var(--card);
+}
+
+.seg__group {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-width: 0;
+}
+
+.seg__rule {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 4px;
+  background: var(--hairline-strong);
+}
+
+.seg__btn {
+  /*
+    NO BOX OF ITS OWN. A segment is told apart from its neighbours by the
+    pressed state and by the rule, not by nine borders inside one border.
+  */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: calc(var(--radius-md) - 3px);
+  background: transparent;
+  color: var(--body);
+  font-family: var(--font-numeric);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dur-hover) var(--ease), color var(--dur-hover) var(--ease);
+}
+
+.seg__btn--glyph {
+  min-width: 26px;
+  padding: 0 6px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.seg__btn:hover:not(:disabled) {
+  background: var(--ground-lift);
+  color: var(--ink);
+}
+
+.seg__btn[aria-pressed="true"] {
+  background: var(--ground-lift);
+  color: var(--ink);
+}
+
+.seg__btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/*
+ * A FOCUS RING IS NEVER CLIPPED, and this one nearly was twice over.
+ *
+ * It was drawn INSIDE the button (`outline-offset: -1px`) to fit a 2px-padded
+ * segment, which is a different ring from every other control on the page — and
+ * the guard that samples the third pixel out from a focused control found no
+ * ring there at all. The system's ring is 2px at a 2px offset, so the segment
+ * carries 4px of padding to hold it: `overflow-x: auto` clips at the PADDING
+ * box, so the ring has somewhere to be drawn and the row still scrolls.
+ */
+.seg {
+  padding: 4px;
+}
+
+/*
+ * `--ink`, NOT `--signal`, AND THAT ONE WORD COST A WHOLE GATE.
+ *
+ * `--signal` is not a token this stylesheet defines. An `outline` shorthand
+ * whose colour is an undefined custom property is invalid at computed-value
+ * time, so the declaration does not fall back — it UNSETS the property, and the
+ * computed style came back `rgb(238, 242, 247) none 3px`: the right colour from
+ * the general rule, and no style at all. The ring simply was not drawn, and the
+ * pixel sampler said so.
+ *
+ * Every other focus ring in this file is `2px solid var(--ink)` at a 2px
+ * offset. This is that ring, not a fourth idea of one.
+ */
+.seg__btn:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/*
+ * THE WAY OUT, in the counter's own face and turned down.
+ *
+ * Text links rather than buttons: they are destinations, and a reader mid-drag
+ * should be able to sweep past them. `--font-numeric` is the deliberate part —
+ * DESIGN.md sets the mono for metadata, and these are the page's own metadata
+ * rather than anything the wall is offering.
+ */
+.strip-links {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-numeric);
+  font-size: 11.5px;
+  color: var(--body);
+  white-space: nowrap;
+}
+
+.strip-links a {
+  color: var(--body);
+  text-decoration: none;
+  transition: color var(--dur-hover) var(--ease);
+}
+
+.strip-links a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.strip-links span {
+  color: var(--hairline-strong);
+}
+
+/*
+ * WHO BUILT IT. Small, quiet, and the only thing on this page that names a
+ * person — which is why it names the person who made it and never a buyer.
+ */
+.built-by {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid var(--control-line);
+  border-radius: var(--radius-pill);
+  background: var(--card);
+  color: var(--body);
+  font-family: var(--font-numeric);
+  font-size: 11px;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: color var(--dur-hover) var(--ease), border-color var(--dur-hover) var(--ease);
+}
+
+.built-by:hover {
+  color: var(--ink);
+  border-color: var(--hairline-strong);
+}
+
+.built-by__mark {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+}
+
+.built-by__handle {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/*
+ * THE PRESENCE PILL, beside the tools, and it is a LINK.
+ *
+ * The dot is the one live green on this page and DESIGN.md carries the
+ * exception in writing: `ok` is a semantic colour, this is the one semantic
+ * thing on the board, and a count of people who are here right now is the only
+ * place a pulse says something true.
+ */
+.presence-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border: 1px solid var(--control-line);
+  border-radius: var(--radius-pill);
+  background: var(--card);
+  text-decoration: none;
+  transition: border-color var(--dur-hover) var(--ease);
+}
+
+.presence-pill:hover {
+  border-color: var(--hairline-strong);
+}
+
+.presence-pill .online-banner {
+  display: flex;
+  font-size: 11.5px;
+}
+
+/* The dot breathes, because the number behind it is alive. Reduced motion
+   stops the pulse and keeps the colour, which is the half that carries the
+   meaning. */
+.presence-pill .online-banner > span:first-child {
+  animation: presence-pulse 2.4s var(--ease) infinite;
+}
+
+@keyframes presence-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .presence-pill .online-banner > span:first-child {
+    animation: none;
+  }
+}
+
+/*
+ * THE SEGMENT SCROLLS RATHER THAN GROWING TALL on a narrow strip. Nine controls
+ * in a 366px column wrapped to three rows and took the strip from 221 to 273 at
+ * 390 — a taller strip is a shorter wall, and a row that scrolls is the answer
+ * this design already uses for the same problem.
+ */
+@media (max-width: 640px) {
+  .seg {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .seg::-webkit-scrollbar {
+    display: none;
+  }
+
+  .seg__group {
+    flex-shrink: 0;
+  }
+
   .board-tools {
-    min-width: max-content;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+}
+
+.board-tools {
+  order: 1;
+  /*
+    STRETCHED, NOT START-ALIGNED, and the rule that says so is above — this one
+    used to repeat `justify-self: start` and, sitting later in the file, quietly
+    undid it. `start` sizes a grid item to its CONTENT and lets it overflow its
+    track: 134px of tools over the panel at 1280, measured the moment the
+    variant attributes came out and the two rules stopped being scoped apart.
+  */
+  gap: 10px;
+}
+
+/*
+ * THE TOOLS SCROLL RATHER THAN WRAP, AND RATHER THAN REFUSE TO SHRINK.
+ *
+ * Two failures, one rule. The preset pill wraps by design so it cannot paint
+ * off the side of a phone — and in the strip's grid that turned a squeeze into
+ * a THIRD ROW, taking the band from 93px to 123 at 1280. The fix for that was
+ * `min-width: max-content`, which then meant the tools could not shrink at all,
+ * so the grid overflowed instead: measured at 1440, the panel ran from 904 to
+ * 1464 in a 1440px window.
+ *
+ * A row that scrolls does neither. The segment keeps one row at any width, the
+ * track shrinks when it must, and 320px is the floor — about the Freehand
+ * button and three sizes, which is enough to see that it IS a row of sizes and
+ * to scroll for the rest.
+ */
+/* `.board-rail.seg`, not `.seg`: BoardRail carries both class names and
+   `.board-rail { flex-wrap: wrap }` sits later in this file, so a single class
+   loses to it and the segment wrapped to three rows at 1280 — 36px of strip. */
+.board-rail.seg {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-width: 0;
+}
+
+.seg::-webkit-scrollbar {
+  display: none;
+}
+
+/* The two groups inside it wrap by their own rule further down this file — the
+   pill was built to fold on a phone. Inside a segment they never do: the
+   segment scrolls instead, and a wrapped group is 36px of strip. */
+.board-rail.seg .board-rail__presets,
+.board-rail.seg .board-rail__zoom,
+.seg__group {
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+}
+
+@media (min-width: 641px) {
+  /*
+    THE WHOLE GROUP SCROLLS, not just the segment inside it. `min-width: 0` lets
+    the TRACK shrink; it does not let the ITEM lay out narrower than its own
+    content, so at 1280 a 306px-wide group sat in a 138px track and painted 168px
+    of itself over the panel. This is the net that makes that impossible.
+  */
+  .board-tools {
+    min-width: 0;
+    flex-shrink: 1;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .board-tools::-webkit-scrollbar {
+    display: none;
+  }
+
+  .seg {
+    min-width: 320px;
+  }
+}
+
+/* Less of a floor where there is less room: about Freehand and two sizes, and
+   the rest is one scroll away. */
+@media (max-width: 1439px) {
+  .seg {
+    min-width: 210px;
   }
 }
 
 .board-controls {
   order: 2;
-  grid-column: 2;
-  justify-self: center;
 }
 
 .board-tape {
@@ -3164,11 +3631,44 @@ h3 {
     gap: 6px;
   }
 
+  .built-by,
+  .strip-links,
   .board-tools,
   .board-controls,
   .board-tape {
     grid-column: 1;
     justify-self: stretch;
+  }
+
+  /*
+   * THE CREDIT AND THE LINKS SHARE ONE ROW at the foot, which is 23px of strip
+   * and therefore 23px of chrome. They are placed on the same explicit row
+   * rather than ordered, because `order` cannot put two items in one cell — and
+   * two rows put the phone's chrome at 267 against a 256 budget.
+   *
+   * Under the controls, which is the reading order on a phone: what you can do,
+   * then what you can read.
+   */
+  .board-tools {
+    grid-row: 1;
+  }
+
+  .board-controls {
+    grid-row: 2;
+  }
+
+  .board-tape {
+    grid-row: 3;
+  }
+
+  .built-by {
+    grid-row: 4;
+    justify-self: start;
+  }
+
+  .strip-links {
+    grid-row: 4;
+    justify-self: end;
   }
 
   /* The panel is the strip's whole width on a phone; the 560 ceiling is for a
@@ -3319,59 +3819,6 @@ h3 {
 }
 
 /* ============================================================================
-   THE PURCHASE PANEL IS WHITE IN BOTH REGISTERS, BECAUSE IT IS THE RECEIPT
-   ----------------------------------------------------------------------------
-   DESIGN.md, "The first exception, and why the receipt is not a colourway":
-   everything else on this page is one design in two registers, and this is the
-   one box that is the same in both. It is where a number somebody is about to
-   pay is printed, and a receipt is white.
-
-   IT IS NOT A COLOUR OVERRIDE, IT IS A PALETTE. Every child of this panel is
-   already styled through tokens, so re-declaring the LIGHT register's tokens on
-   the panel itself makes the whole island light without a single component
-   knowing: the readout, the hint, the borders, the labels. That is also what
-   keeps it honest — nothing here invents a value, every one of them is a number
-   this document has already measured.
-
-   WHAT IS DELIBERATELY NOT RE-DECLARED IS `--primary`. The accent means money
-   moving now, and the Buy button is the fifth of its five permitted places; it
-   stays the register's own accent so a green Buy in the dark register is still
-   the same claim it is everywhere else.
-
-   MEASURED, against this panel's white:
-
-     ink        #2b241c   15.31   ink-soft  #443a2c   11.13
-     body       #6b6154    6.06   mute      #827968    4.30
-     control-line #8a795c  4.23
-
-   AND THE PANEL AGAINST THE WALL IT FLOATS ON: 19.46:1 on the dark canvas,
-   19.83:1 on the dark paper — and 1.17:1 on the CREAM one, which is to say the
-   white panel is not visible against the light register's ground by tone at
-   all. Its 1px `control-line` border is what says where it is there, at 4.23:1
-   against the panel and 3.62:1 against the cream: the same argument this
-   document already makes for `hairline-strong`, that a boundary is identified
-   by a line rather than by a step.
-   ========================================================================= */
-
-.board-controls {
-  --card: #ffffff;
-  --card-lift: #f7f4ee;
-  --canvas: #ffffff;
-  --canvas-deep: #f0ece2;
-  --ink: #2b241c;
-  --ink-soft: #443a2c;
-  --body: #6b6154;
-  --mute: #827968;
-  --hairline: rgba(43, 36, 28, 0.1);
-  --hairline-strong: #c9baa0;
-  --control-line: #8a795c;
-  --danger: #a8371f;
-
-  background: #ffffff;
-  color: var(--ink);
-}
-
-/* ============================================================================
    THE WALLET CONTROL, IN THE HEADER AND IN A VIOLET THIS DESIGN DID NOT CHOOSE
    ----------------------------------------------------------------------------
    DESIGN.md, "The second exception": the accent means money moving now and
@@ -3466,5 +3913,199 @@ h3 {
 
   .wallet-connect__button {
     padding: 0 7px;
+  }
+}
+
+/* ============================================================================
+   THE BUTTON SYSTEM — THREE ROLES, ONE SHAPE
+   ----------------------------------------------------------------------------
+   Asked for on 2026-09-03: every button on this site had grown its own radius,
+   its own height and its own type size, so a page carried four or five
+   different ideas of what a button is. There are three now, and they differ by
+   WEIGHT rather than by shape:
+
+     primary    filled with the accent      — the one action being asked for
+     secondary  outlined, transparent fill  — a real action that is not the ask
+     tertiary   text only, no box at all    — a destination
+
+   Radius, height and typography come from the four tokens below and nothing
+   overrides them, which is what makes "the same button" a fact rather than an
+   intention. Padding is allowed to differ: a `+` and `Connect wallet` cannot
+   carry the same horizontal space and be the same control.
+
+   THE SHAPE IS THE PILL, chosen by the owner on 2026-09-03 against a
+   small-cornered "printed" rectangle set in the mono. Both were shown on a
+   local server at both widths; the pill won and the other is deleted.
+   ========================================================================= */
+
+:root {
+  /*
+   * 26, AND THE FOUR PIXELS IT GAVE BACK ARE A FOCUS RING AGAIN.
+   *
+   * It was 30 against a 34px header, which leaves two pixels above the control
+   * and below it — and a 2px ring at a 2px offset needs four. Measured: the
+   * Connect button sat at `top: 1.5`, so its ring would have been drawn at
+   * y = -0.5, off the top of the window entirely. Not clipped by a container
+   * this time, clipped by the screen.
+   *
+   * The alternative was a 38px header, which is four pixels of wall at every
+   * width — the opposite of what the batch this sits in just won. A control
+   * four pixels shorter costs nothing anybody can point at.
+   */
+  --btn-h: 26px;
+  --btn-r: var(--radius-pill);
+  --btn-fs: 12.5px;
+  --btn-fw: 600;
+  --btn-family: var(--font-ui);
+  --btn-tracking: 0;
+  /* The panel is a container rather than a control, so it takes the direction's
+     idea of a corner without taking a pill's. */
+  --panel-r: 10px;
+}
+
+/*
+ * EVERY BUTTON ON THE PAGE, WHATEVER IT IS CALLED.
+ *
+ * Unlayered on purpose: Tailwind's utilities are layered, so a `text-[14px]` or
+ * a `rounded-full` in a component's class list loses to this — which is the
+ * point. One shape, decided here, and a component that wants a different one
+ * has to come and say so in this block.
+ */
+.btn-primary,
+.btn-quiet,
+.seg__btn,
+.wallet-connect__button,
+.built-by,
+.presence-pill {
+  min-height: var(--btn-h);
+  border-radius: var(--btn-r);
+  font-family: var(--btn-family);
+  font-size: var(--btn-fs);
+  font-weight: var(--btn-fw);
+  letter-spacing: var(--btn-tracking);
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The primary carries more weight than the others and it is the only one that
+   does. `Buy` and `Connect wallet` are both primary, which is the whole answer
+   to "the Buy button should weigh what Connect weighs". */
+.btn-primary,
+.wallet-connect__button {
+  font-weight: 700;
+}
+
+/* A segment is inside a control that already has a radius, so it takes the
+   inner one — the same shape, one step smaller. */
+.seg__btn {
+  /* The inner corner, and never smaller than a corner: `calc(3px - 2px)` is a
+     1px radius, which reads as a rendering artefact rather than as a shape. */
+  border-radius: max(2px, calc(var(--btn-r) - 2px));
+  min-height: 26px;
+}
+
+/* Tertiary: a destination, and it never grows a box. */
+.strip-links a {
+  font-family: var(--btn-family);
+  font-size: var(--btn-fs);
+  font-weight: var(--btn-fw);
+  letter-spacing: var(--btn-tracking);
+}
+
+/* ============================================================================
+   THE CREDIT PILL IS INVERTED AGAINST THE PAGE
+   ----------------------------------------------------------------------------
+   Dark with light text on the light register, light with dark text on the dark
+   one. It is the one element on the page that belongs to the person who made
+   it rather than to the wall, and inverting it is how that reads as a signature
+   rather than as another control — the same move outbid.lol makes.
+
+   The tokens are already the two registers' own extremes, so this is a swap and
+   not a new colour: `--ink` is the darkest thing each register has and
+   `--canvas` its ground.
+   ========================================================================= */
+
+.built-by {
+  background: var(--ink);
+  color: var(--canvas);
+  border-color: var(--ink);
+}
+
+.built-by:hover {
+  background: var(--ink-soft);
+  border-color: var(--ink-soft);
+  color: var(--canvas);
+}
+
+.built-by__handle {
+  color: var(--canvas);
+  font-weight: 700;
+}
+
+/* ============================================================================
+   THE PURCHASE PANEL — TWO CANDIDATES, AND BOTH DROP THE WHITE RECEIPT
+   ----------------------------------------------------------------------------
+   Asked for on 2026-09-03, and it REVERSES a written exception: DESIGN.md's
+   "the first exception, and why the receipt is not a colourway" made this one
+   box white in both registers, on the argument that a receipt is white. Against
+   a dark wall it reads as a card floating on the page rather than as part of
+   the strip, and the owner does not want that.
+
+   Both candidates below re-declare nothing: the panel takes the register's own
+   tokens like everything else, so the whole contrast table in DESIGN.md's two
+   registers applies to it unchanged.
+
+     panel=1   a solid block in the theme's own raised ground, no border
+     panel=2   no fill at all, one hairline, the strip showing through
+
+   The white palette above is kept and now applies to neither, so choosing it
+   back is deleting two attributes rather than rewriting a section.
+   ========================================================================= */
+
+/*
+ * THE PANEL IS AN OUTLINE, AND IT IS NO LONGER A WHITE CARD.
+ *
+ * Chosen by the owner on 2026-09-03 against a solid block in the register's own
+ * raised ground — and it REVERSES a written exception. DESIGN.md's "the first
+ * exception, and why the receipt is not a colourway" made this one box white in
+ * both registers, on the argument that a receipt is white. Against a dark wall
+ * it read as a card floating on the page rather than as part of the strip, and
+ * that is the thing the owner did not want.
+ *
+ * Nothing is re-declared: the panel takes the register's own tokens like every
+ * other element, so both contrast tables in DESIGN.md apply to it unchanged. No
+ * fill at all, one hairline, and the strip showing through.
+ */
+.board-controls {
+  background: transparent;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--panel-r);
+  box-shadow: none;
+}
+
+/*
+ * THE PRESENCE PILL IS NOT IN A PHONE'S HEADER.
+ *
+ * It moved into the header on 2026-09-03 and at 390 there is no room for a
+ * fourth thing: measured, the wordmark was clipped to 117px of its 158, the
+ * wallet control lost its box entirely, and the overflow guard caught all four
+ * elements at once.
+ *
+ * UNLAYERED, AND THAT IS THE WHOLE REASON THIS RULE IS DOWN HERE. The first
+ * attempt put it in the header's own media query, which lives inside
+ * `@layer components` — and the button system above sets `display: inline-flex`
+ * on this element from outside every layer, so the layered `none` lost and the
+ * pill was still there at 390 with the guard still red.
+ *
+ * What a phone loses is the count, not the heartbeat: the element is still
+ * mounted, so this browser is still counted, and `/stats` has both numbers with
+ * their history. A control that cannot be reached is worse than a number that
+ * is one tap away.
+ */
+@media (max-width: 640px) {
+  .presence-pill {
+    display: none;
   }
 }

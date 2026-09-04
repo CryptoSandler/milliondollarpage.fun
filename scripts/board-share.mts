@@ -62,24 +62,25 @@ if (SHOTS) mkdirSync(SHOTS, { recursive: true });
  * and selected measure the same, and a difference between them is now a bug
  * rather than a second budget.
  *
- * 127 SINCE 2026-09-03, DOWN FROM 130, AND IT IS THE MEASUREMENT RATHER THAN A
- * ROUND NUMBER WITH SLACK IN IT. A 34px header plus a 93px strip: the panel's
- * own two lines (a readout of two, and the Buy button, with the refusal on its
- * own line under both), padded to 80 so the idle box matches it, plus 6px of
- * strip padding above and below and one hairline.
+ * 115 SINCE 2026-09-03, DOWN FROM 127 AND FROM 130 BEFORE THAT, AND IT IS THE
+ * MEASUREMENT RATHER THAN A ROUND NUMBER WITH SLACK IN IT. A 34px header plus
+ * an 81px strip: the purchase panel's own two rows — the readout beside the Buy
+ * button, and the refusal on its own line under both — padded to 68 so the idle
+ * box matches it, plus 6px of strip padding above and below and one hairline.
  *
- * WHY IT DID NOT COME DOWN FURTHER, since the header and the strip were both
- * rebuilt in the batch that set it: the strip's height is the purchase panel's,
- * and the panel's is a 46px readout over a refusal that is allowed two lines.
- * Clipping that refusal to one line would buy 14px of wall and cost a buyer the
- * reason their Buy button is dead, which is not a trade this design makes. The
- * owner's estimate going in was ~98; the honest number is 127, and it is here
- * with the arithmetic rather than the estimate.
+ * WHERE THE TWELVE PIXELS CAME FROM: the readout's second row folded into its
+ * first when the strip was redrawn on one baseline, so the panel is one line
+ * plus a warning instead of two lines plus a warning.
+ *
+ * WHY IT DID NOT COME DOWN FURTHER: the refusal is allowed TWO lines, and the
+ * longest one this page can print is 118 characters. Clipping it to one buys
+ * 14px of wall and costs a buyer the reason their Buy button is dead, which is
+ * not a trade this design makes.
  *
  * It is a CEILING and not a target, and there is no slack in it on purpose: the
  * next thing that grows the chrome should have to say so out loud.
  */
-const BUDGET_BANDED = 127;
+const BUDGET_BANDED = 115;
 
 /**
  * And a phone's, which is a different question wearing the same units.
@@ -91,7 +92,24 @@ const BUDGET_BANDED = 127;
  * share, and the table's own percentage column is what says the wall did not
  * move.
  */
-const BUDGET_PHONE = 256;
+/*
+ * 220, AND IT WENT TO 224 AND BACK IN ONE BATCH — WHICH IS THE INTERESTING PART.
+ *
+ * It was the measured 220. Then the segmented control needed 4px of padding to
+ * hold a 2px focus ring at a 2px offset (`overflow-x: auto` clips at the
+ * padding box, so a scrolling row of controls must carry room for the ring or
+ * it draws one nobody can see) and the phone measured 224 — over.
+ *
+ * The budget moved rather than the ring, and then it moved back: fixing the
+ * SAME rule in the header meant dropping every control from 30px to 26, because
+ * a 30px button in a 34px bar leaves two pixels above it and a 2px ring at a 2px
+ * offset needs four. Four pixels off every control gave the phone's stacked
+ * strip its four back.
+ *
+ * Net zero, and neither number was chosen: both are what the page measured
+ * after a rule this design does not trade against a number.
+ */
+const BUDGET_PHONE = 220;
 /**
  * And the budget where a PAIR of rails is on — either pair — which is the
  * header and nothing else, measured at exactly 34px: the same number
@@ -376,9 +394,18 @@ async function main(): Promise<void> {
             labelled it "open", which is the two-states rule one level down.
             The assertion at the end catches that now.
           */
+          /*
+            FOUND BY ITS ACCESSIBLE NAME, NOT BY ITS VISIBLE LABEL. The presets
+            read `10×10` until 2026-09-03 and read `10` after it — the row is
+            already a row of sizes and the second number was saying the same
+            thing four times — and this guard went red on the change, correctly
+            and unhelpfully. `aria-label` is still `10×10` and is the thing a
+            person operating this control by name would use, so it is the thing
+            to select on: it survives the label being shortened again.
+          */
           const armed = await browser.evaluate<boolean>(
             `(() => { const b = [...document.querySelectorAll(".board-rail button")]
-                .find((el) => /^\\d+×\\d+$/.test(el.textContent.trim()));
+                .find((el) => /^\\d+×\\d+$/.test((el.getAttribute("aria-label") || "").trim()));
               if (b) b.click(); return !!b; })()`,
           );
           if (!armed) throw new Error("no size preset on the rail to arm");

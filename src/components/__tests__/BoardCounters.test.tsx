@@ -36,11 +36,15 @@ function occurrences(haystack: string, needle: string): number {
 }
 
 describe("the top bar's counters", () => {
-  it("prints the million once, because nothing beside it says it any more", () => {
+  it("prints the million once, as the denominator and not as the headline", () => {
     const html = markup(0);
 
+    // Once: `0 pixels sold of 1,000,000`. On an untouched board the old
+    // headline WAS the million — `1,000,000 pixels left` — which is the same
+    // sentence as "nothing has happened here". It is the denominator now.
     expect(occurrences(html, "1,000,000")).toBe(1);
-    expect(html).toContain("pixels left");
+    expect(html).toContain("pixels sold");
+    expect(html).toContain("of 1,000,000");
   });
 
   it("is always on screen, at every width", () => {
@@ -50,7 +54,19 @@ describe("the top bar's counters", () => {
     expect(markup(1)).not.toContain("sm:hidden");
   });
 
-  it("counts what is left rather than what is gone", () => {
-    expect(markup(250_000)).toContain("750,000");
+  /*
+    REVERSED 2026-09-03, and the old name of this test is kept in the comment so
+    the change is findable: it was "counts what is left rather than what is
+    gone", and it enforced DESIGN.md's rule that the headline counts pixels
+    REMAINING — a nearly-full board tells a buyer how much chance they have
+    left. The owner reversed it: a wall on its first day says `1,000,000 pixels
+    left`, which is the same sentence as `nothing has happened here`, and the
+    number that makes somebody buy is the one that moves.
+  */
+  it("counts what is gone, with the total beside it", () => {
+    expect(markup(250_000)).toContain("250,000");
+    expect(markup(250_000)).toContain("of 1,000,000");
+    // And not the remainder, which is the number this used to print.
+    expect(markup(250_000)).not.toContain("750,000");
   });
 });

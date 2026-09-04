@@ -116,15 +116,20 @@ export default function OnlineBanner({
           there is nothing here to agree with the number. */}
       online
       {views !== undefined && views > 0 && (
-        <>
-          {/* The cumulative half of the same sentence: how many have ever been
-              here, beside how many are here now. One is the wall's history and
-              the other is its present, and a reader weighing a rectangle wants
-              both. See `lib/board/audience.ts` for what a visit is. */}
-          <span aria-hidden className="text-hairline-strong">·</span>
-          <span className="font-semibold text-ink">{shortCount(views)}</span>
-          views
-        </>
+        /* The cumulative half of the same sentence: how many have ever been
+           here, beside how many are here now. One is the wall's history and the
+           other is its present, and a reader weighing a rectangle wants both.
+           See `lib/board/audience.ts` for what a visit is.
+
+           IT IS THE FIRST THING THIS PILL SHEDS on a narrow strip, and it has
+           its own class so the stylesheet can do that without the component
+           knowing anything about widths. "Who is here NOW" is the half that
+           cannot be got anywhere else; the total is on `/stats`, which this
+           pill links to. */
+        <span className="online-banner__views">
+          <span aria-hidden className="text-hairline-strong">·</span>{" "}
+          <span className="font-semibold text-ink">{shortCount(views)}</span> views
+        </span>
       )}
     </p>
   );

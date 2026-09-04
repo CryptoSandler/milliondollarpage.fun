@@ -821,7 +821,28 @@ export default function BoardCanvas({
      * frame would be twenty for nothing.
      */
     const painted = `${frame.x},${frame.y},${frame.width},${frame.height}`;
-    if (canvas.dataset.boardRect !== painted) canvas.dataset.boardRect = painted;
+    if (canvas.dataset.boardRect !== painted) {
+      canvas.dataset.boardRect = painted;
+      /*
+        AND THE SAME NUMBERS AS CSS, because one thing in the chrome has to line
+        up with the WALL rather than with the window: the purchase panel's right
+        edge sits on the wall's right frame edge. Nothing in a stylesheet can
+        work that out — it is the fit scale, the aspect ratio and the chrome
+        together — and re-deriving it in the boot script would be a second copy
+        of the arithmetic this element already did. So the renderer publishes
+        what it just drew, exactly as it does for the guard above.
+
+        Written only when the paint changes, which is what the comparison above
+        is for: the ants redraw twenty times a second and this must not.
+      */
+      const box = canvas.getBoundingClientRect();
+      const root = document.documentElement.style;
+      root.setProperty("--wall-left", `${Math.round(box.left + frame.x)}px`);
+      root.setProperty(
+        "--wall-right",
+        `${Math.round(window.innerWidth - (box.left + frame.x + frame.width))}px`,
+      );
+    }
 
     // The graph paper, and ONLY above the zoom where a wall pixel is about
     // eight screen pixels. At fit it is not a ruling, it is moiré — and it is
@@ -1054,14 +1075,24 @@ export default function BoardCanvas({
         context.strokeRect(x + 1, y + 1, Math.max(0, w - 2), Math.max(0, h - 2));
       }
 
-      // The caption chip, for a rectangle whose words have actually been
-      // fetched — which is the one under the pointer or under the cursor.
-      // Every sold rectangle used to carry one, because every caption used to
-      // ride along in the board payload; none of them do now, and a chip on
-      // one is honest where a chip on none would have thrown the rule away.
-      // DESIGN.md's rule about the chip itself is untouched: a caption is
-      // never free text over artwork.
-      const words = held ? undefined : details.get(rect.id)?.caption;
+      /*
+        THE CAPTION CHIP, ON THE ONE RECTANGLE UNDER THE POINTER.
+
+        This used to read "for a rectangle whose words have actually been
+        fetched — which is the one under the pointer", and that stopped being
+        true the moment `keepDetail` started asking for every rectangle IN VIEW
+        so the composite could know each one's fit. The cache is now full of
+        words for rectangles nobody is pointing at, and every one of them drew a
+        chip: photographed on the preview wall with `Cape Verde`, `Colombia` and
+        `Germany` all lit at once and the pointer on none of them.
+
+        So the condition is the pointer, not the cache. A keyboard user is not
+        losing anything — the live region reads the caption for the rectangle
+        under the cursor, which is the same fact through the channel that suits
+        them. DESIGN.md's rule about the chip itself is untouched: a caption is
+        never free text over artwork.
+      */
+      const words = held || rect.id !== hoveredId ? undefined : details.get(rect.id)?.caption;
       if (words && w >= CHIP_MIN_BLOCK_PX && h >= CHIP_HEIGHT + 8) {
         drawCaptionChip(context, words, x + 4, y + h - 4 - CHIP_HEIGHT, w - 8, family);
       }

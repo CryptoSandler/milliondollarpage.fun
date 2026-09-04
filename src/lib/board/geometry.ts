@@ -137,3 +137,16 @@ export function rectIsValid(rect: Rect): boolean {
   if (x < 0 || y < 0) return false;
   return x + w <= BOARD_WIDTH && y + h <= BOARD_HEIGHT;
 }
+
+/**
+ * The one milestone this wall marks, in PIXELS.
+ *
+ * WHO READS THIS: `src/app/stats/page.tsx`, and nothing else — deliberately.
+ * `DECISIONS.md`, "the moment this wall tells somebody about is the first 1,000
+ * pixels": it is parity with the original, it is counted in pixels rather than
+ * in dollars (the two are the same figure here, and pixels keep the sentence
+ * about the wall rather than about the money), and it lives on the page
+ * somebody opened to ask rather than beside the offer. A countdown next to the
+ * Buy button would be the wall asking to be hurried.
+ */
+export const MILESTONE_PIXELS = 1_000;

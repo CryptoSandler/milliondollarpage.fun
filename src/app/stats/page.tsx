@@ -5,6 +5,7 @@ import SiteFooter from "../../components/SiteFooter";
 import { boardStats, boardStandings, soldToday, soldValueBaseUnits } from "../../lib/board/blocks";
 import { TOTAL_PIXELS } from "../../lib/board/geometry";
 import { formatPercentSold, formatUsdc, pixelCount } from "../../lib/board/pricing";
+import { MILESTONE_PIXELS } from "../../lib/board/geometry";
 import { onlineNow, presenceHistory } from "../../lib/board/presence";
 import { pricePerPixelBaseUnits } from "../../lib/board/settings";
 import { recentPurchases } from "../../lib/board/tape";
@@ -140,6 +141,41 @@ export default async function StatsPage() {
               </strong>{" "}
               sold today — <span className="tabular">{pixelCount(sold.pixels)}</span>, counting
               since midnight UTC.
+            </>
+          )}
+        </p>
+
+        {/*
+          THE ONE MILESTONE THIS WALL TELLS ANYBODY ABOUT, and `DECISIONS.md`
+          settled both halves of it: the number is **1,000 pixels**, which is
+          parity with the original, and it is counted in PIXELS rather than in
+          dollars — the two are the same figure here, and saying it in pixels
+          keeps the sentence about the wall rather than about the money.
+
+          It is on this page and nowhere else. The board says what is left; a
+          countdown to a threshold beside the offer would be the wall asking to
+          be hurried, which is the thing the whole design refuses.
+
+          BEFORE and AFTER are two different sentences on purpose. Before, the
+          useful fact is the distance; after, it is the date it happened, and a
+          progress bar that reached 100% and stayed there would be a widget
+          nobody has anything left to read.
+        */}
+        <p className="mt-2 text-[15px] leading-relaxed text-body">
+          {stats.pixelsSold >= MILESTONE_PIXELS ? (
+            <>
+              <strong className="font-bold text-ink">
+                The first <span className="tabular">{pixelCount(MILESTONE_PIXELS)}</span> are gone.
+              </strong>{" "}
+              That was the one number this wall said it would tell anybody about, and it has.
+            </>
+          ) : (
+            <>
+              <span className="tabular font-bold text-ink">
+                {pixelCount(MILESTONE_PIXELS - stats.pixelsSold)}
+              </span>{" "}
+              to the first <span className="tabular">{pixelCount(MILESTONE_PIXELS)}</span> — the
+              only milestone this wall marks, and the same one the original passed in 2005.
             </>
           )}
         </p>
