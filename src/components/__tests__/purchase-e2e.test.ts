@@ -372,6 +372,9 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
 
       await waitForPhrase("the purchase dialog's first step", "Step 1 of 2");
 
+      /** The hash of the bytes the preview drew, captured at 3b and checked at the end. */
+      let previewHash = "";
+
       // 3. THE CONTENT. A real PNG through the real file input, so the
       //    browser's own shrink (image-encode.ts) runs on real bytes.
       const base64 = await picture();
@@ -394,6 +397,39 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
         type(document.querySelector('input[inputmode=url]'), 'example.com');
         type(document.querySelector('input[maxlength="32"]'), 'a test block');
       })()`);
+
+      /*
+        3b. THE PREVIEW IS THE UPLOAD, and this is where that claim is checked.
+
+        `ExactPreview` draws a Blob rather than a rendering of one: the form
+        prepares the bytes the moment a file is picked, shows THOSE, and sends
+        the same object. So the hash of what the buyer looked at, and the
+        `image_sha256` the row ends up with, have to be one number — and the
+        second half of that assertion is below, after the attach.
+
+        Before this the form showed `URL.createObjectURL(draft.file)` — the
+        buyer's own photograph at whatever size they picked it — and the
+        shrinking happened at submit, so the first sight of what a rectangle
+        would really carry was the confirmation screen.
+      */
+      await waitFor("the exact preview to have bytes to show", () =>
+        browser.evaluate<boolean>(
+          `!!document.querySelector(".exact-preview__zoom")?.style.backgroundImage?.includes("blob:")`,
+        ),
+      );
+      previewHash = await browser.evaluate<string>(`(async () => {
+        /* No regex here on purpose: a backslash inside a template literal that
+           is itself inside a template literal loses a level every time this
+           string is written, and the page ended up evaluating /^url("?/ —
+           "Unterminated group". Slicing between the quotes cannot be escaped
+           wrong. */
+        const raw = document.querySelector(".exact-preview__zoom").style.backgroundImage;
+        const url = raw.slice(raw.indexOf('"') + 1, raw.lastIndexOf('"'));
+        const bytes = await (await fetch(url)).arrayBuffer();
+        const digest = await crypto.subtle.digest("SHA-256", bytes);
+        return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+      })()`);
+      expect(previewHash).toMatch(/^[0-9a-f]{64}$/);
 
       // 4. CONTINUE — the first signed step. It is enabled at all only because
       //    `sign` is no longer null, which is the seam this whole batch is.
@@ -431,8 +467,9 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
         link: string | null;
         w: number;
         h: number;
+        image_sha256: string | null;
       }>(
-        `SELECT status, buyer_pubkey, caption, link, w, h
+        `SELECT status, buyer_pubkey, caption, link, w, h, image_sha256
            FROM blocks
           WHERE buyer_pubkey = $1`,
         [wallet.address],
@@ -443,6 +480,14 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
       expect(row!.caption).toBe("a test block");
       expect(row!.link).toBe("https://example.com");
       expect({ w: row!.w, h: row!.h }).toEqual({ w: 10, h: 10 });
+
+      /*
+        AND THE OTHER HALF OF THE PREVIEW'S PROMISE. What the buyer looked at,
+        what the browser uploaded and what the row stored are one number. A
+        server that re-encoded anything on the way in would break this and
+        nothing else in this suite would notice.
+      */
+      expect(row!.image_sha256).toBe(previewHash);
     },
     240_000,
   );

@@ -68,11 +68,29 @@ describe("the contact address", () => {
   });
 
   it("is answered on the FAQ as well as in the footer", async () => {
-    // Twice on that page: once in the invitation to report a mismatch, once in
-    // the footer every page carries. A single occurrence would mean one of the
-    // two was dropped.
+    // Three times on that page since 2026-09-04: the invitation to report a
+    // mismatch, the answer about changing a sold rectangle, and the footer
+    // every page carries. A missing one would mean a route out was dropped.
     const html = renderToStaticMarkup(<FaqPage />);
-    expect(html.split(CONTACT_EMAIL)).toHaveLength(3);
+    expect(html.split(CONTACT_EMAIL)).toHaveLength(4);
+  });
+
+  /**
+   * THE WORDING IS THE PROMISE, and it was chosen over a stronger one.
+   *
+   * The owner's first phrasing was "changes only by claim", which promises a
+   * PROCESS — that a claim exists, is read, and can be granted. There is no
+   * claims table and no signed request, deliberately (see `takedown.ts` and
+   * `DECISIONS.md`), so that sentence would have been a mechanism the site does
+   * not have. This one is true of the code as well as the copy: `attachContent`
+   * refuses anything but a reserved row and three migrations freeze the rest.
+   */
+  it("says a sold rectangle is not editable, and promises nothing beyond that", () => {
+    const html = renderToStaticMarkup(<FaqPage />);
+    expect(html).toContain("A sold rectangle is not editable from this site");
+    const words = html.replace(/<[^>]*>/g, " ").toLowerCase();
+    expect(words).not.toContain("changes only by claim");
+    expect(words).not.toContain("we will change");
   });
 
   it("is at this domain, so a forward at the registrar can reach it", () => {

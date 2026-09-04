@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
 import { prepareImage, type PreparedImage } from "../lib/board/image-encode";
+import ExactPreview from "./ExactPreview";
 import { canHonourContain, type Box } from "../lib/board/image-fit";
 import { MAX_INPUT_BYTES, targetBox } from "../lib/board/image-plan";
 import { checkLink, normaliseLink } from "../lib/board/link";
@@ -189,6 +190,72 @@ export default function ContentForm({
   const sourceBox = loaded && loaded.url === previewUrl ? loaded.box : null;
 
   /**
+   * THE BYTES THIS BLOCK WILL ACTUALLY CARRY, made as soon as there is a file
+   * rather than at submit.
+   *
+   * `prepareImage` used to run inside the submit handler, so the first time
+   * anybody saw what a rectangle would really hold was the confirmation screen
+   * — after the content had been attached. What the form showed until then was
+   * `URL.createObjectURL(draft.file)`: the buyer's own photograph at whatever
+   * size they picked it, which on a 6×40 rectangle is not remotely the thing
+   * they are buying.
+   *
+   * Running it here costs one encode per file and per change of fit, and buys
+   * the only claim worth making about a preview: it is not a rendering OF the
+   * upload, it IS the upload. `ExactPreview` draws this Blob and `submit` sends
+   * this Blob, so there are not two answers that could differ.
+   *
+   * The key is the file and the fit together, because the fit changes the
+   * bytes — a `cover` crop is a different picture from a `contain` letterbox.
+   */
+  const [prepared, setPrepared] = useState<
+    { key: string; blob: Blob; filename: string; url: string; width: number; height: number; still: boolean } | null
+  >(null);
+
+  useEffect(() => {
+    /*
+      NOTHING TO SET WHEN THERE IS NO FILE. An early `setPrepared(null)` here is
+      a synchronous setState inside an effect, which this repository's lint rule
+      refuses and is right to: the stale value is already unreachable, because
+      `preparedNow` below compares the stored key against the current one and a
+      file that is gone has no key to match.
+    */
+    if (!draft.file) return;
+    const key = `${draft.file.name}:${draft.file.size}:${draft.file.lastModified}:${draft.imageFit}`;
+    let alive = true;
+    let made: string | null = null;
+
+    void prepareImage(draft.file, { width: order.rect.w, height: order.rect.h }, draft.imageFit).then(
+      (result) => {
+        // A file swapped while this was encoding: the answer belongs to a
+        // picture the buyer has already replaced, so it is dropped rather than
+        // shown for a frame.
+        if (!alive || !result.ok) return;
+        made = URL.createObjectURL(result.image.blob);
+        setPrepared({
+          key,
+          blob: result.image.blob,
+          filename: result.image.filename,
+          url: made,
+          width: result.image.width,
+          height: result.image.height,
+          still: result.stillFromAnimation,
+        });
+      },
+    );
+
+    return () => {
+      alive = false;
+      if (made) URL.revokeObjectURL(made);
+    };
+  }, [draft.file, draft.imageFit, order.rect.w, order.rect.h]);
+
+  const preparedKey = draft.file
+    ? `${draft.file.name}:${draft.file.size}:${draft.file.lastModified}:${draft.imageFit}`
+    : null;
+  const preparedNow = prepared && prepared.key === preparedKey ? prepared : null;
+
+  /**
    * Whether "Fit inside" is a fit this purchase can actually be given.
    *
    * TRUE UNTIL THE PICTURE IS KNOWN: with no file, or with one still
@@ -320,19 +387,40 @@ export default function ContentForm({
     // The block's own size decides the stored size: four stored pixels per
     // block pixel, so a 10x10 rectangle carries 40x40 and a 100x100 carries
     // 400x400. The fit the buyer chose decides what is cropped.
-    const prepared = await prepareImage(
-      draft.file,
-      { width: order.rect.w, height: order.rect.h },
-      draft.imageFit,
-    );
-    if (!prepared.ok) {
-      setMessages(describeUpload({ kind: "local", problem: prepared.problem }));
-      setStage("idle");
-      return;
+    /*
+      THE SAME BLOB THE PREVIEW DREW, not a second encode of the same file.
+
+      If the effect above has already produced bytes for this exact file and
+      fit, they are the bytes that go — which is what makes the preview's
+      promise structural. It only encodes here when there is nothing ready yet,
+      which is a buyer pressing Continue inside the few milliseconds the first
+      encode takes.
+    */
+    let sending: { blob: Blob; filename: string; still: boolean; width: number; height: number };
+    if (preparedNow) {
+      sending = {
+        blob: preparedNow.blob, filename: preparedNow.filename, still: preparedNow.still,
+        width: preparedNow.width, height: preparedNow.height,
+      };
+    } else {
+      const made = await prepareImage(
+        draft.file,
+        { width: order.rect.w, height: order.rect.h },
+        draft.imageFit,
+      );
+      if (!made.ok) {
+        setMessages(describeUpload({ kind: "local", problem: made.problem }));
+        setStage("idle");
+        return;
+      }
+      sending = {
+        blob: made.image.blob, filename: made.image.filename, still: made.stillFromAnimation,
+        width: made.image.width, height: made.image.height,
+      };
     }
 
     const form = new FormData();
-    form.set("image", prepared.image.blob, prepared.image.filename);
+    form.set("image", sending.blob, sending.filename);
     form.set("link", link);
     form.set("caption", draft.caption);
     form.set("imageFit", draft.imageFit);
@@ -351,8 +439,16 @@ export default function ContentForm({
 
     if (result.ok) {
       onSubmitted(result.order, {
-        stillFromAnimation: prepared.stillFromAnimation,
-        prepared: prepared.image,
+        stillFromAnimation: sending.still,
+        // The confirmation screen renders the same Blob this request carried,
+        // which is the same one the preview above drew. Three surfaces, one
+        // set of bytes.
+        prepared: {
+          blob: sending.blob,
+          filename: sending.filename,
+          width: sending.width,
+          height: sending.height,
+        },
       });
       return;
     }
@@ -475,6 +571,20 @@ export default function ContentForm({
           and we shrink it. Locked to the block the moment you pay: there is no later swap or crop.
         </Permanence>
         <FieldError id={`${imageId}-error`} message={messages.fields.image} />
+
+        {/*
+          AND WHAT IT WILL ACTUALLY LOOK LIKE, from the bytes that will be
+          stored, before anything is signed. The sentence above says the
+          resolution in numbers; this shows it. See `ExactPreview` for why it
+          renders the upload rather than a rendering of it.
+        */}
+        {preparedNow && (
+          <ExactPreview
+            prepared={{ url: preparedNow.url, width: preparedNow.width, height: preparedNow.height }}
+            rect={order.rect}
+            fit={draft.imageFit}
+          />
+        )}
       </div>
 
       <div>

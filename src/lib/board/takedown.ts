@@ -181,6 +181,29 @@ export async function unhide(id: string): Promise<TakedownState | null> {
  * that was somebody else's. For the one statement in this project that
  * destroys a buyer's bytes, that is not the trade to take.
  */
+/*
+ * WHERE A CHANGE REQUEST WILL LIVE, IF ONE EVER ARRIVES.
+ *
+ * `/faq` says a sold rectangle is not editable from this site, and it is true
+ * of the code as well as the copy: `attachContent` refuses anything but a
+ * `reserved` row, and migrations 005, 006 and 011 freeze the owner, the sale
+ * and the row against deletion. There is no path from the site to a paid
+ * block's picture.
+ *
+ * The owner considered a claims table — a signed request from `/b/<id>`, an
+ * admin queue, an audit log — and the round on 2026-09-04 recommended against
+ * building it yet: it would be the FIRST mutation path that has ever existed
+ * here, built for a claim nobody has made, and it would make the promise weaker
+ * while the copy got stronger. What shipped instead is the exact preview, which
+ * is the thing that prevents most claims from existing at all, and an address.
+ *
+ * WHEN ONE DOES ARRIVE, IT BELONGS IN THIS FILE. This module already holds the
+ * only sanctioned way published content changes after payment — `hide`,
+ * `unhide` and `purge`, each token-gated and each recorded on the row — so an
+ * applied change request is a fourth operator statement beside them rather than
+ * a second system next to them. `DECISIONS.md` carries the reasoning.
+ */
+
 export async function purge(id: string, reason: string): Promise<TakedownState | null> {
   return transaction(async (client) => {
     const target = await client.query<{ id: string; image_sha256: string | null }>(

@@ -782,3 +782,65 @@ refusals to compare against.
 **The door:** if pHash is ever built, it goes beside this rather than instead of
 it — an exact match is cheap, certain, and has no false positives, and those are
 three things a perceptual match cannot offer.
+
+---
+
+## Settled: the preview IS the upload, and a sold rectangle is not editable
+
+**Status: settled and built 2026-09-04.** Scoped by the adversarial round the
+same day, which recommended against half of what was asked for.
+
+**WHAT WAS ASKED FOR** was an exact preview *and* a claims workflow: a signed
+"Request a change" on `/b/<id>`, a claims table, an admin queue, an audit log,
+and copy reading *"changes only by claim"*.
+
+**WHAT THE ROUND FOUND.** "Immutable after payment" was **already true**:
+`attachContent` refuses anything but a `reserved` row, and migrations 005, 006
+and 011 freeze the owner, the sale and the row against deletion. There is no
+path from the site to a paid block's picture. So the claims workflow would have
+built **the first mutation path that has ever existed here** and then guarded
+it — the promise gets weaker while the copy gets stronger — for a claim nobody
+has yet made. It also found no `audit_log` table to write to, and that
+`takedown.hide/purge` already mutates published content post-payment, so claims
+belong *inside* that surface rather than beside it.
+
+**WHAT SHIPPED.** The preview, which is the thing that prevents most claims from
+existing; `/faq` reading **"a sold rectangle is not editable from this site"**;
+and an address. No table, no signature, no queue. `takedown.ts` carries a header
+naming itself as where an applied change request would live if one ever
+arrives — a fourth operator statement beside `hide`, `unhide` and `purge`.
+
+**THE WORDING WAS CHANGED ON PURPOSE.** *"Changes only by claim"* promises a
+process — that a claim exists, is read, and can be granted. This site has no
+claims mechanism, so that sentence would have described one it does not have.
+The shipped wording is true of the code as well as the copy, and
+`contact.test.tsx` asserts the old phrasing is absent.
+
+### Why the preview needed no new pipeline
+
+`prepareImage` is browser code and the form already called it to produce the
+bytes it uploads — but at SUBMIT, so the first sight of what a rectangle would
+really carry was the confirmation screen, after the content was attached. What
+the form showed until then was the buyer's own photograph at whatever size they
+picked it.
+
+It now prepares on every change of file or fit and **renders that Blob**. The
+preview is not a rendering OF the upload, it IS the upload, so "what you see is
+what you bought" is structural rather than two implementations agreeing to stay
+in step. The end-to-end test hashes the bytes the preview drew and asserts they
+equal the `image_sha256` the row ends up with — **a server that re-encoded
+anything on the way in would break that and nothing else in the suite would
+notice.**
+
+**Four views, because they are four questions:** the wall at 1× with the real
+neighbours (the only one that says where it is), 4× (the only way to see what a
+six-pixel-wide picture is), and the register and card thumbnails (where most
+people will actually see it).
+
+**Every note under them is a measurement from `docs/imagenes.md`**, not a
+judgement: below 200 picture pixels only a colour or a bold shape reads, below a
+40-pixel short edge words do not survive, and a `contain` fit on a rectangle
+more than 2:1 away from the picture's shape names the exact share being spent on
+bars — 88% on a 31×169. **None of them refuses anything.** The buyer chose the
+rectangle; these are offered before payment, and the re-upload loop is the
+mechanism.

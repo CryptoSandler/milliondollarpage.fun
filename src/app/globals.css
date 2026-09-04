@@ -4109,3 +4109,121 @@ h3 {
     display: none;
   }
 }
+
+/* ============================================================================
+   THE EXACT PREVIEW
+   ----------------------------------------------------------------------------
+   Four pictures of one purchase, drawn from the bytes that will be stored. See
+   `src/components/ExactPreview.tsx` for why they are four and not one.
+
+   EVERY SURFACE HERE IS `pixelated`, and that is the point rather than a
+   detail: the board draws a bought pixel as a square at every zoom, and a
+   preview that smoothed what the wall will not would be showing a picture
+   nobody is going to get.
+   ========================================================================= */
+
+.exact-preview {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-md);
+  background: var(--canvas-deep);
+}
+
+.exact-preview__views {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.exact-preview__view {
+  margin: 0;
+  min-width: 0;
+}
+
+.exact-preview__view figcaption {
+  margin-top: 6px;
+  font-family: var(--font-numeric);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--body);
+}
+
+/*
+ * THE WALL ITSELF, at one board pixel to one screen pixel — the crop is real
+ * bytes off `/api/wall/<version>`, so the neighbours are whoever the
+ * neighbours are. `max-width` keeps a wide rectangle's window inside the
+ * dialog; it scrolls rather than shrinking, because a "actual size" view that
+ * is not actual size is a lie.
+ */
+.exact-preview__wall {
+  position: relative;
+  max-width: 100%;
+  overflow: auto;
+  border: 1px solid var(--hairline-strong);
+  background-color: var(--canvas);
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+}
+
+/*
+ * THE RECTANGLE BEING BOUGHT, outlined so it can be found among its neighbours
+ * even when the picture in it is four pixels tall.
+ *
+ * IN `--ink`, NOT THE ACCENT, and the guard is why. The first draft used
+ * `--primary` — it is the buyer's own rectangle, so the accent felt right — and
+ * `design-tokens.test.ts` refused it by name: *these reach for the accent and
+ * DESIGN.md's table does not list them*. That table has five entries and the
+ * accent means money moving now; a marker on a preview is not one of them, and
+ * a sixth place added quietly is how a rule about a colour stops meaning
+ * anything. Ink at a 1px offset says "this one" just as well.
+ */
+.exact-preview__block {
+  position: absolute;
+  background-repeat: no-repeat;
+  background-position: center;
+  image-rendering: pixelated;
+  outline: 1px solid var(--ink);
+  outline-offset: 1px;
+}
+
+.exact-preview__zoom,
+.exact-preview__thumb {
+  display: block;
+  background-repeat: no-repeat;
+  background-position: center;
+  image-rendering: pixelated;
+  border: 1px solid var(--hairline-strong);
+}
+
+.exact-preview__notes {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--body);
+}
+
+/*
+ * A WARNING IS NOT A REFUSAL, and the colour says so. `--danger` is what the
+ * board paints a rectangle that cannot be bought; none of these stops anybody.
+ * They are measurements, so they are set like the other measurements on this
+ * page and marked only by weight.
+ */
+.exact-preview__notes .is-warn {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.exact-preview__ground {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--body);
+}

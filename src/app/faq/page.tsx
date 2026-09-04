@@ -555,6 +555,25 @@ export default function AboutPage() {
           </p>
         </Question>
 
+        <Question title="Can I change the picture or the link afterwards?">
+          <p>
+            <strong className="font-bold text-ink">
+              A sold rectangle is not editable from this site.
+            </strong>{" "}
+            Once a purchase is paid there is no button anywhere that swaps the image, the link or
+            the caption — not for you and not for us. That is why the step before you sign shows
+            you the picture at the size it will actually be, in the place it will actually go, and
+            lets you replace it as many times as you like: everything is decided there, on purpose.
+          </p>
+          <p>
+            If something is wrong with a rectangle after the fact — a link that no longer works, a
+            picture that should not be up — write to{" "}
+            <span className="tabular font-semibold text-ink">{CONTACT_EMAIL}</span> with the address
+            of its page. What happens then is a decision a person makes and applies, not a form on
+            this site, and there is no promise here that any particular change will be made.
+          </p>
+        </Question>
+
         <Question title="Do my pixels overlap anybody else's?">
           <p>
             They cannot. Two live rectangles are refused by the database itself rather than by a check
