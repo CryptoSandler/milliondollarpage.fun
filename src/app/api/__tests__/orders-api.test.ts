@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import { execute, queryOne } from "../../../lib/db";
+import { block } from "../../../lib/board/blocklist";
 import { reserveRect } from "../../../lib/board/reserve";
 import { CONTENT_LIMITS, MULTIPART_FRAMING_ALLOWANCE_BYTES } from "../../../lib/board/content";
 import { BUYER_PUBKEY_HEADER } from "../../../lib/board/purchase-client";
@@ -286,6 +288,68 @@ describe("POST /api/orders/:id/content", () => {
   // The caption is optional now. A buyer who leaves it blank gets a block
   // with no caption at all, not one carrying an empty string that would draw
   // an empty chip on the board.
+  /**
+   * THE ONE REFUSAL THAT NEEDS THE DATABASE, and the reason the blocklist
+   * exists at all.
+   *
+   * Before 2026-09-04 this test could not have been written: `image_sha256` was
+   * computed on every upload and compared against nothing, so a picture that
+   * had been purged off one rectangle was perfectly acceptable at the door for
+   * the next one. `docs/imagenes.md` measured the moderation surface and named
+   * this as the most urgent thing missing.
+   *
+   * IT ASSERTS THE SILENCE AS WELL AS THE REFUSAL. The reason a picture is on
+   * the list was written by a person about somebody else's upload — it may name
+   * a law, a complaint or a judgement — and repeating it back would both hand
+   * this uploader something that is not their business and tell anybody probing
+   * the list what is in it.
+   */
+  it("refuses an image that is on the blocklist, and says only that", async () => {
+    const bytes = await png();
+    await block({
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+      reason: "a complaint nobody uploading should be reading",
+      source: "admin",
+    });
+
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const response = await POST_CONTENT(
+      await contentRequest(held.id, OWNER, {}, bytes),
+      ctx(held.id),
+    );
+
+    expect(response.status).toBe(422);
+    const body = (await response.json()) as { rejections: { code: string; reason: string }[] };
+    expect(body.rejections).toHaveLength(1);
+    expect(body.rejections[0].code).toBe("image_blocked");
+    expect(body.rejections[0].reason).not.toContain("complaint");
+
+    // And a refusal that wrote something is not a refusal.
+    expect(await contentOnRow(held.id)).toEqual({ caption: null, link: null });
+  });
+
+  it("accepts a different picture on the same rectangle straight afterwards", async () => {
+    const blocked = await png();
+    await block({
+      sha256: createHash("sha256").update(blocked).digest("hex"),
+      reason: "refused",
+      source: "admin",
+    });
+
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    await POST_CONTENT(await contentRequest(held.id, OWNER, {}, blocked), ctx(held.id));
+
+    // The list refuses a FILE, not a buyer and not a rectangle.
+    const other = await sharp({
+      create: { width: 40, height: 40, channels: 3, background: { r: 1, g: 2, b: 3 } },
+    }).png().toBuffer();
+    const response = await POST_CONTENT(
+      await contentRequest(held.id, OWNER, {}, other),
+      ctx(held.id),
+    );
+    expect(response.status).toBe(200);
+  });
+
   it("accepts a blank caption and stores it as null", async () => {
     const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
     const response = await POST_CONTENT(

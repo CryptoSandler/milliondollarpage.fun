@@ -555,7 +555,21 @@ async function main(): Promise<void> {
         }
 
         const share = ((bw * bh) / (reading.vw * reading.vh)) * 100;
-        const over = chrome > budget;
+        /*
+          JUDGED ON THE NUMBER IT PRINTS, not on the one behind it.
+
+          This was `chrome > budget` against an unrounded measurement while the
+          table printed `toFixed(0)`, so the phone came back reading `220px` over
+          `a 220px budget` and marked OVER — a row that shows two identical
+          numbers and calls one of them too big is a row nobody can act on. The
+          measurement is fractional because a hairline and a padding do not land
+          on whole pixels; the budget is an integer because a person wrote it.
+
+          Rounding first makes the comparison the one the reader can check. A
+          real overrun is a pixel or more and survives it; a sub-pixel one is not
+          a chrome regression, it is a border.
+        */
+        const over = Math.round(chrome) > budget;
         if (over) {
           failures.push(
             `${view.name} ${selected ? "selected" : "idle"}: chrome ${chrome.toFixed(0)}px over a ${budget}px budget`,

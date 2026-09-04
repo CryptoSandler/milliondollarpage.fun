@@ -183,13 +183,35 @@ export async function unhide(id: string): Promise<TakedownState | null> {
  */
 export async function purge(id: string, reason: string): Promise<TakedownState | null> {
   return transaction(async (client) => {
-    const target = await client.query(
-      `SELECT id FROM blocks
+    const target = await client.query<{ id: string; image_sha256: string | null }>(
+      `SELECT id, image_sha256 FROM blocks
         WHERE id = $1 AND status = ANY($2) AND purged_at IS NULL
         FOR UPDATE`,
       [id, SOLD],
     );
     if (target.rowCount === 0) return null;
+
+    /*
+      THE HASH IS TAKEN BEFORE THE BYTES GO, because after `block_purge_content`
+      there is nothing left to hash. This is what makes a purge a RULE rather
+      than an event: the same file cannot be bought onto another rectangle five
+      minutes later, which it could until 2026-09-04.
+
+      IN THE SAME TRANSACTION as the purge, so there is no window in which the
+      picture is gone from the wall and still acceptable at the door. A row with
+      no hash — one purged before `image_sha256` was written, or one that never
+      had bytes — blocks nothing, which is the honest outcome rather than an
+      error: there is no file to refuse.
+    */
+    const sha = target.rows[0].image_sha256;
+    if (sha) {
+      await client.query(
+        `INSERT INTO blocked_images (sha256, reason, source)
+         VALUES ($1, $2, 'purge')
+         ON CONFLICT (sha256) DO NOTHING`,
+        [sha, reason],
+      );
+    }
 
     await client.query(`SELECT block_purge_content($1, $2)`, [id, reason]);
 

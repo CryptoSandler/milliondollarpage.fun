@@ -555,3 +555,230 @@ after a decision is a second layout nobody is testing.
 **What was NOT a defect:** the left column already started flush with the frame
 at y=34, on both sides, at every width. The gap at the top of it was Next's own
 dev-mode badge sitting over the page.
+
+---
+
+## Settled: nothing is painted until a person has looked at it
+
+**Status: settled 2026-09-04. Not built yet — the adversarial round below closed
+first, and it changed the shape of the thing.**
+
+Every paid purchase enters **pending review** and appears nowhere until the
+owner approves it in `/admin`. Approve or reject with a reason; the takedown
+that already exists keeps covering what has been published. The buyer sees *in
+review* on `/b/<id>`.
+
+**THE SALE IS NOT PENDING — THE PUBLICATION IS.** The money settles, the
+rectangle is theirs, the exclusion constraint holds it, the register carries the
+settlement and `/stats` counts the pixels. What waits is the artwork appearing.
+That distinction is the whole design, and it is what keeps every permanence
+trigger untouched.
+
+**IT IS A COLUMN, NOT A STATUS**, and this is the decision the round produced.
+The obvious move is a fourth `status`, and it collides with everything: the
+overlap constraint's status list, `blocks_stay_sold`, `blocks_paid_at_matches_status`,
+and the forty-two places that read `status IN ('paid','minted')`. Instead,
+`approved_at timestamptz` and `approval_note text`, folded into
+**`publishesTextSql`** — one predicate, already the single gate for the
+composite, the block's words, its page, its image, its card, its badge, `/go`
+and `/buyers`. Eight readers get it for free and no trigger is touched.
+
+**THE COPY CHANGES BEFORE THE WALLET OPENS, NOT AFTER.** A buyer paying $10,800
+and finding out afterwards that publication waits on somebody's attention is the
+site taking money for something it did not say it was doing. The confirmation
+step and `/faq` say it first, or this does not ship.
+
+**SILENCE IS THE FAILURE MODE, so the queue is visible.** `/b/<id>` shows when
+the purchase entered review, and `/admin` shows the oldest waiting first. A
+review queue costs attention per sale where a takedown costs nothing until it is
+used — that is the real price of this and it is worth paying only if the queue
+is looked at.
+
+**The door:** a perceptual hash is a LATER layer, not this one. It answers "is
+this the same picture as one we already refused", which only matters once there
+is a refusal history. Written down so the next batch does not invent it.
+
+---
+
+## Settled: the picture does not rot, and there is a mechanism rather than a claim
+
+**Status: settled 2026-09-04. Not built yet.**
+
+**Amended 2026-09-04, the same day: no card, so no R2.** The bucket became a
+private GitHub repository, `CryptoSandler/backups`, written by a daily workflow
+in this repository. **The property that mattered survives** — the source is Neon
+and the copy is GitHub, which is still two providers, and that separation was
+the whole reason a bucket was named in the first place. R2 stays written down as
+the alternative the day there is a card.
+
+`/faq` may not say a picture cannot rot until all of this is true:
+
+1. **A daily dump** of `blocks` and every stored image, committed to
+   `backups/milliondollarpage/<date>/` in a private repository this project
+   controls, separate from Neon.
+2. **A manifest of hashes** beside it, so a restore can be checked rather than
+   hoped for. `image_sha256` already exists on every row and is the natural key.
+3. **A restore rehearsed monthly and written down** — the date, the version
+   restored, and what was checked. A backup nobody has restored is a belief.
+4. **Neon's PITR on top**, which covers the database and not the bytes leaving
+   the provider.
+
+**WHY THE BUCKET IS THE POINT.** The pictures are already ours rather than
+hotlinked — `bytea` in our own database, no URL in the render path — which is
+what makes the original's link rot impossible here. What that does NOT survive
+is one provider. Until there is a copy somewhere else, *the picture cannot rot*
+is a claim about Neon's reliability wearing a promise's clothes.
+
+5. **90 days of retention, squashed monthly** — which means the history is
+   REWRITTEN, not merely added to. A squash on its own reclaims nothing: the old
+   blobs stay reachable until the commits that name them are gone.
+
+**AND THE ONE THING THAT HAS TO BE DECIDED BEFORE ANY OF IT IS WRITTEN: A PURGE
+MUST REACH THE BACKUP.**
+
+`takedown.purge()` is this project's irreversible removal — it nulls the bytes
+and the words, and it exists for the case where an image must stop existing,
+which is the case with a legal edge. A backup that commits every image daily and
+keeps ninety days of history turns that into *"removed, except for the three
+months of copies we kept"*. That is exactly backwards for the only situation
+purge is for.
+
+So the dump excludes purged rows — trivially, they have no bytes — and **a purge
+runs a scripted expunge of the backup history**, force-pushed, in the same
+close. Until that script exists, `purge` is weaker than SECURITY.md says it is,
+and this backup must not ship without it. The monthly squash and the expunge are
+the same mechanism, which is the one piece of luck here.
+
+**THE WORKFLOW READS WITH A ROLE THAT CANNOT WRITE.** `mdp_backup_reader`, made
+2026-09-04: `CONNECT`, `USAGE` on `public`, and `SELECT` on every table
+including ones added later. Verified by trying, not by declaring — `insert`,
+`update`, `delete`, `truncate` and `create table` are all refused, and
+`pg_roles` reads back `super=false createdb=false createrole=false
+bypassrls=false`. That is what lives in this repository's Actions secrets rather
+than the app's own credential.
+
+**Why it matters more here than usual:** `CryptoSandler/milliondollarpage.fun`
+is a PUBLIC repository. Secrets stay masked, but a public repo's Actions logs are
+public and anyone may propose a workflow — so the thing in there should be
+incapable of damage rather than merely trusted not to do any. The dump also
+inherits the connection-string rule from `~/.claude/GATES.md`: a parse failure
+prints the `ep-*` host or `unparseable`, never the string.
+
+**What is not code, and is not mine:** `CryptoSandler/backups` itself and its
+PAT — the owner has assigned that to Cowork — and the Neon connection string as
+a secret on this repository. The `gh` CLI on this machine is authenticated as
+`Sandlerr1`, not CryptoSandler, so creating that repository from here would put
+it under the wrong account.
+
+**Sizing, measured rather than assumed:** an image is capped at 100 KiB
+(`STORED_MAX_BYTES`), so no single file approaches GitHub's 100 MB limit. Git is
+content-addressed, so a daily commit adds only what CHANGED — an unchanged image
+is the same blob. A full wall at an average 50 KiB over tens of thousands of
+purchases is a few hundred megabytes against GitHub's 1 GB soft limit, which is
+the number to watch and the reason retention is bounded at all.
+
+---
+
+## Settled: the chrome stays as it is, and three whole alternatives were built to find that out
+
+**Status: settled 2026-09-04.**
+
+Three complete chromes were built behind `?chrome=1|2|3` — not mockups, the real
+page with the real register and the real wall — measured with
+`scripts/board-share.mts` and photographed at 2495, 1440 and 390. The owner chose
+**the chrome already shipped**, and the other three are deleted along with the
+parameter and every line that supported them.
+
+**THE MEASUREMENT IS WHY THIS WAS WORTH DOING, AND IT IS THE SAME NUMBER FOUR
+TIMES:**
+
+| | 2495 | 1440 | 390 |
+|---|---|---|---|
+| shipped, mesa, vitrina, galería | **77.2%** | **71.1%** | **27.4%** |
+
+Nothing stood on the wall in any of them, at any width, and no axis scrolled. So
+none of the three was a trade against the artwork — they cost the same pixels
+and differed only in what the page feels like. **That is what made it a taste
+decision with nothing hidden in it**, and finding that out is the whole return on
+building them.
+
+**What each one was, and the one thing each cost that the wall number does not
+show:**
+
+- **mesa** — presets as a vertical dial at the foot of the left letterbox, zoom
+  floating bottom-right, the strip holding only the panel. It costs **the
+  register**: both letterboxes are full of the parade top to bottom, so each
+  column gives up its bottom 200px, three or four rows. Two parts of the brief
+  could not be built as written — a zoom *inside* the frame is a zoom on the
+  wall, and a page footer "below the fold" needs a document that scrolls, which
+  this one never does.
+- **vitrina** — the header leaves the top of the window and sits on the strip,
+  the two together a shelf, the wall's top edge at the top of the screen. It
+  replaced the brief's "instrumento", which was the printed-button direction the
+  owner had already turned down on 2026-09-03 wearing a different name.
+- **galería** — the strip reserved but unpainted until the pointer comes down or
+  a drag begins. Its risk is the one it cannot fix: the instruction line lives in
+  that strip, so *drag to select* — the single thing this wall has to teach — is
+  invisible until the reader has already moved towards the controls.
+
+**Why the current one stayed.** It is the only one of the four that puts the
+figure, the wallet and the way out where a reader looks first and still gives the
+tools a home that does not cost the register anything. The three alternatives
+each bought a quality — a canvas's calm, a gallery's hang, an absent interface —
+by spending something the wall number does not price: rows of the parade,
+familiarity of where a header is, or the discoverability of the only gesture that
+matters.
+
+**What was reverted, exactly.** `BoardView` briefly measured WHERE the header is
+rather than assuming it is above, because vitrina needed it. It is back to the
+assumption, and `git diff` reports the three touched files byte-identical to the
+commit they came from — the revert is exact rather than approximate.
+
+**The door:** the three are in the history of this repository if any of them is
+ever wanted, and the arithmetic above is the reason none of them would be free
+to re-adopt: each has a cost, and none of the costs is wall.
+
+---
+
+## Settled: a purged picture is refused for ever, by the hash of its exact bytes
+
+**Status: settled and built 2026-09-04.**
+
+`blocked_images` — a hash, a reason, a source (`purge` or `admin`) and a moment.
+`purge` writes to it inside its own transaction, **before**
+`block_purge_content` empties the row, because that function erases
+`image_sha256` along with the bytes and after it there is nothing left to read.
+The content route asks the list before it accepts an upload.
+
+**WHAT WAS BROKEN, AND FOR HOW LONG.** `image_sha256` has been computed on every
+upload since migration 001 and compared against **nothing** — it exists to
+fingerprint the wall for cache invalidation. So a takedown was a single EVENT:
+the identical file could be bought onto a different rectangle five minutes later
+and nothing anywhere would notice. `docs/imagenes.md` measured the rest of the
+moderation surface — format, weight, dimensions, takedown, all present — and
+named this as the one thing missing that mattered.
+
+**THE UPLOADER IS NOT TOLD WHY.** The reason on a row was written by a person
+about somebody else's picture and may name a law, a complaint or a judgement.
+Repeating it back would hand this uploader something that is not their business
+AND tell anybody probing the list what is on it. They are told that this exact
+file cannot be used and that a different one can, which is all they can act on.
+The reason is read at `/admin`.
+
+**A PERSON CAN WRITE TO IT, and that is not a nicety.** A list only `purge` can
+add to is a consequence rather than a rule — it refuses a picture only after
+somebody has bought a rectangle for it and a person has had to look at it.
+`/api/admin/blocked` is where the same decision gets made once, in advance, and
+where a hash added by mistake comes off again.
+
+**WHAT IT DOES NOT CATCH, ON PURPOSE.** A one-pixel edit is a different SHA-256
+and walks straight past. That is understood rather than overlooked: the exact
+match costs one primary-key lookup and stops the case that actually happens —
+the same file, again. **A perceptual hash stays the later layer**, and the
+argument for not building it yet is that it answers "is this the same picture as
+one we already refused", which only has meaning once there is a history of
+refusals to compare against.
+
+**The door:** if pHash is ever built, it goes beside this rather than instead of
+it — an exact match is cheap, certain, and has no false positives, and those are
+three things a perceptual match cannot offer.

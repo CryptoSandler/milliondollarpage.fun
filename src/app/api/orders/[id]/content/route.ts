@@ -1,4 +1,5 @@
 import { CONTENT_LIMITS, MULTIPART_FRAMING_ALLOWANCE_BYTES, validateContent } from "../../../../../lib/board/content";
+import { isBlocked } from "../../../../../lib/board/blocklist";
 import {
   attachContent,
   getOrder,
@@ -144,6 +145,32 @@ export async function POST(
   });
   if (!validated.ok) {
     return problem(422, "That content could not be accepted.", { rejections: validated.rejections });
+  }
+
+  /*
+    AND THE ONE CHECK THAT NEEDS THE DATABASE, which is why it is here rather
+    than inside `validateContent`: that function is pure, and every one of its
+    rules is testable without a database because of it.
+
+    THE REASON IS NOT REPEATED BACK. The row carries why the picture was
+    refused, and that sentence was written by a person about somebody else's
+    upload — it may name a law, a complaint or a judgement, and none of that is
+    this uploader's business. What they are told is that this exact file cannot
+    be used and that a different one can, which is the whole of what they can
+    act on. `blocklist.ts` has the reasoning; `/admin` is where the reason is
+    read.
+  */
+  const blocked = await isBlocked(validated.content.sha256);
+  if (blocked) {
+    return problem(422, "That content could not be accepted.", {
+      rejections: [
+        {
+          field: "image",
+          code: "image_blocked",
+          reason: "This exact image cannot be used on this wall. Choose a different one.",
+        },
+      ],
+    });
   }
 
   try {

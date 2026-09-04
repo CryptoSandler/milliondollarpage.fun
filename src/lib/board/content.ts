@@ -79,6 +79,14 @@ export type RejectionCode =
   | "image_unreadable"
   | "image_wrong_type"
   | "image_too_large"
+  /*
+    Not produced by `validateContent` — it is the one refusal that needs the
+    database, so the content route raises it after this function has passed the
+    bytes. It lives in this union because a caller reading a rejection should
+    find every code in one place, and `blocklist.ts` says why the check is not
+    in here.
+  */
+  | "image_blocked"
   | "link_too_long"
   | "link_not_https"
   | "link_invalid"

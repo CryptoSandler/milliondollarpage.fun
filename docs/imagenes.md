@@ -147,10 +147,13 @@ from the wall, the page, the card and the API while the sale stands) and `purge`
 Ours publishes on payment, which is the trade a self-serve wall makes.
 
 > **Recommendation, and it is the most urgent thing in this document.**
-> 1. **An exact-hash blocklist**, checked on upload against `image_sha256`. It
->    is one table, one index and one `SELECT` — and it is what turns a takedown
->    into a rule instead of a single event, because the same file cannot be
->    re-uploaded onto a different rectangle five minutes later. **Build now.**
+> 1. ~~**An exact-hash blocklist**~~ — **BUILT 2026-09-04**, and it was one table,
+>    one index and one `SELECT`. A takedown is a rule now rather than a single
+>    event: the same file cannot be re-uploaded onto a different rectangle five
+>    minutes later. The one thing this section got wrong is that it read as
+>    purge-only — a list nothing but `purge` can write to still refuses a picture
+>    only AFTER somebody bought a rectangle for it, so `/api/admin/blocked` ships
+>    with it.
 > 2. **A published address to report to** — already shipped: `contact@`.
 > 3. A perceptual hash (pHash) so a one-pixel edit does not defeat (1), and a
 >    third-party scan for illegal imagery before anything is indexed. **Decide
@@ -230,7 +233,10 @@ design.
 
 ## What to build now, in order
 
-1. **The exact-hash blocklist** (§4) — one table, and it makes takedown a rule.
+1. ~~**The exact-hash blocklist** (§4)~~ — **built 2026-09-04.** `blocked_images`,
+   written by `purge` inside its own transaction and by `/api/admin/blocked`,
+   read by the content route before it accepts an upload. `DECISIONS.md` carries
+   the reasoning, including why the uploader is not told the reason.
 2. **Default to `cover` when the aspects differ by more than 2×** (§2) — the
    flags showed 85–90% of an awkward rectangle going to bars.
 3. **Print the picture's pixel size in the upload step** (§1) — a measurement,

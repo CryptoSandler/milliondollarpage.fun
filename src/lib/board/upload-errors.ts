@@ -89,6 +89,14 @@ const FIELD_SENTENCES: Record<RejectionCode | ImageProblem, string> = {
   image_unreadable: "We could not open that file as a picture. Try a JPEG, PNG, WebP or GIF.",
   image_wrong_type: "That kind of file cannot go on the board. Try a JPEG, PNG, WebP or GIF.",
   image_too_large: "That picture is larger than the whole board. Try a smaller one.",
+  /*
+    IT DOES NOT SAY WHY. The reason a picture is on the blocklist was written by
+    a person about somebody else's upload and may name a law, a complaint or a
+    judgement — none of which is this uploader's business, and all of which
+    would tell anybody probing the list what is in it. What they can act on is
+    that this exact file will not go on, and another one will.
+  */
+  image_blocked: "That exact image cannot go on this wall. Choose a different one.",
   image_input_too_large: "That file is over 10 MB. Pick a lighter one — the shrinking is our job, but ten megabytes is where we stop.",
   image_unencodable: "We could not shrink that picture down to your block. Try a different one.",
   link_too_long: "That link is too long. Use a shorter address.",

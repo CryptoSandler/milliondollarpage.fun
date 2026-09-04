@@ -106,6 +106,22 @@ wrong, and an irreversible answer to a reversible question is how a mistake
 becomes permanent. The bytes are never touched, so what comes back is the same
 picture byte for byte.
 
+**AND A PURGE NOW REFUSES THE SAME FILE FOR EVER — BUILT 2026-09-04.** The
+hash is read off the row inside the purge's own transaction, before
+`block_purge_content` empties it, and written to `blocked_images`. Until that
+day a takedown was a single EVENT: the identical bytes could be bought onto a
+different rectangle five minutes later and nothing anywhere would notice,
+because `image_sha256` was computed on every upload and compared against
+nothing. `src/lib/board/blocklist.ts` carries the reasoning and what it does not
+catch — a one-pixel edit is a different hash and walks past, which is why
+`DECISIONS.md` holds a perceptual hash as a later layer.
+
+**WHAT A PURGE STILL DOES NOT REACH: A BACKUP.** There is none yet, and
+`DECISIONS.md` requires the expunge script to ship in the same close as the
+first one — because a backup that keeps ninety days of history would turn this
+irreversible deletion into a removal with three months of copies behind it,
+which is exactly backwards for the only case a purge is for.
+
 **Legal purge is a deletion of bytes — BUILT, same migration.**
 `block_purge_content(id, reason)`. Where the law requires the material itself
 to be destroyed rather than hidden, the image, its mime, its hash, the caption
