@@ -109,7 +109,22 @@ async function contentRequestWith(fields: Record<string, unknown>, ip = freshIp(
   return withContentLength(form, { "x-forwarded-for": ip });
 }
 
-function confirmRequestWith(body: unknown, ip = "203.0.113.9"): Request {
+/**
+ * A FRESH ADDRESS PER REQUEST, unless a test names one.
+ *
+ * The signed writes share one ceiling — thirty in ten minutes per caller — and
+ * this file drives thirty-five of them. A single address here would make the
+ * suite fail by arithmetic rather than by defect, which is the same trap
+ * `proof.ts` fell into and climbed out of the same way. Tests that care about
+ * WHICH caller is asking still pass one in.
+ */
+let requester = 0;
+function freshCaller(): string {
+  requester += 1;
+  return `203.0.113.${100 + (requester % 150)}`;
+}
+
+function confirmRequestWith(body: unknown, ip = freshCaller()): Request {
   return new Request("http://localhost/api/orders/x/confirm", {
     method: "POST",
     headers: { "content-type": "application/json", "x-forwarded-for": ip },
@@ -117,7 +132,7 @@ function confirmRequestWith(body: unknown, ip = "203.0.113.9"): Request {
   });
 }
 
-async function confirmRequest(orderId: string, wallet: TestWallet, ip = "203.0.113.9"): Promise<Request> {
+async function confirmRequest(orderId: string, wallet: TestWallet, ip = freshCaller()): Promise<Request> {
   return confirmRequestWith(await proofFor(orderId, "pay", wallet), ip);
 }
 
@@ -450,7 +465,11 @@ describe("POST /api/orders/:id/content", () => {
     const release = await DELETE(
       new Request("http://localhost/api/orders/x", {
         method: "DELETE",
-        headers: { "content-type": "application/json" },
+        // The release route identifies its caller since the eight-point
+        // contract's point 8 was checked: a request with no trustworthy
+        // address is 400 before the proof is so much as read, and this test is
+        // about the proof.
+        headers: { "content-type": "application/json", "x-forwarded-for": freshCaller() },
         body: JSON.stringify(misdirected),
       }),
       ctx(held.id),
@@ -726,7 +745,7 @@ describe("POST /api/orders/:id/challenge", () => {
       const response = await POST_CHALLENGE(
         new Request("http://localhost/", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", "x-forwarded-for": "198.51.100.78" },
           body: JSON.stringify({ action }),
         }),
         ctx(held.id),
@@ -759,7 +778,7 @@ describe("POST /api/orders/:id/challenge", () => {
       const response = await POST_CHALLENGE(
         new Request("http://localhost/", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", "x-forwarded-for": "198.51.100.78" },
           body: JSON.stringify({ action }),
         }),
         ctx(held.id),
@@ -782,7 +801,7 @@ describe("POST /api/orders/:id/challenge", () => {
       POST_CHALLENGE(
         new Request("http://localhost/", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", "x-forwarded-for": "198.51.100.78" },
           body: JSON.stringify({ action: "release" }),
         }),
         ctx(id),
@@ -799,7 +818,7 @@ describe("DELETE /api/orders/:id", () => {
   function releaseRequest(body: unknown): Request {
     return new Request("http://localhost/api/orders/x", {
       method: "DELETE",
-      headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.9" },
+      headers: { "content-type": "application/json", "x-forwarded-for": freshCaller() },
       body: JSON.stringify(body),
     });
   }

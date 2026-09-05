@@ -70,8 +70,8 @@ describe("POST /api/reserve", () => {
 
   it("answers 409 with availableAt: null and a permanence message when a sold block blocks it", async () => {
     await execute(
-      `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc)
-       VALUES (0, 0, 20, 20, 'paid', 1000000, 400000000)`,
+      `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, approved_at)
+       VALUES (0, 0, 20, 20, 'paid', 1000000, 400000000, now())`,
     );
     const response = await POST(
       request({ rect: { x: 10, y: 10, w: 20, h: 20 }, buyerPubkey: BUYER, chain: "solana" }, "203.0.113.10"),

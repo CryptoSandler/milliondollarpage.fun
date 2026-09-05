@@ -3,6 +3,9 @@ import Link from "next/link";
 import { adminConfigured, adminSessionLabel } from "../../lib/admin";
 import type { ClientTakedown } from "../../lib/board/admin-client";
 import { listHidden } from "../../lib/board/takedown";
+import { awaitingReview, type PendingPurchase } from "../../lib/board/review";
+import { blockImageUrl } from "../../lib/board/block-image";
+import { blockPageUrl } from "../../lib/board/block-details";
 import TakedownConsole from "../../components/TakedownConsole";
 
 /**
@@ -87,6 +90,7 @@ export default async function AdminPage(props: PageProps<"/admin">) {
               refunded, and nobody else can buy them. Unhiding a block puts back the same picture,
               byte for byte, because the bytes were never touched.
             </p>
+            <ReviewQueue waiting={await awaitingReview()} />
             <TakedownConsole label={label} initial={(await listHidden()).map(overTheWire)} />
           </>
         )}
@@ -181,5 +185,81 @@ function SignIn({ error }: { error?: string }) {
         Sign in
       </button>
     </form>
+  );
+}
+
+/**
+ * What is waiting to go on the wall, oldest first.
+ *
+ * SILENCE IS THE FAILURE MODE — `DECISIONS.md` — so the queue is the first
+ * thing on this page rather than a tab behind it. A review queue costs
+ * attention per sale, and it is only worth what it costs if it is looked at.
+ *
+ * SERVER-RENDERED AND NOT A CONSOLE. The takedown console below is a client
+ * component because it has three actions, a confirmation and a list that
+ * changes under it. This has one action, and one form per row posting to the
+ * route the console already uses is the laziest thing that works — no state, no
+ * fetch, no optimistic list to reconcile. The page reloads and the row is gone,
+ * which is exactly what happened.
+ *
+ * THE PICTURE IS SHOWN, and it has to be: approving without looking is the one
+ * failure this whole mechanism is built to prevent. The image route refuses an
+ * unapproved block to the public — that is the point of the queue — so this
+ * asks for the same bytes as an operator who is already signed in.
+ */
+function ReviewQueue({ waiting }: { waiting: PendingPurchase[] }) {
+  if (waiting.length === 0) {
+    return (
+      <p className="mt-6 rounded-xl border border-hairline-strong bg-card px-4 py-3 text-[15px] text-body">
+        Nothing is waiting for review. Every settled purchase is on the wall.
+      </p>
+    );
+  }
+
+  return (
+    <section className="mt-6">
+      <h2 className="font-display text-[19px] font-semibold tracking-tight">
+        {waiting.length} waiting to be looked at
+      </h2>
+      <p className="mt-2 text-[15px] leading-relaxed text-body">
+        These are paid for and permanently their buyers&apos;. What is waiting is the picture
+        appearing on the wall. To refuse one, hide it below with a reason instead.
+      </p>
+      <ul className="mt-4 flex flex-col gap-3">
+        {waiting.map((block) => (
+          <li
+            key={block.id}
+            className="flex items-center gap-4 rounded-xl border border-hairline-strong bg-card p-3"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- the bytes
+                are ours and the size is the rectangle's own, so `next/image`
+                would add a loader and a layout pass for a 64px thumbnail. */}
+            <img
+              src={blockImageUrl(block.id)}
+              alt=""
+              width={64}
+              height={64}
+              className="size-16 shrink-0 rounded-lg object-contain [image-rendering:pixelated]"
+            />
+            <div className="min-w-0 flex-1 text-[13.5px]">
+              <p className="tabular text-ink">
+                {block.w} × {block.h} at ({block.x}, {block.y}) · {block.pixels.toLocaleString("en-US")} px
+              </p>
+              <p className="truncate text-body">{block.caption || "no caption"}</p>
+              <p className="truncate break-all text-body">{block.link ?? "no link"}</p>
+              <a className="underline" href={blockPageUrl(block.id)}>
+                its page
+              </a>
+            </div>
+            <form action={`/api/admin/blocks/${block.id}`} method="post">
+              <input type="hidden" name="action" value="approve" />
+              <button type="submit" className="btn-quiet px-3 py-1.5 text-[13px]">
+                Put it on the wall
+              </button>
+            </form>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

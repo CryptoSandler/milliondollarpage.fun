@@ -1022,6 +1022,36 @@ the rail off the instance starts normally and `/api/status` says why.
 A treasury that is present but MALFORMED refuses the boot either way, rail on or
 off, because a typo boots, takes money, and sends it where nobody holds a key.
 
+### The eight points, each against the test that proves it
+
+Written out because a contract nobody can point at a test for is a contract
+nobody is keeping. Checking it line by line is what found point 8 unmet in
+three routes.
+
+| # | The point | What proves it |
+|---|---|---|
+| 1 | A payment cannot be forged or replayed | `robinhood-rail.test.ts` → "refuses to settle a second rectangle with the same transaction" (the UNIQUE constraint, not the code); `robinhood.test.ts` → "refuses an amount that is one base unit short, and one too many" |
+| 2 | Amount, destination and network are read FROM THE CHAIN, never from the body | `robinhood-rail.test.ts` → "ignores an amount, a recipient and a chain id sent in the body" — a body carrying a forger's own numbers settles identically to one without them |
+| 3 | The cluster is verified server-side; a devnet payment cannot settle a mainnet order | `robinhood.test.ts` → "refuses a payment read on the testnet, and reads nothing else" (one RPC call, then refusal); `robinhood-rail.test.ts` → "refuses a payment read on the testnet" |
+| 4 | Presenting a payment is separated from controlling the paying wallet — the pixelwar C-1 class | `robinhood.test.ts` → "refuses a real payment presented by somebody who did not make it"; `robinhood-rail.test.ts` → "refuses a transfer somebody else made, and leaves the hold standing" and "refuses a proof from a different wallet even with the payment on the chain" |
+| 5 | One on-chain transaction settles at most one order, by database constraint | `robinhood-rail.test.ts` → "refuses to settle a second rectangle with the same transaction", which asserts the SECOND rectangle is still `reserved` |
+| 6 | A payment landing after the reservation expired has a defined outcome | `orders-api.test.ts` → "answers 410 for an expired hold, to the wallet that can prove it holds it". A late payment is a refund conversation, not a rectangle, and `markPaid` refuses rather than papering over it |
+| 7 | The stub payment path cannot be reached in any deployed environment | `config.test.ts` → "refuses to start in production with stub payments enabled", including "refuses whatever the flag says, not only the word true" |
+| 8 | Every write route on the money path is rate limited | `limits.test.ts` → "allows a purchase's worth of writes and then refuses, naming when"; `reserve.test.ts` → "answers 429 with a retry-after once the caller's ceiling is reached" |
+
+**Point 8 was NOT met, and this table is how that was found.** `/reserve` and
+`/content` had ceilings; `/confirm`, `/challenge` and the release `DELETE` had
+none — and `/challenge` inserts a row for anybody who asks, which is an
+unbounded insert and a way to spend a database. All three now share one budget,
+`SIGNED_WRITE_LIMITS`, thirty in ten minutes per caller, because they are steps
+of one act: a purchase is a challenge and a confirm, a release is a challenge
+and a DELETE, and three separate budgets would be three times the ceiling for
+the same abuse. A real purchase spends four or five.
+
+The `DELETE` route's header comment used to say, correctly at the time, "there
+is no `identify()` — no rate limit hangs off this". It says something else now,
+and the reason is in it.
+
 ### The testnet rehearsal RAN, against real data and with no faucet
 
 **2026-09-04, testnet 46630.** The first plan needed a funded account and a
@@ -1069,3 +1099,115 @@ rather than a convenience.
   reason the rail is off.
 - **A Solana rail.** Still unbuilt. `stubVerifyPayment` remains the only path a
   Solana-owned order has, and it is refused on any deployed instance.
+
+---
+
+## Built: the review queue, the wall's encoding, and the default fit
+
+**Status: built 2026-09-05, behind no flag. Three decisions that were already
+settled and unbuilt, plus one that changed on contact with the code.**
+
+### The review queue
+
+Migrations 018 adds `approved_at` and `approval_note` and **backfills every
+existing sale as approved, dated to its own settlement**. That backfill is a
+decision, not a formality: leaving them NULL would have taken pictures off the
+wall that have been on it since the day they were bought, which is a review
+queue applied retroactively to purchases nobody agreed to review.
+
+`approvedSql()` folds into `publishesTextSql`, exactly as the round predicted,
+and eight readers got it in one edit — the composite, the words, the image, the
+card, the badge, `/go`, `/buyers` and the board list.
+
+**`/b/<id>` is the one reader that deliberately does NOT use that predicate.**
+It asks the two older halves — a sale, not taken down — because a buyer who has
+just paid needs a page to look at, and a 404 there is the site losing a purchase
+in front of the person who made it. The page says **"This one is in review"**
+and withholds the picture and the words, which are what the queue is about.
+
+**There is no `reject`.** A refusal is a takedown, with its reason, through the
+mechanism that already exists — a refused purchase and one taken down a week
+later are the same thing to every reader: a sale that stands whose picture is
+not on the wall. A third state would be a second way to say one fact.
+
+**The copy went in before the wallet opens**, which the earlier round made the
+condition of shipping at all: the confirmation step says it above the price, and
+`/faq` answers "How soon does my picture appear?".
+
+### WebP for the wall, and NOT the way `docs/imagenes.md` recommended
+
+That file said WebP with a PNG fallback chosen by `Accept`. **The fallback was
+refused.** The wall's version is a hash of its bytes, so content negotiation
+would mean one URL with two bodies — a `Vary` header, a split in every shared
+cache, and the end of the immutability the whole versioning scheme exists for.
+The build encodes both and **keeps whichever is smaller**; migration 017 gives
+the row a `mime` so the route serves what it stored instead of guessing.
+
+**Lossless, which gives up most of the saving that section measured.** Lossy
+WebP is smoothing, and `DESIGN.md` says a smoothed bitmap is no longer the
+picture the buyer uploaded. A buyer of a 6×40 block paid for two hundred and
+forty exact pixels. Flat art — which is most of this wall — still compresses
+better than PNG losslessly, and where it does not, PNG is kept.
+
+### `cover` by default past a 2× aspect gap
+
+`defaultFit` in `image-fit.ts`, applied once per picture so it is a starting
+point and not a rule the buyer has to fight. The threshold is the measurement:
+twenty real flags, and the three awkward shapes spending 85–90% of a paid
+rectangle on flat grey. **It flips just past two and not at it** — a square
+picture in a 2:1 banner is the commonest deliberate shape there is.
+
+### And the scaling table is in `DESIGN.md`
+
+"The same purchase, on four surfaces, at four scales", so the next reader finds
+`nearest` going up and `lanczos3` coming down as a rule rather than as a bug.
+
+---
+
+## Built: the backup, and the expunge script that had to come first
+
+**Status: built 2026-09-05. The workflow is committed and its first scheduled
+run is the night after it merges; no copy exists yet.**
+
+**THE ORDER WAS THE DECISION.** The owner's rule was that the daily backup does
+not start before the script that can expunge it exists, because a copy kept for
+ninety days turns an irreversible deletion into a removal with three months of
+copies behind it. So `scripts/backup-expunge.mts` and its test came first, and
+`SECURITY.md` now says what a purge covers **in the present tense** rather than
+promising something about a mechanism that did not exist.
+
+**The expunge is tested against a real repository, not a mock.** Three commits
+with the bytes in all three, the real script, and the requirement that no object
+anywhere in the object database still contains them — `refs/original` deleted,
+the reflog expired and `gc --prune=now` run, because a rewrite that leaves the
+old history reachable is not an expunge. It also refuses to delete an image a
+block that was NOT purged still points at, which is the one way
+content-addressing could have destroyed the wrong picture.
+
+**The role that reads cannot write.** `mdp_backup_reader`, `SELECT` and nothing
+else — verified by attempting an `INSERT` against it and being refused, not by
+reading a grant. A scheduled job holding the owner's credentials would be a
+second key to the wall, running unattended, every night.
+
+**The workflow names no host, no repository, no branch and no path**, because it
+lives in a public repository. `BACKUP_REPO` and `BACKUP_TOKEN` are secrets, and
+the clone URL is assembled inside the runner and never printed. Somebody reading
+the workflow learns that a backup exists and nothing about where it is.
+
+**Content-addressed images are what make a daily copy cheap**: an unchanged
+picture is the same path with the same contents, so a day on which nothing was
+bought is a commit that is never made. `manifest.json` carries a hash per row
+and per image, which is also what the expunge reads to decide what may go.
+
+### What is NOT done, and it is the part that matters
+
+**No restore has ever been rehearsed**, because no copy exists yet.
+`docs/backup.md` carries the procedure and an empty table at the bottom with the
+words "Never run" in it. Until a line appears in that table, this is a backup by
+construction and not by evidence — and `/faq` may not say the picture cannot rot
+until it is.
+
+**There is deliberately no restore script.** Writing one before a restore has
+been done by hand would be writing it against a guess at what goes wrong. The
+first rehearsal is what tells us; the script comes after, and its first test is
+that transcript.

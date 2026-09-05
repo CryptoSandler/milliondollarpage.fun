@@ -17,6 +17,7 @@ import {
 } from "../orders";
 import { formatPercentSold, formatUsdc } from "../pricing";
 import { reserveRect } from "../reserve";
+import { approve } from "../review";
 
 const BUYER = "BuyerPubkey1111111111111111111111111111111";
 const STRANGER = "StrangerPubkey11111111111111111111111111111";
@@ -66,6 +67,10 @@ describe("a single pixel, bought end to end", () => {
     await attachContent(held.id, BUYER, content());
     const paid = await markPaid(held.id, BUYER, "sig-one-pixel");
     expect(paid.status).toBe("paid");
+    // Paid is not painted since migration 018. This test reads what the PAGE
+    // would draw, so it takes the second step too — see `review.test.ts` for
+    // the queue itself.
+    await approve(held.id, "the suite");
 
     // The row itself: one pixel, a dollar, and no expiry left to sweep.
     const [row] = await query<{

@@ -1,8 +1,9 @@
 "use client";
 
 import type { Ref } from "react";
-import { shortAddress, type UsableWallet } from "../lib/wallet/standard";
-import type { WalletState } from "./useWallet";
+import { shortAddress } from "../lib/wallet/standard";
+import { OWNER_CHAIN_LABEL } from "../lib/board/owner";
+import type { WalletsState } from "./useWallets";
 
 /**
  * The control that replaced the wallet address field.
@@ -87,8 +88,13 @@ const INSTALLS: { name: string; install: string; browse?: (url: string) => strin
   { name: "Backpack", install: "https://backpack.app/download" },
 ];
 
+/** Whether the list spans both rails, which is the only time naming one helps. */
+function bothChains(choices: WalletsState["choices"]): boolean {
+  return choices.some((c) => c.chain === "solana") && choices.some((c) => c.chain === "robinhood");
+}
+
 export default function WalletConnect({
-  wallets,
+  choices,
   connected,
   connecting,
   notice,
@@ -97,7 +103,7 @@ export default function WalletConnect({
   onConnect,
   onDisconnect,
   ref,
-}: Pick<WalletState, "wallets" | "connected" | "connecting" | "notice"> & {
+}: Pick<WalletsState, "choices" | "connected" | "connecting" | "notice"> & {
   /**
    * True while a purchase dialog is open.
    *
@@ -109,7 +115,7 @@ export default function WalletConnect({
   disabled: boolean;
   /** A buyable rectangle is selected and there is no wallet — the one moment this control is the thing in the way. */
   needed: boolean;
-  onConnect: (wallet: UsableWallet) => void;
+  onConnect: (key: string) => void;
   onDisconnect: () => void;
   /**
    * `BoardView` needs to reach this control: pressing Buy with no wallet opens
@@ -147,9 +153,16 @@ export default function WalletConnect({
             <span className="tabular" aria-hidden>
               {shortAddress(connected.address)}
             </span>
-            <span className="sr-only">{`Wallet menu. Connected with ${connected.name}, address ${connected.address}`}</span>
+            <span className="sr-only">{`Wallet menu. Connected with ${connected.name} on ${OWNER_CHAIN_LABEL[connected.chain]}, address ${connected.address}`}</span>
           </summary>
           <div className="wallet-connect__sheet">
+            {/*
+              THE CHAIN IS NAMED HERE TOO. A rectangle is held by a (chain,
+              address) pair and a buyer with wallets on both needs to see which
+              one is about to sign — an address alone does not say, and the two
+              alphabets are close enough at a glance to be mistaken.
+            */}
+            <p className="mb-1 text-[11.5px] text-body">{OWNER_CHAIN_LABEL[connected.chain]}</p>
             <p className="tabular mb-2 break-all text-[11.5px] text-body">{connected.address}</p>
             <button
               type="button"
@@ -162,7 +175,7 @@ export default function WalletConnect({
             </button>
           </div>
         </details>
-      ) : wallets.length === 0 ? (
+      ) : choices.length === 0 ? (
         /*
           THE BUTTON IS ALWAYS THERE, WHETHER OR NOT THERE IS A WALLET.
 
@@ -183,11 +196,12 @@ export default function WalletConnect({
             <span className="wallet-connect__label" aria-hidden>
               Connect wallet
             </span>
-            <span className="sr-only">Connect wallet. You will need a Solana wallet first.</span>
+            <span className="sr-only">Connect wallet. You will need a wallet first.</span>
           </summary>
           <div className="wallet-connect__sheet">
             <p className="mb-2 text-[12.5px] leading-snug text-body">
-              Buying is signed, so it needs a Solana wallet. These three work here:
+              Buying is signed, so it needs a wallet. These work here — the first three on
+              Solana, the last on Robinhood Chain:
             </p>
             {INSTALLS.map((install) => (
               <a
@@ -219,20 +233,20 @@ export default function WalletConnect({
             ))}
           </div>
         </details>
-      ) : wallets.length === 1 ? (
+      ) : choices.length === 1 ? (
         // One wallet is the common case, and a list of one is a menu nobody
         // needs: the button connects it.
         <button
           type="button"
           className="wallet-connect__button"
           disabled={disabled || connecting !== null}
-          onClick={() => onConnect(wallets[0])}
+          onClick={() => onConnect(choices[0].key)}
           /* The accessible name NAMES THE WALLET, which the visible label
              cannot at 390 and does not need to anywhere else. It is also what
              `purchase-e2e.test.ts` reaches for, and what a screen reader is
              told instead of the glyph. */
-          aria-label={`Connect ${wallets[0].name}`}
-          title={`Connect ${wallets[0].name}`}
+          aria-label={`Connect ${choices[0].name}`}
+          title={`Connect ${choices[0].name} on ${OWNER_CHAIN_LABEL[choices[0].chain]}`}
         >
           <span aria-hidden>◈</span>
           <span className="wallet-connect__label" aria-hidden>
@@ -247,16 +261,26 @@ export default function WalletConnect({
             <span className="sr-only">Choose a wallet to connect</span>
           </summary>
           <div className="wallet-connect__sheet">
-            {wallets.map((wallet) => (
+            {/*
+              ONE ROW PER WALLET, WITH ITS CHAIN BESIDE IT, and the chain is
+              shown only when both are on offer. A reader with one Solana wallet
+              does not need to be taught that a chain exists; a reader holding
+              both needs to know which button signs with which, because the
+              rectangle they end up owning is held by the pair.
+            */}
+            {choices.map((choice) => (
               <button
-                key={wallet.name}
+                key={choice.key}
                 type="button"
-                onClick={() => onConnect(wallet)}
+                onClick={() => onConnect(choice.key)}
                 disabled={disabled || connecting !== null}
-                aria-label={`Connect ${wallet.name}`}
-                className="btn-quiet mb-1 w-full px-2 py-1.5 text-left text-[12.5px] last:mb-0"
+                aria-label={`Connect ${choice.name}`}
+                className="btn-quiet mb-1 flex w-full items-baseline justify-between gap-2 px-2 py-1.5 text-left text-[12.5px] last:mb-0"
               >
-                {wallet.name}
+                <span>{choice.name}</span>
+                {bothChains(choices) && (
+                  <span className="text-[11px] text-body">{OWNER_CHAIN_LABEL[choice.chain]}</span>
+                )}
               </button>
             ))}
           </div>

@@ -227,6 +227,32 @@ describe("paying for a rectangle in USDG", () => {
     expect(response.status).toBe(403);
   });
 
+  /**
+   * POINT 2 OF THE CONTRACT, from the other side: amount, destination and
+   * network are read FROM THE CHAIN, and the request body contributes one
+   * string. So a body carrying its own idea of all three changes nothing —
+   * the numbers below are the ones a forger would put there, and the verdict
+   * is identical to the same request without them.
+   */
+  it("ignores an amount, a recipient and a chain id sent in the body", async () => {
+    const { id, owed } = await readyToPay();
+    chainAnswers(receipt(owed));
+    const body = {
+      ...(await confirmBody(id)),
+      amount: 1,
+      totalBaseUnits: 1,
+      payTo: "0x000000000000000000000000000000000000dEaD",
+      chainId: 1,
+    };
+    expect((await POST_CONFIRM(request(body), ctx(id))).status).toBe(200);
+
+    const rows = await query<{ payment_signature: string }>(
+      "SELECT payment_signature FROM blocks WHERE id = $1",
+      [id],
+    );
+    expect(rows[0].payment_signature).toBe(HASH.toLowerCase());
+  });
+
   it("does not exist at all with the rail off and no stub", async () => {
     vi.stubEnv("ROBINHOOD_PAYMENTS", "");
     const { id } = await readyToPay();

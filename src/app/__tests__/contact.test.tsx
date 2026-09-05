@@ -11,19 +11,16 @@ import StatsPage from "../stats/page";
 import { CONTACT_EMAIL } from "../../lib/site";
 
 /**
- * There is an address on this site, it is the same address everywhere, and it
- * is not a link yet.
+ * There is an address on this site, it is the same address everywhere, and
+ * since 2026-09-05 it is a link.
  *
- * THE THIRD CLAUSE IS THE ONE WITH A DATE ON IT. The mailbox does not exist:
- * the domain is at Namecheap and the owner has chosen to put Private Email on
- * it at the end of the build. Until then the address is printed as text, so a
- * reader copies it rather than firing a message into a mailbox that will bounce
- * without telling them. `src/lib/site.ts` carries the reasoning and the one-line
- * upgrade.
- *
- * This guard exists because the fix — wrapping it in an `<a href="mailto:">` —
- * is the most natural edit anybody looking at this markup would make, and it
- * would look like an improvement right up until the first message vanished.
+ * THE THIRD CLAUSE HAS A DATE ON IT IN BOTH DIRECTIONS. It was deliberately NOT
+ * a link while the mailbox did not exist — a `mailto:` on an address that
+ * bounces invites a reader to spend a message that silently fails — and this
+ * file guarded that. The mailbox is open, so the guard now holds the other end:
+ * a page that quietly went back to bare text would be a page where pressing the
+ * address does nothing. `src/lib/site.ts` keeps both halves of the reasoning,
+ * because the reason it was text is the reason it would have to be text again.
  */
 
 const PER_PIXEL = 1_000_000;
@@ -31,9 +28,9 @@ const PER_PIXEL = 1_000_000;
 async function seed(): Promise<string> {
   const rows = await query<{ id: string }>(
     `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
-                         owner_address, payment_signature, caption, link)
+                         owner_address, payment_signature, caption, link, approved_at)
      VALUES (12, 34, 50, 20, 'paid', $1, $2, '2026-03-04T05:06:07Z',
-             'AWalletNobodyMayLearn', 'a-signature', 'My shop', 'https://example.com/shop')
+             'AWalletNobodyMayLearn', 'a-signature', 'My shop', 'https://example.com/shop', now())
      RETURNING id`,
     [PER_PIXEL, 50 * 20 * PER_PIXEL],
   );
@@ -63,16 +60,30 @@ describe("the contact address", () => {
     expect(await render()).toContain(CONTACT_EMAIL);
   });
 
-  it.each(PAGES)("is not a mailto on %s", async (_name, render) => {
-    expect(await render()).not.toContain("mailto:");
+  /*
+    THE GUARD TURNED ROUND ON 2026-09-05. It asserted the address was NOT a
+    link, because the mailbox did not exist and a `mailto:` would have spent
+    readers' messages silently. The mailbox is open, so the same guard now
+    holds the other end: every page that prints the address links it, and a
+    page that printed it as bare text again would be a page where the most
+    natural thing a reader does — press it — does nothing.
+  */
+  it.each(PAGES)("is a mailto on %s", async (_name, render) => {
+    expect(await render()).toContain(`mailto:${CONTACT_EMAIL}`);
   });
 
   it("is answered on the FAQ as well as in the footer", async () => {
-    // Three times on that page since 2026-09-04: the invitation to report a
-    // mismatch, the answer about changing a sold rectangle, and the footer
-    // every page carries. A missing one would mean a route out was dropped.
+    // Three PLACES on that page: the invitation to report a mismatch, the
+    // answer about changing a sold rectangle, and the footer every page
+    // carries. A missing one would mean a route out was dropped.
+    //
+    // Counted as `mailto:` rather than as the address, because since
+    // 2026-09-05 each place spends the address twice — once in the href and
+    // once as the text somebody can still copy. Counting the address would
+    // have made this assertion a fact about the markup rather than about how
+    // many ways out of this page there are.
     const html = renderToStaticMarkup(<FaqPage />);
-    expect(html.split(CONTACT_EMAIL)).toHaveLength(4);
+    expect(html.split(`mailto:${CONTACT_EMAIL}`)).toHaveLength(4);
   });
 
   /**

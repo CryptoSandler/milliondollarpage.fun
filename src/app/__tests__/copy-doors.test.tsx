@@ -36,9 +36,9 @@ const PER_PIXEL = 1_000_000;
 async function seed(): Promise<string> {
   const rows = await query<{ id: string }>(
     `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
-                         owner_address, payment_signature, caption, link)
+                         owner_address, payment_signature, caption, link, approved_at)
      VALUES (12, 34, 50, 20, 'paid', $1, $2, '2026-03-04T05:06:07Z',
-             'AWalletNobodyMayLearn', 'a-signature', 'My shop', 'https://example.com/shop')
+             'AWalletNobodyMayLearn', 'a-signature', 'My shop', 'https://example.com/shop', now())
      RETURNING id`,
     [PER_PIXEL, 50 * 20 * PER_PIXEL],
   );

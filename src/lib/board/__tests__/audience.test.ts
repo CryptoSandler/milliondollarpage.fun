@@ -128,8 +128,8 @@ describe("counting visits from the heartbeat that already exists", () => {
 describe("counting clicks", () => {
   async function aBlock(): Promise<string> {
     const rows = await query<{ id: string }>(
-      `INSERT INTO blocks (x, y, w, h, status, caption, link, price_per_pixel_usdc, total_usdc)
-       VALUES (0, 0, 10, 10, 'paid', 'A caption', 'https://example.com', 1000000, 100000000)
+      `INSERT INTO blocks (x, y, w, h, status, caption, link, price_per_pixel_usdc, total_usdc, approved_at)
+       VALUES (0, 0, 10, 10, 'paid', 'A caption', 'https://example.com', 1000000, 100000000, now())
        RETURNING id`,
     );
     return rows[0].id;

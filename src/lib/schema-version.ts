@@ -22,4 +22,4 @@
  * error naming a column, which reads like a bug in the query rather than a
  * database that was never migrated.
  */
-export const EXPECTED_MIGRATION = "016_owner_is_chain_and_address";
+export const EXPECTED_MIGRATION = "018_review_queue";

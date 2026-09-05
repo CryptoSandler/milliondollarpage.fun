@@ -1,6 +1,11 @@
 import type { PoolClient } from "pg";
 import { execute, query, queryOne } from "../db";
-import { IMAGE_BEARING_STATUSES, hasPublicImageSql, publishesTextSql } from "./block-image";
+import {
+  IMAGE_BEARING_STATUSES,
+  hasPublicImageSql,
+  notTakenDownSql,
+  publishesTextSql,
+} from "./block-image";
 import { TOTAL_PIXELS } from "./geometry";
 import { SIGNATURE_KEPT } from "./tape";
 import type { OwnerChain } from "./owner";
@@ -230,6 +235,16 @@ export type BlockPage = {
    * "USDC, on Solana" became a sentence that is wrong for half the wall.
    */
   ownerChain: OwnerChain;
+  /**
+   * When a person let this purchase onto the wall, or null while it waits.
+   *
+   * THE PAGE EXISTS EITHER WAY, and that is the point. A buyer who has just
+   * paid needs somewhere to look, and "in review" is an answer where a 404 is
+   * the site losing their purchase in front of them. What the page withholds
+   * while this is null is the picture and the words — everything
+   * `publishesTextSql` gates — not the sale.
+   */
+  approvedAt: string | null;
 };
 
 /**
@@ -262,11 +277,12 @@ export async function getBlockPage(id: string): Promise<BlockPage | null> {
     signature: string | null;
     paid_at: Date;
     owner_chain: string;
+    approved_at: Date | null;
   }>(
     // No alias on `blocks`, for the reason `getBlockDetails` gives above:
     // `publishesTextSql` is written against bare column names and is shared
     // with four other queries. `block_clicks` names none of them.
-    `SELECT id, x, y, w, h, total_usdc, caption, link, paid_at, owner_chain,
+    `SELECT id, x, y, w, h, total_usdc, caption, link, paid_at, owner_chain, approved_at,
             coalesce(block_clicks.clicks, 0)::int AS clicks,
             CASE
               WHEN payment_signature IS NULL THEN NULL
@@ -276,7 +292,18 @@ export async function getBlockPage(id: string): Promise<BlockPage | null> {
        FROM blocks
        LEFT JOIN block_clicks ON block_clicks.block_id = blocks.id
       WHERE id = $1
-        AND ${publishesTextSql(2)}
+        -- NOT publishesTextSql, AND THIS IS THE ONE PLACE THAT DIFFERS.
+        --
+        -- That predicate now also asks whether a person has approved the
+        -- purchase, which is right for the composite, the image, the card and
+        -- the badge: a picture nobody has looked at is not published anywhere.
+        -- It is wrong HERE. A buyer who has just paid needs a page to look at,
+        -- and answering 404 while their purchase waits is the site losing it
+        -- in front of them. So this asks the two older halves -- a sale, not
+        -- taken down -- and the page itself withholds the picture and the
+        -- words until approved_at is set.
+        AND status = ANY($2)
+        AND ${notTakenDownSql()}
         -- A sale with no settled instant has nothing to date, and every row
         -- this predicate lets through has one. Belt and braces for the rows
         -- the stub payment path wrote before paid_at was required.
@@ -301,6 +328,7 @@ export async function getBlockPage(id: string): Promise<BlockPage | null> {
     signature: row.signature,
     paidAt: row.paid_at.toISOString(),
     ownerChain: row.owner_chain as OwnerChain,
+    approvedAt: row.approved_at ? row.approved_at.toISOString() : null,
   };
 }
 

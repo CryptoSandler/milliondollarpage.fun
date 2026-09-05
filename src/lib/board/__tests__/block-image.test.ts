@@ -20,8 +20,8 @@ async function insert(
 ): Promise<string> {
   const row = await queryOne<{ id: string }>(
     `INSERT INTO blocks (x, y, w, h, status, expires_at, price_per_pixel_usdc, total_usdc,
-                         pending_image, pending_image_mime)
-     VALUES ($1, 0, 10, 10, $2, $3, 1000000, 100000000, $4, $5)
+                         pending_image, pending_image_mime, approved_at)
+     VALUES ($1, 0, 10, 10, $2, $3, 1000000, 100000000, $4, $5, CASE WHEN $2 IN ('paid','minted') THEN now() END)
      RETURNING id`,
     [x, status, status === "reserved" ? "2999-01-01T00:00:00Z" : null, image, mime],
   );
@@ -172,8 +172,8 @@ describe("getBlockImage", () => {
     const theirs = Buffer.from("a completely different picture", "utf8");
     await execute(
       `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc,
-                           pending_image, pending_image_mime)
-       VALUES (100, 0, 10, 10, 'paid', 1000000, 100000000, $1, 'image/png')`,
+                           pending_image, pending_image_mime, approved_at)
+       VALUES (100, 0, 10, 10, 'paid', 1000000, 100000000, $1, 'image/png', now())`,
       [theirs],
     );
     expect(Buffer.compare((await getBlockImage(mine))!.bytes, WEBP)).toBe(0);

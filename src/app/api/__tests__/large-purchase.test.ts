@@ -7,6 +7,7 @@ import { POST as POST_CONTENT } from "../orders/[id]/content/route";
 import { POST as POST_RESERVE } from "../reserve/route";
 import { testWallet } from "../../../lib/wallet/__tests__/keypair";
 import { proofFor } from "./proof";
+import { approve } from "../../../lib/board/review";
 
 /**
  * The purchase this batch's limits are not allowed to break.
@@ -76,7 +77,7 @@ async function describeBlock(orderId: string, bytes: Buffer): Promise<Response> 
 }
 
 async function pay(orderId: string): Promise<Response> {
-  return POST_CONFIRM(
+  const response = await POST_CONFIRM(
     new Request("http://localhost/api/orders/x/confirm", {
       method: "POST",
       headers: { "content-type": "application/json", "x-forwarded-for": ADDRESS },
@@ -84,6 +85,10 @@ async function pay(orderId: string): Promise<Response> {
     }),
     ctx(orderId),
   );
+  // Paying and being painted are two events since migration 018, and this file
+  // asserts on the board. See `small-purchase.test.ts` for the argument.
+  if (response.status === 200) await approve(orderId, "the suite");
+  return response;
 }
 
 describe("a buyer taking the largest rectangle the ceiling allows", () => {

@@ -222,22 +222,82 @@ export const CONTENT_SUBMISSION_LIMITS = {
 
 const recentContentSubmissions = new Map<string, number[]>();
 
-export function checkContentSubmissionLimits(ipHash: string): LimitDecision {
+/**
+ * The sliding window itself, once, so a second limited route is a Map and a
+ * sentence rather than a second copy of the arithmetic.
+ *
+ * Extracted when `/confirm`, `/challenge` and the release DELETE were found
+ * unlimited — the eight-point contract's point 8 says every write route on the
+ * money path is rate limited, and three of them were not. Two copies of a
+ * sliding window are two places for an off-by-one to live.
+ */
+function slidingWindow(
+  store: Map<string, number[]>,
+  limits: { perWindow: number; windowMinutes: number },
+  ipHash: string,
+  message: string,
+): LimitDecision {
   const now = Date.now();
-  const windowMs = CONTENT_SUBMISSION_LIMITS.windowMinutes * 60_000;
-  const timestamps = (recentContentSubmissions.get(ipHash) ?? []).filter((t) => t > now - windowMs);
+  const windowMs = limits.windowMinutes * 60_000;
+  const timestamps = (store.get(ipHash) ?? []).filter((t) => t > now - windowMs);
 
-  if (timestamps.length >= CONTENT_SUBMISSION_LIMITS.perWindow) {
-    recentContentSubmissions.set(ipHash, timestamps);
+  if (timestamps.length >= limits.perWindow) {
+    store.set(ipHash, timestamps);
     return {
       ok: false,
       reason: "too_many_recent",
-      message: "Too many content submissions recently. Try again later.",
+      message,
       retryAt: new Date(timestamps[0] + windowMs).toISOString(),
     };
   }
 
   timestamps.push(now);
-  recentContentSubmissions.set(ipHash, timestamps);
+  store.set(ipHash, timestamps);
   return { ok: true };
+}
+
+export function checkContentSubmissionLimits(ipHash: string): LimitDecision {
+  return slidingWindow(
+    recentContentSubmissions,
+    CONTENT_SUBMISSION_LIMITS,
+    ipHash,
+    "Too many content submissions recently. Try again later.",
+  );
+}
+
+/**
+ * The ceiling on the three signed writes that had none: issuing a challenge,
+ * confirming a payment, and handing a hold back.
+ *
+ * ONE BUDGET FOR ALL THREE, on purpose. They are steps of the same act — a
+ * purchase is a challenge and then a confirm, and a release is a challenge and
+ * then a DELETE — so a caller who is hammering any of them is hammering the
+ * money path, and three separate budgets would be three times the ceiling for
+ * the same abuse.
+ *
+ * THIRTY IN TEN MINUTES is loose on purpose. A real purchase spends four or
+ * five: it is not a limit on buying, it is a limit on a script. The number that
+ * matters is that there IS one — `/challenge` inserts a row for anybody who
+ * asks, and an unbounded insert is a way to spend a database.
+ *
+ * // ponytail: in memory and therefore per process, exactly like the content
+ * // limiter above and for the same reason — a challenge is not a row in
+ * // `blocks` and there is nothing to count in SQL without a new table. On more
+ * // than one instance each has its own count. If that stops being good enough,
+ * // the fix is a table, and it is the same fix for both.
+ */
+export const SIGNED_WRITE_LIMITS = {
+  perWindow: 30,
+  windowMinutes: 10,
+} as const;
+
+const recentSignedWrites = new Map<string, number[]>();
+
+export function checkSignedWriteLimits(ipHash: string): LimitDecision {
+  return slidingWindow(
+    recentSignedWrites,
+    SIGNED_WRITE_LIMITS,
+    ipHash,
+    "Too many requests on this order recently. Try again later.",
+  );
 }

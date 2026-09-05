@@ -409,6 +409,20 @@ export default function AboutPage() {
           summarised.
         </p>
         <div className="mt-2">
+        <Question title="How soon does my picture appear?">
+          <p>
+            The rectangle is yours the moment the payment settles — nobody else can buy those
+            pixels, and it has a page of its own straight away. The picture going up on the wall
+            waits until a person has looked at it, which is usually hours rather than days.
+          </p>
+          <p>
+            That is a queue and not a filter: it exists because a wall anybody can put a picture on
+            is a wall somebody eventually puts something on that should not be there, and the
+            alternative — taking it down afterwards — means it was up in the meantime. If a picture
+            is refused, you are told why, and the sale still stands.
+          </p>
+        </Question>
+
         <Question title="How long do I keep it?">
           <p>
             For good. A rectangle you have paid for does not change owner and does not change content
@@ -575,7 +589,7 @@ export default function AboutPage() {
           <p>
             If something is wrong with a rectangle after the fact — a link that no longer works, a
             picture that should not be up — write to{" "}
-            <span className="tabular font-semibold text-ink">{CONTACT_EMAIL}</span> with the address
+            <a className="tabular font-semibold text-ink underline decoration-hairline-strong underline-offset-2" href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> with the address
             of its page. What happens then is a decision a person makes and applies, not a form on
             this site, and there is no promise here that any particular change will be made.
           </p>
@@ -597,11 +611,11 @@ export default function AboutPage() {
           That is a bug in one of the two, and we would rather hear about it than have you find out
           later. Write to{" "}
           {/*
-            TEXT AND NOT A `mailto:`, on purpose. `src/lib/site.ts` carries the
-            reason: the mailbox is not open yet, and a link to an address that
-            bounces spends somebody's message without telling them it failed.
+            A `mailto:` since the mailbox opened. It was text for as long as a
+            link to an address that bounced would have spent somebody's message
+            without telling them — `src/lib/site.ts` has both halves.
           */}
-          <span className="tabular font-semibold text-ink">{CONTACT_EMAIL}</span> — a person reads
+          <a className="tabular font-semibold text-ink underline decoration-hairline-strong underline-offset-2" href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> — a person reads
           it.
         </p>
 

@@ -15,8 +15,8 @@ async function insertBlock(
   // the overlap constraint this suite is actually exercising.
   const expiresAt = status === "reserved" ? "now() + interval '30 minutes'" : "NULL";
   await execute(
-    `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, expires_at)
-     VALUES ($1, $2, $3, $4, $5, 1000000, $6, ${expiresAt})`,
+    `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, expires_at, approved_at)
+     VALUES ($1, $2, $3, $4, $5, 1000000, $6, ${expiresAt}, CASE WHEN $5 IN ('paid','minted') THEN now() END)`,
     [x, y, w, h, status, w * h * 1000000],
   );
 }
@@ -137,8 +137,8 @@ describe("the blocks table", () => {
   it("refuses a caption longer than 32 characters", async () => {
     const code = await errorCodeOf(() =>
       execute(
-        `INSERT INTO blocks (x, y, w, h, status, caption, price_per_pixel_usdc, total_usdc)
-         VALUES (0, 0, 10, 10, 'minted', $1, 1000000, 100000000)`,
+        `INSERT INTO blocks (x, y, w, h, status, caption, price_per_pixel_usdc, total_usdc, approved_at)
+         VALUES (0, 0, 10, 10, 'minted', $1, 1000000, 100000000, now())`,
         ["x".repeat(33)],
       ),
     );
@@ -166,8 +166,8 @@ describe("the ownership trigger", () => {
 
   async function soldTo(status: string, buyer = OWNER, x = 0): Promise<string> {
     const rows = await query<{ id: string }>(
-      `INSERT INTO blocks (x, y, w, h, status, owner_address, price_per_pixel_usdc, total_usdc)
-       VALUES ($1, 0, 10, 10, $2, $3, 1000000, 100000000)
+      `INSERT INTO blocks (x, y, w, h, status, owner_address, price_per_pixel_usdc, total_usdc, approved_at)
+       VALUES ($1, 0, 10, 10, $2, $3, 1000000, 100000000, CASE WHEN $2 IN ('paid','minted') THEN now() END)
        RETURNING id`,
       [x, status, buyer],
     );

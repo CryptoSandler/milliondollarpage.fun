@@ -3,7 +3,7 @@ import sharp from "sharp";
 import { ADMIN_COOKIE, createAdminSession } from "../../../lib/admin";
 import { hashIp } from "../../../lib/callers/client-ip";
 import { query, queryOne } from "../../../lib/db";
-import { ensureWall, wallPng } from "../../../lib/board/composite";
+import { ensureWall, wallImage } from "../../../lib/board/composite";
 import { reserveRect } from "../../../lib/board/reserve";
 import { GET as detailsRoute } from "../blocks/[id]/route";
 import { GET as imageRoute } from "../blocks/[id]/image/route";
@@ -59,9 +59,9 @@ async function sold(): Promise<string> {
   const row = await queryOne<{ id: string }>(
     `INSERT INTO blocks (x, y, w, h, status, owner_address, caption, link,
                          price_per_pixel_usdc, total_usdc,
-                         pending_image, pending_image_mime, image_fit, image_sha256)
+                         pending_image, pending_image_mime, image_fit, image_sha256, approved_at)
      VALUES (0, 0, 20, 20, 'paid', $1, 'My shop', 'https://example.com/shop',
-             1000000, 400000000, $2, 'image/png', 'cover', $3)
+             1000000, 400000000, $2, 'image/png', 'cover', $3, now())
      RETURNING id`,
     [OWNER, await magenta(), "a".repeat(64)],
   );
@@ -116,8 +116,13 @@ async function servedBytes(id: string): Promise<Buffer | null> {
 async function wallPixelAt(x: number, y: number) {
   const wall = await ensureWall();
   if (!wall) throw new Error("there should be a wall");
-  const png = await wallPng(wall.version);
-  const { data, info } = await sharp(png!).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const image = await wallImage(wall.version);
+  // sharp reads either encoding, which is the point: the assertion below is
+  // about pixels, and the wall's format is whichever came out smaller.
+  const { data, info } = await sharp(image!.bytes)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
   const at = (y * info.width + x) * 4;
   return { version: wall.version, r: data[at], g: data[at + 1], b: data[at + 2], a: data[at + 3] };
 }

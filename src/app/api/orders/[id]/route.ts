@@ -8,8 +8,9 @@ import {
 } from "../../../../lib/board/orders";
 import { BUYER_PUBKEY_HEADER } from "../../../../lib/board/purchase-client";
 import { consumeChallenge } from "../../../../lib/board/challenge";
-import { NO_STORE, isUuid, json, problem } from "../../../../lib/http";
+import { NO_STORE, identify, isUuid, json, problem } from "../../../../lib/http";
 import { sameOwner } from "../../../../lib/board/owner";
+import { checkSignedWriteLimits } from "../../../../lib/callers/limits";
 
 /**
  * An order's current state, for polling a hold or a confirmation screen.
@@ -103,9 +104,10 @@ const UNSIGNED =
  * The proof travels in the body rather than the URL: a query string ends up
  * in access logs, in `Referer`, and in a browser's own history, and a nonce
  * that is meant to be spent once should not be written down three times on
- * its way in. There is no `identify()` — no rate limit hangs off this, and a
- * caller without the key can neither delete anything nor learn anything by
- * trying, which is the same reason GET above is unauthenticated.
+ * its way in. `identify()` runs, and it did not until the eight-point contract
+ * was checked line by line: a caller without the key can neither delete
+ * anything nor learn anything by trying, which is true and is not a ceiling —
+ * point 8 asks for one on every write on the money path, and this is one.
  *
  * Answers 204 with no body. There is nothing left to describe: the order the
  * caller named is gone, and returning a corpse of it would only invite a
@@ -117,6 +119,24 @@ export async function DELETE(
 ): Promise<Response> {
   const { id } = await params;
   if (!isUuid(id)) return problem(404, "That order does not exist.");
+
+  /*
+    POINT 8 OF THE CONTRACT: every write route on the money path is rate
+    limited, and this one inserts a row for anybody who asks — an unbounded
+    insert is a way to spend a database. One budget covers the challenge, the
+    confirm and the release, because they are steps of one act.
+
+    IT DOES NOT CHANGE WHAT A STRANGER LEARNS. The ceiling is per caller, not
+    per order, and a 429 says nothing about whether the order exists — which is
+    the property the comment above spends a paragraph protecting.
+  */
+  const caller = identify(request);
+  if (!caller.ok) return problem(400, caller.message);
+  const limit = checkSignedWriteLimits(caller.ipHash);
+  if (!limit.ok) {
+    const seconds = Math.max(1, Math.ceil((Date.parse(limit.retryAt) - Date.now()) / 1000));
+    return problem(429, limit.message, { retryAt: limit.retryAt }, { "retry-after": String(seconds) });
+  }
 
   let body: unknown;
   try {

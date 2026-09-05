@@ -4,7 +4,7 @@ import sharp from "sharp";
 import { execute, query } from "../../db";
 import { GET as wallRoute } from "../../../app/api/wall/[version]/route";
 import { listBoardRects } from "../blocks";
-import { currentWall, ensureWall, wallPng } from "../composite";
+import { currentWall, ensureWall, wallImage } from "../composite";
 import { BOARD_HEIGHT, BOARD_WIDTH } from "../geometry";
 import { placeImage } from "../image-fit";
 import { SOLD_GROUND } from "../composite";
@@ -57,8 +57,8 @@ async function buy(
   const rows = await query<{ id: string }>(
     `INSERT INTO blocks (x, y, w, h, status, owner_address, image_fit,
                          price_per_pixel_usdc, total_usdc,
-                         pending_image, pending_image_mime, image_sha256)
-     VALUES ($1, $2, $3, $4, 'paid', 'BuyerWallet1111111111', $5, 1000000, $6, $7, $8, $9)
+                         pending_image, pending_image_mime, image_sha256, approved_at)
+     VALUES ($1, $2, $3, $4, 'paid', 'BuyerWallet1111111111', $5, 1000000, $6, $7, $8, $9, now())
      RETURNING id`,
     [
       rect.x,
@@ -242,7 +242,7 @@ describe("regenerating the wall", () => {
     const before = await ensureWall();
     await buy({ x: 0, y: 0, w: 10, h: 10 }, await solidPng(20, { r: 7, g: 7, b: 7 }));
     await ensureWall();
-    expect(await wallPng(before!.version)).not.toBeNull();
+    expect(await wallImage(before!.version)).not.toBeNull();
   });
 
   /**
@@ -264,7 +264,7 @@ describe("regenerating the wall", () => {
       sharpState.broken = false;
     }
     expect((await currentWall())!.version).toBe(standing!.version);
-    expect(await wallPng(standing!.version)).not.toBeNull();
+    expect(await wallImage(standing!.version)).not.toBeNull();
   });
 
   it("answers 404 for a version that is not one of ours, and for a malformed one", async () => {
@@ -276,12 +276,21 @@ describe("regenerating the wall", () => {
     }
   });
 
-  it("serves the wall as an immutable PNG, because its URL is its hash", async () => {
+  it("serves the wall as an immutable image, because its URL is its hash", async () => {
     const wall = await ensureWall();
     const response = await wallRoute(new Request(`http://localhost${wall!.url}`), {
       params: Promise.resolve({ version: wall!.version }),
     });
-    expect(response.headers.get("content-type")).toBe("image/png");
+    /*
+      WHAT THE ROW SAYS, not a format this test picked. The build encodes both
+      PNG and lossless WebP and keeps the smaller, so the encoding is part of a
+      version's identity rather than a property of the route — see migration
+      017. Asserting one format here would be asserting which one happened to
+      win for this fixture.
+    */
+    const stored = await wallImage(wall!.version);
+    expect(response.headers.get("content-type")).toBe(stored!.mime);
+    expect(["image/png", "image/webp"]).toContain(stored!.mime);
     expect(response.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
   });
@@ -437,6 +446,48 @@ describe("the checkout preview and the wall agree about the rectangle", () => {
 });
 
 /** A solid picture that is not square, so a fit has something to do. */
+/**
+ * WHICH ENCODING THE WALL IS, which is a decision the build makes per version.
+ *
+ * `docs/imagenes.md` §5 measured a photographic wall at 3.8 MiB of PNG and
+ * recommended WebP. What ships encodes BOTH and keeps the smaller, because the
+ * version is the hash of the bytes: an encoding is a different URL rather than
+ * a negotiation, and negotiation would have meant `Vary`, a split in every
+ * shared cache, and the end of the property the versioning exists for.
+ *
+ * Lossless, and that is the line this wall does not cross — DESIGN.md says a
+ * smoothed bitmap is no longer the picture the buyer uploaded, and a buyer of a
+ * 6×40 block paid for forty exact pixels.
+ */
+describe("what the wall is encoded as", () => {
+  it("keeps WebP on the flat art this wall is mostly made of, and says so", async () => {
+    await buy({ x: 0, y: 0, w: 40, h: 40 }, await solidPng(160, { r: 220, g: 40, b: 40 }));
+    const wall = await ensureWall();
+    const image = await wallImage(wall!.version);
+    expect(image!.mime).toBe("image/webp");
+  });
+
+  it("is the same picture whichever encoding won", async () => {
+    // The assertion that matters: lossless means the pixels are the pixels.
+    await buy({ x: 0, y: 0, w: 40, h: 40 }, await solidPng(160, { r: 220, g: 40, b: 40 }));
+    const wall = await ensureWall();
+    const image = await wallImage(wall!.version);
+    const { data, info } = await sharp(image!.bytes)
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const at = (20 * info.width + 20) * 4;
+    expect([data[at], data[at + 1], data[at + 2], data[at + 3]]).toEqual([220, 40, 40, 255]);
+  });
+
+  it("hashes the bytes it actually stored, so the URL and the encoding agree", async () => {
+    await buy({ x: 0, y: 0, w: 40, h: 40 }, await solidPng(160, { r: 10, g: 200, b: 90 }));
+    const wall = await ensureWall();
+    const image = await wallImage(wall!.version);
+    expect(createHash("sha256").update(image!.bytes).digest("hex")).toBe(wall!.version);
+  });
+});
+
 async function solidRect(width: number, height: number, colour: Rgba3): Promise<Buffer> {
   return sharp({ create: { width, height, channels: 3, background: colour } })
     .png()

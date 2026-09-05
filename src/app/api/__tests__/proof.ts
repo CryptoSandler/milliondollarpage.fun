@@ -22,6 +22,24 @@ import { POST as POST_CHALLENGE } from "../orders/[id]/challenge/route";
 
 export type Challenge = { nonce: string; message: string; expiresAt: string };
 
+/**
+ * A DIFFERENT ADDRESS FOR EVERY CHALLENGE A TEST ASKS FOR.
+ *
+ * `SIGNED_WRITE_LIMITS` is thirty in ten minutes per caller, and `orders-api`
+ * alone spends more than that — it drove seventeen failures the first time this
+ * helper used one address, all of them 429s from a ceiling doing exactly its
+ * job. A suite file is not one buyer, and pretending it is would mean either a
+ * looser ceiling in production or tests that fail by arithmetic.
+ *
+ * The ceiling itself is exercised where it can be exercised honestly:
+ * `limits.test.ts` counts to it directly.
+ */
+let caller = 0;
+function challengeCaller(): string {
+  caller += 1;
+  return `198.51.100.${caller % 250}`;
+}
+
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 
 /** Asks for a challenge for one act on one order, and fails loudly if refused. */
@@ -29,7 +47,10 @@ export async function challengeFor(orderId: string, action: ChallengeAction): Pr
   const response = await POST_CHALLENGE(
     new Request("http://localhost/", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      // The challenge route identifies its caller now — it inserts a row, and
+      // point 8 of the contract wants a ceiling on that — so a request with no
+      // trustworthy address is refused before it reaches the nonce.
+      headers: { "content-type": "application/json", "x-forwarded-for": challengeCaller() },
       body: JSON.stringify({ action }),
     }),
     ctx(orderId),

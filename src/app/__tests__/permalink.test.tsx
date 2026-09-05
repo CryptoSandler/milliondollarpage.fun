@@ -49,9 +49,9 @@ async function seed(fields: Seed = {}): Promise<string> {
   const rows = await query<{ id: string }>(
     `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
                          owner_address, owner_wallet, payment_signature, caption, link, image_fit,
-                         expires_at)
+                         expires_at, approved_at)
      VALUES ($10, 34, 50, 20, $1, $2, $3, $8,
-             $4, $4, $5, $6, $7, 'contain', $9)
+             $4, $4, $5, $6, $7, 'contain', $9, CASE WHEN $1 IN ('paid','minted') THEN now() END)
      RETURNING id`,
     [
       status,

@@ -126,6 +126,17 @@ export default function ConfirmationStep({
         <Row term="You pay" strong>
           {formatUsdc(order.totalBaseUnits)}
         </Row>
+        {/*
+          WHAT THE WALLET IS ABOUT TO BE ASKED FOR, said before it opens.
+
+          A dollar is a dollar on either rail — six decimals on both, so the
+          figure above does not change — but the wallet prompt will name a token
+          and a network, and a buyer who has not been told which is a buyer
+          reading an unfamiliar prompt and wondering whether this site is what
+          it says. `docs/wallet-warnings.md` is the long version of why that
+          matters more than the line costs.
+        */}
+        <Row term="In">{order.payTo ? "USDG, on Robinhood Chain" : "USDC, on Solana"}</Row>
       </dl>
 
       <dl className="flex flex-col gap-2 rounded-xl border border-hairline-strong bg-card-lift px-4 py-3 text-[15px]">
@@ -175,6 +186,30 @@ export default function ConfirmationStep({
           FAQ
         </a>{" "}
         says the rest in full.
+      </p>
+
+      {/*
+        BEFORE THE WALLET OPENS, NOT AFTER, and `DECISIONS.md` makes that the
+        condition of the review queue shipping at all: a buyer paying $10,800
+        and finding out afterwards that publication waits on somebody's
+        attention is the site taking money for something it did not say it was
+        doing. It sits above the preview-build note because it is true of the
+        real build too.
+      */}
+      <p className="rounded-lg border border-hairline-strong bg-canvas px-3 py-2 text-[14px] leading-relaxed text-body">
+        <span className="font-semibold text-ink">Your picture goes up once a person has looked at
+        it.</span>{" "}
+        {/*
+          NOT "these pixels are yours", which is the RECEIPT's sentence — "Done
+          — 100 pixels are yours" — and the phrase the browser harness waits on
+          to know the payment landed. Saying it here made that wait match one
+          step early, so the suite read the confirmation screen as the receipt
+          and then found the row still `reserved`. A wording collision, caught
+          by an end-to-end test doing exactly what it is for.
+        */}
+        The sale is not waiting on that: the moment this settles these pixels belong to you, nobody
+        else can buy them, and they never expire. What waits is the picture appearing on the wall —
+        usually hours, and your rectangle has a page of its own from the first second.
       </p>
 
       <p className="rounded-lg border border-hairline-strong bg-canvas px-3 py-2 text-[14px] leading-relaxed text-body">

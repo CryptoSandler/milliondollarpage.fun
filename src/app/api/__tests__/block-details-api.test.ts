@@ -15,9 +15,9 @@ import { GET } from "../blocks/[id]/route";
 async function seed(status: string, expiresAt: string | null = null): Promise<string> {
   const rows = await query<{ id: string }>(
     `INSERT INTO blocks (x, y, w, h, status, expires_at, caption, link, image_fit,
-                         price_per_pixel_usdc, total_usdc)
+                         price_per_pixel_usdc, total_usdc, approved_at)
      VALUES (10, 20, 30, 40, $1, $2, 'My shop', 'https://example.com/shop', 'cover',
-             1000000, 1200000000)
+             1000000, 1200000000, CASE WHEN $1 IN ('paid','minted') THEN now() END)
      RETURNING id`,
     [status, expiresAt],
   );
@@ -101,8 +101,8 @@ describe("GET /api/blocks/{id}", () => {
 
   it("never carries the one credential the site has", async () => {
     const rows = await query<{ id: string }>(
-      `INSERT INTO blocks (x, y, w, h, status, owner_address, caption, price_per_pixel_usdc, total_usdc)
-       VALUES (0, 0, 10, 10, 'paid', 'AWalletNobodyMayLearn', 'Mine', 1000000, 100000000)
+      `INSERT INTO blocks (x, y, w, h, status, owner_address, caption, price_per_pixel_usdc, total_usdc, approved_at)
+       VALUES (0, 0, 10, 10, 'paid', 'AWalletNobodyMayLearn', 'Mine', 1000000, 100000000, now())
        RETURNING id`,
     );
     const raw = await (await get(rows[0].id)).text();

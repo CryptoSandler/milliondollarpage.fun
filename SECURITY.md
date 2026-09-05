@@ -116,11 +116,28 @@ nothing. `src/lib/board/blocklist.ts` carries the reasoning and what it does not
 catch — a one-pixel edit is a different hash and walks past, which is why
 `DECISIONS.md` holds a perceptual hash as a later layer.
 
-**WHAT A PURGE STILL DOES NOT REACH: A BACKUP.** There is none yet, and
-`DECISIONS.md` requires the expunge script to ship in the same close as the
-first one — because a backup that keeps ninety days of history would turn this
-irreversible deletion into a removal with three months of copies behind it,
-which is exactly backwards for the only case a purge is for.
+**WHAT A PURGE REACHES, AND WHAT IT WOULD REACH: THERE ARE STILL NO COPIES.**
+No backup runs, so today a purge is complete by construction — the bytes exist
+in one database and the statement destroys them there.
+
+The rule for when that changes was written before the change: **the backup is
+not switched on before the script that can expunge it exists**, because a copy
+kept for ninety days would turn an irreversible deletion into a removal with
+three months of copies behind it, which is exactly backwards for the only case
+a purge is for.
+
+**That script exists as of 2026-09-05.** `scripts/backup-expunge.mts` removes a
+purged block's row and its image from EVERY commit of the backup, not from its
+tip — `src/lib/__tests__/backup-expunge.test.ts` builds a three-commit
+repository with the bytes in all three, runs the real script, and requires that
+no object anywhere in the repository still contains them. It refuses to delete
+an image a block that was NOT purged still points at, which is the one way
+content-addressing could have destroyed the wrong picture.
+
+So the sentence that stands today is: **a purge covers everything there is,
+because a backup has not been turned on yet.** The moment one is, the operator's
+purge is two statements — the SQL, then this script against the backup — and
+this section says so rather than leaving it implied.
 
 **Legal purge is a deletion of bytes — BUILT, same migration.**
 `block_purge_content(id, reason)`. Where the law requires the material itself

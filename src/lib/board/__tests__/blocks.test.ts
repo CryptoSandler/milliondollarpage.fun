@@ -16,8 +16,8 @@ async function insert(
   expiresAt: string | null = null,
 ): Promise<void> {
   await execute(
-    `INSERT INTO blocks (x, y, w, h, status, expires_at, price_per_pixel_usdc, total_usdc)
-     VALUES ($1, $2, $3, $4, $5, $6, 1000000, $7)`,
+    `INSERT INTO blocks (x, y, w, h, status, expires_at, price_per_pixel_usdc, total_usdc, approved_at)
+     VALUES ($1, $2, $3, $4, $5, $6, 1000000, $7, CASE WHEN $5 IN ('paid','minted') THEN now() END)`,
     [x, y, w, h, status, expiresAt, w * h * 1000000],
   );
 }
@@ -74,9 +74,9 @@ describe("listBoardRects", () => {
     // 005), which is the point of that trigger and would refuse this fixture.
     await execute(
       `INSERT INTO blocks (x, y, w, h, status, owner_address, caption, link, image_fit,
-                           price_per_pixel_usdc, total_usdc, pending_image, pending_image_mime)
+                           price_per_pixel_usdc, total_usdc, pending_image, pending_image_mime, approved_at)
        VALUES (0, 0, 10, 10, 'paid', 'AWalletNobodyMayLearn', 'My shop',
-               'https://example.com/shop', 'cover', 1000000, 100000000, $1, 'image/webp')`,
+               'https://example.com/shop', 'cover', 1000000, 100000000, $1, 'image/webp', now())`,
       [Buffer.from([0x52, 0x49, 0x46, 0x46])],
     );
     const [rect] = await listBoardRects();

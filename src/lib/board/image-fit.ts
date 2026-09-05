@@ -165,3 +165,43 @@ export function canHonourContain(source: Box, block: Box): boolean {
   const bar = Math.max(dest.x, dest.y);
   return bar < NO_BAR_AT_ALL || bar >= 1;
 }
+
+/**
+ * How far apart two aspect ratios have to be before `contain` is the wrong
+ * default.
+ *
+ * TWO, MEASURED RATHER THAN CHOSEN. `docs/imagenes.md` §2 put twenty real flags
+ * through the pipeline and read the bars off the result: a 31×169 column spent
+ * **88%** of what its buyer paid on flat grey, a 173×16 strip 85%, a 6×40 block
+ * 90%. Every one of those is well past a factor of two; nothing below two was
+ * anywhere near as bad. So two is where the honest default flips.
+ */
+export const ASPECT_GAP_FOR_COVER = 2;
+
+/**
+ * Which fit to OPEN the form on, for this picture in this rectangle.
+ *
+ * WHO CALLS THIS: `src/components/ContentForm.tsx`, once per picture, and the
+ * buyer can change it immediately afterwards. It is a default and never a
+ * decision — `docs/imagenes.md` is explicit that the two fits stay and that the
+ * buyer still chooses; what changed is which one they start on.
+ *
+ * WHY IT IS NOT JUST `canHonourContain`. That answers a different question —
+ * whether `contain` can be drawn at all — and it is false only for rectangles
+ * so extreme the bars leave no room. Everything between "impossible" and
+ * "fine" was defaulting to `contain` and spending most of a purchase on grey.
+ *
+ * `cover` crops and `contain` letterboxes, and both are lossy in their own way.
+ * The trade below is deliberately asymmetric: a crop loses the edges of a
+ * picture, bars lose the middle of a RECTANGLE SOMEBODY PAID FOR by the pixel.
+ */
+export function defaultFit(source: Box, block: Box): Fit {
+  if (!canHonourContain(source, block)) return "cover";
+  if (source.width <= 0 || source.height <= 0 || block.width <= 0 || block.height <= 0) {
+    return "contain";
+  }
+  const sourceAspect = source.width / source.height;
+  const blockAspect = block.width / block.height;
+  const gap = sourceAspect > blockAspect ? sourceAspect / blockAspect : blockAspect / sourceAspect;
+  return gap > ASPECT_GAP_FOR_COVER ? "cover" : "contain";
+}

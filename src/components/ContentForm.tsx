@@ -1,9 +1,18 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { prepareImage, type PreparedImage } from "../lib/board/image-encode";
 import ExactPreview from "./ExactPreview";
-import { canHonourContain, type Box } from "../lib/board/image-fit";
+import { canHonourContain, defaultFit, type Box } from "../lib/board/image-fit";
 import { MAX_INPUT_BYTES, targetBox } from "../lib/board/image-plan";
 import { checkLink, normaliseLink } from "../lib/board/link";
 import { submitContent, type ClientOrder, type WalletSigner } from "../lib/board/purchase-client";
@@ -284,10 +293,33 @@ export default function ContentForm({
     };
   }, [previewUrl]);
 
-  // The picture is known and this rectangle cannot draw the bars: "Fit
-  // inside" is not one of the answers here, so the draft moves to the fit
-  // that will actually be drawn rather than carrying one the server is about
-  // to refuse. It runs once — after it, `draft.imageFit` is "cover".
+  /*
+    THE FIT THE FORM OPENS ON, decided once per picture and never again.
+
+    Two things used to live here as one: a rectangle that cannot draw bars at
+    all forced `cover`, and everything else started on `contain`. The second
+    half was the wrong default for exactly the shapes this wall makes easy to
+    buy — `docs/imagenes.md` measured twenty real flags and found 85–90% of an
+    awkward rectangle going to grey — so `defaultFit` now decides both, and the
+    threshold and its measurements live beside it in `image-fit.ts`.
+
+    ONCE PER PICTURE, WHICH IS WHAT THE REF IS FOR. Without it this would fight
+    the buyer: they press "Fit inside", the effect re-runs and puts it back, and
+    the control appears broken. The default is a starting point, not a rule.
+  */
+  const defaultedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!sourceBox || !draft.file) return;
+    const key = `${draft.file.name}:${draft.file.size}:${draft.file.lastModified}`;
+    if (defaultedFor.current === key) return;
+    defaultedFor.current = key;
+    const fit = defaultFit(sourceBox, { width: order.rect.w, height: order.rect.h });
+    if (fit !== draft.imageFit) onDraftChange({ imageFit: fit });
+  }, [sourceBox, draft.file, draft.imageFit, order.rect.w, order.rect.h, onDraftChange]);
+
+  // And the hard case stays a rule rather than a default: a rectangle that
+  // cannot draw the bars has no "Fit inside" answer at all, so a draft that
+  // still carries one is moved to the fit the server will accept.
   useEffect(() => {
     if (!canFitInside && draft.imageFit === "contain") onDraftChange({ imageFit: "cover" });
   }, [canFitInside, draft.imageFit, onDraftChange]);

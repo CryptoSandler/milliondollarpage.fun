@@ -1230,9 +1230,9 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
     async () => {
       await execute(
         `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
-                             payment_signature, caption)
-         VALUES (300, 0, 650, 60, 'paid', 1000000, 39000000000, now(), 'ticker-top', 'Across the top'),
-                (0, 400, 120, 90, 'paid', 1000000, 10800000000, now(), 'ticker-two', 'A second one')`,
+                             payment_signature, caption, approved_at)
+         VALUES (300, 0, 650, 60, 'paid', 1000000, 39000000000, now(), 'ticker-top', 'Across the top', now()),
+                (0, 400, 120, 90, 'paid', 1000000, 10800000000, now(), 'ticker-two', 'A second one', now())`,
       );
 
       for (const [width, height, where] of [
@@ -1325,9 +1325,9 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
     async () => {
       await execute(
         `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
-                             payment_signature, caption)
+                             payment_signature, caption, approved_at)
          VALUES (300, 0, 650, 60, 'paid', 1000000, 39000000000, now(), 'across-the-top',
-                 'Across the top of the wall')`,
+                 'Across the top of the wall', now())`,
       );
 
       const covered: string[] = [];
@@ -1598,9 +1598,9 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
       // state that matters here, because position is what is being asserted.
       await execute(
         `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
-                             payment_signature, caption)
-         VALUES (1240, 300, 10, 10, 'paid', 1000000, 100000000, now(), 'edge-right', 'The right edge'),
-                (0, 300, 10, 10, 'paid', 1000000, 100000000, now(), 'edge-left', 'The left edge')`,
+                             payment_signature, caption, approved_at)
+         VALUES (1240, 300, 10, 10, 'paid', 1000000, 100000000, now(), 'edge-right', 'The right edge', now()),
+                (0, 300, 10, 10, 'paid', 1000000, 100000000, now(), 'edge-left', 'The left edge', now())`,
       );
 
       for (const [width, height] of [
@@ -1878,8 +1878,8 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
     async () => {
       await execute(
         `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
-                             owner_address, payment_signature, caption)
-         VALUES (200, 200, 300, 200, 'paid', $1, $2, now(), $3, $4, $5)`,
+                             owner_address, payment_signature, caption, approved_at)
+         VALUES (200, 200, 300, 200, 'paid', $1, $2, now(), $3, $4, $5, now())`,
         [1_000_000, 300 * 200 * 1_000_000, testWallet().address, "sig-hover", "A caption to read"],
       );
 
@@ -2035,8 +2035,8 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
       for (const [i, block] of seeded.entries()) {
         await execute(
           `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
-                               owner_address, payment_signature, caption)
-           VALUES ($1, $2, 140, 100, 'paid', $3, $4, now(), $5, $6, $7)`,
+                               owner_address, payment_signature, caption, approved_at)
+           VALUES ($1, $2, 140, 100, 'paid', $3, $4, now(), $5, $6, $7, now())`,
           [block.x, block.y, 1_000_000, 140 * 100 * 1_000_000, wallet, `sig-chip-${i}`, block.caption],
         );
       }

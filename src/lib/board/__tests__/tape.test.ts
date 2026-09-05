@@ -27,8 +27,8 @@ async function sell(
 ): Promise<void> {
   await execute(
     `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc,
-                         paid_at, payment_signature, owner_address)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+                         paid_at, payment_signature, owner_address, approved_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CASE WHEN $5 IN ('paid','minted') THEN now() END)`,
     [
       x,
       y,
@@ -69,8 +69,8 @@ describe("recentPurchases", () => {
   it("dates a row from when it settled, not from when the hold was taken", async () => {
     await execute(
       `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc,
-                           created_at, paid_at, payment_signature)
-       VALUES (0, 0, 10, 10, 'paid', $1, $2, '2026-01-01T00:00:00Z', '2026-01-01T00:29:00Z', $3)`,
+                           created_at, paid_at, payment_signature, approved_at)
+       VALUES (0, 0, 10, 10, 'paid', $1, $2, '2026-01-01T00:00:00Z', '2026-01-01T00:29:00Z', $3, now())`,
       [PER_PIXEL, 100 * PER_PIXEL, signature("Ap6E4Tz9")],
     );
 
@@ -170,8 +170,8 @@ describe("recentPurchases", () => {
 describe("paid_at, as the database enforces it", () => {
   it("stamps a sale that arrives without one", async () => {
     await execute(
-      `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc)
-       VALUES (0, 0, 10, 10, 'paid', $1, $2)`,
+      `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, approved_at)
+       VALUES (0, 0, 10, 10, 'paid', $1, $2, now())`,
       [PER_PIXEL, 100 * PER_PIXEL],
     );
     const [row] = await query<{ paid_at: Date | null }>("SELECT paid_at FROM blocks");

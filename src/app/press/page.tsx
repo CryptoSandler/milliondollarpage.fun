@@ -65,7 +65,7 @@ export default function PressPage() {
           </Link>{" "}
           and they are the same rows the board draws from. Anything else, including a screenshot at
           a size you need, comes from{" "}
-          <span className="tabular font-semibold text-ink">{CONTACT_EMAIL}</span>.
+          <a className="tabular font-semibold text-ink underline decoration-hairline-strong underline-offset-2" href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
         </p>
 
         <SiteFooter />

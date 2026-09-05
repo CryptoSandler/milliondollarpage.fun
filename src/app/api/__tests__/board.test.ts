@@ -7,8 +7,8 @@ import { STANDINGS_ON_WALL } from "../../../lib/board/blocks";
 
 async function insert(x: number, y: number, w: number, h: number, status: string): Promise<void> {
   await execute(
-    `INSERT INTO blocks (x, y, w, h, status, caption, link, price_per_pixel_usdc, total_usdc)
-     VALUES ($1, $2, $3, $4, $5, 'A caption', 'https://example.com', 1000000, $6)`,
+    `INSERT INTO blocks (x, y, w, h, status, caption, link, price_per_pixel_usdc, total_usdc, approved_at)
+     VALUES ($1, $2, $3, $4, $5, 'A caption', 'https://example.com', 1000000, $6, CASE WHEN $5 IN ('paid','minted') THEN now() END)`,
     [x, y, w, h, status, w * h * 1000000],
   );
 }
@@ -96,8 +96,8 @@ describe("GET /api/board", () => {
   it("points at one versioned wall rather than one bitmap per purchase", async () => {
     await execute(
       `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc,
-                           pending_image, pending_image_mime, image_fit)
-       VALUES (260, 490, 10, 10, 'paid', 1000000, 100000000, $1, 'image/png', 'cover')`,
+                           pending_image, pending_image_mime, image_fit, approved_at)
+       VALUES (260, 490, 10, 10, 'paid', 1000000, 100000000, $1, 'image/png', 'cover', now())`,
       [
         await sharp({ create: { width: 20, height: 20, channels: 3, background: { r: 1, g: 2, b: 3 } } })
           .png()
@@ -151,8 +151,8 @@ describe("GET /api/board", () => {
   it("never ships the bytes themselves, or the one credential the site has", async () => {
     await execute(
       `INSERT INTO blocks (x, y, w, h, status, owner_address, price_per_pixel_usdc, total_usdc,
-                           pending_image, pending_image_mime)
-       VALUES (0, 0, 10, 10, 'paid', 'AWalletNobodyMayLearn', 1000000, 100000000, $1, 'image/webp')`,
+                           pending_image, pending_image_mime, approved_at)
+       VALUES (0, 0, 10, 10, 'paid', 'AWalletNobodyMayLearn', 1000000, 100000000, $1, 'image/webp', now())`,
       [Buffer.from([1, 2, 3])],
     );
     const raw = await (await GET()).text();
@@ -189,16 +189,19 @@ describe("GET /api/board", () => {
     // one rectangle AND one tape row, which is a cost that stops being paid.
     const filler = Array.from(
       { length: TAPE_ROWS + 1 },
-      (_, i) => `(${(i + 2) * 20}, 0, 10, 10, 'paid', 1000000, 100000000)`,
+      (_, i) => `(${(i + 2) * 20}, 0, 10, 10, 'paid', 1000000, 100000000, now())`,
     ).join(", ");
     await execute(
-      `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc) VALUES ${filler}`,
+      // `approved_at` on every one: these are purchases that are ON the wall,
+      // which is what makes them count towards the payload this measures.
+      `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, approved_at)
+       VALUES ${filler}`,
     );
 
     const before = (await (await GET()).text()).length;
     await execute(
-      `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc)
-       VALUES (20, 0, 10, 10, 'paid', 1000000, 100000000)`,
+      `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, approved_at)
+       VALUES (20, 0, 10, 10, 'paid', 1000000, 100000000, now())`,
     );
     const grown = await (await GET()).text();
 

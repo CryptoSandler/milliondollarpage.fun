@@ -1839,6 +1839,30 @@ take it. The Buy button cannot: the same close that returns focus clears the
 selection that enabled it. So the board is the fallback — it is what the buyer
 was working on, and it is never disabled.
 
+## The same purchase, on four surfaces, at four scales
+
+**A bitmap that has been smoothed is no longer the picture the buyer uploaded**
+— and that rule is about ENLARGING. A stored image is four times its
+rectangle's size by design (`BLOCK_PIXEL_SCALE`), so the common case on the wall
+is a 4:1 reduction, and throwing away fifteen of every sixteen pixels of a
+photograph is not sharpness, it is a different picture. `composite.ts` picks
+`nearest` going up and `lanczos3` coming down, and this table is where that
+lives so the next reader does not find it as a bug.
+
+| Surface | Scale | Filter | Why |
+|---|---|---|---|
+| The wall, at fit | 1 board px ≈ 0.96 screen px at 1440 | the composite's, baked in | one image for the whole wall; the browser only maps it 1:1 |
+| The wall, zoomed in | up to 8× | `image-rendering: pixelated` | enlarging: a bought pixel must stay a square |
+| The register's parade | 24–160px tall | `pixelated` | the shape is the thing being shown |
+| `/b/<id>` and the cards | ~44px thumbnails | `pixelated` | a 1×1 purchase stores 4×4, and 4×4 smoothed is a picture nobody uploaded |
+
+**At 1× on the wall the filter has already happened**: the composite is 1250×800
+and the browser draws it at 0.96, so a visitor sees the Lanczos reduction plus a
+sub-pixel browser resample. In the register and on `/b/<id>` the stored image is
+being enlarged, so it is nearest and hard-edged. **Those are two different
+pictures of one purchase and that is correct rather than inconsistent** — one is
+the wall, the other is the artefact. Measured in `docs/imagenes.md` §3.
+
 ## Settled decisions
 
 Decisions already taken, recorded so a later pass does not spend its time

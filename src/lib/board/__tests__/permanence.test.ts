@@ -27,8 +27,8 @@ async function soldBlock(): Promise<string> {
   // the point, so a fixed rectangle would collide with the previous test's.
   const x = 200 + slot++ * 20;
   await execute(
-    `INSERT INTO blocks (id, x, y, w, h, status, price_per_pixel_usdc, total_usdc, owner_address, created_at)
-     VALUES ($1, $2, 500, 10, 10, 'paid', 1000000, 100000000, $3, now())`,
+    `INSERT INTO blocks (id, x, y, w, h, status, price_per_pixel_usdc, total_usdc, owner_address, created_at, approved_at)
+     VALUES ($1, $2, 500, 10, 10, 'paid', 1000000, 100000000, $3, now(), now())`,
     [id, x, OWNER],
   );
   return id;

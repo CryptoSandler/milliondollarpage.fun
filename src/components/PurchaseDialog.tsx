@@ -21,6 +21,7 @@ import ConfirmationStep from "./ConfirmationStep";
 import ContentForm, { EMPTY_DRAFT, type ContentDraft } from "./ContentForm";
 import HoldTimer from "./HoldTimer";
 import type { ProvenOwner } from "../lib/board/owner";
+import type { EvmPaymentResult } from "./useEvmWallet";
 
 type Step = "holding" | "describing" | "confirming" | "paying" | "done";
 
@@ -112,6 +113,7 @@ export default function PurchaseDialog({
   selection,
   owner,
   sign,
+  payOnChain,
   knownHoldIds,
   onHoldStarted,
   onHoldEnded,
@@ -142,6 +144,16 @@ export default function PurchaseDialog({
    * derives both from the one connection and hands both down.
    */
   sign: WalletSigner | null;
+  /**
+   * Moves the money, on a rail that needs money moved before the server is
+   * asked anything — or null when there is no such rail for this order.
+   *
+   * A PROP, LIKE `sign`, AND FOR THE SAME REASON. The dialog holds one
+   * `(chain, address)` for its whole life and must not be able to reach for a
+   * different wallet halfway through; `BoardView` derives both from the one
+   * connection and hands both down.
+   */
+  payOnChain: ((order: ClientOrder) => Promise<EvmPaymentResult>) | null;
   /** Holds this browser already started, so a returned order can be recognised as a resumed one rather than a new one. */
   knownHoldIds: string[];
   /** A hold now exists (fresh or resumed) — the board marks it as this buyer's. */
@@ -489,13 +501,51 @@ export default function PurchaseDialog({
     await attemptHold();
   }
 
+  /**
+   * The transfer this dialog has already sent, if it has.
+   *
+   * THE ONE PIECE OF STATE THAT EXISTS TO PREVENT PAYING TWICE. `retryStalled`
+   * re-enters `handleConfirm`, which is right for every other step and would be
+   * catastrophic here: a confirm that ran past its ceiling AFTER the wallet had
+   * broadcast would, on a naive retry, open the wallet again and move a second
+   * payment. The hash is remembered, and a retry re-presents the same one — the
+   * server is idempotent about that by constraint, since `payment_signature` is
+   * UNIQUE and a repeat of the same hash on the same order returns the order.
+   */
+  const [sentTxHash, setSentTxHash] = useState<string | null>(null);
+
   async function handleConfirm() {
     if (!order) return;
     setStep("paying");
     setConfirmError(null);
+
+    /*
+      THE MONEY MOVES FIRST, AND ONLY ON A RAIL THAT HAS ONE. `payTo` is
+      present only for an order the server put on the Robinhood rail while that
+      rail is on; everything else — a Solana order, or any order while the rail
+      is off — has nothing to send and goes straight to the server, which is
+      the stub path and is refused in any deployed environment.
+    */
+    let txHash = sentTxHash ?? undefined;
+    if (order.payTo && !txHash) {
+      if (!payOnChain) {
+        setConfirmError("This rectangle is paid for from the wallet that holds it.");
+        setStep("confirming");
+        return;
+      }
+      const paid = await payOnChain(order);
+      if (!paid.ok) {
+        setConfirmError(paid.message);
+        setStep("confirming");
+        return;
+      }
+      txHash = paid.txHash;
+      setSentTxHash(paid.txHash);
+    }
+
     let result;
     try {
-      result = await call.confirm(order.id, sign);
+      result = await call.confirm(order.id, sign, txHash);
     } catch (error) {
       if (!(error instanceof TimedOut)) throw error;
       setStalled("confirm");

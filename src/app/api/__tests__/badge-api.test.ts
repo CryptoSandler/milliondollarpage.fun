@@ -23,9 +23,9 @@ async function seed(
   const settled = status === "paid" || status === "minted";
   const rows = await query<{ id: string }>(
     `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
-                         owner_address, owner_wallet, payment_signature, caption, link, expires_at)
+                         owner_address, owner_wallet, payment_signature, caption, link, expires_at, approved_at)
      VALUES ($5, 34, 50, 20, $1, $2, $3, $6, $4, $4, $7,
-             '<script>alert(1)</script>', 'https://example.com/shop', $8)
+             '<script>alert(1)</script>', 'https://example.com/shop', $8, CASE WHEN $1 IN ('paid','minted') THEN now() END)
      RETURNING id`,
     [
       status,

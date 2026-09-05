@@ -60,9 +60,9 @@ async function sell(
   const [row] = await query<{ id: string }>(
     `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
                          payment_signature, owner_address, caption, link,
-                         pending_image, pending_image_mime)
+                         pending_image, pending_image_mime, approved_at)
      VALUES (0, 0, $1, $2, $3, $4, $5, now(), $6, $7,
-             'A CAPTION NOBODY MAY SEE', 'https://a-link-nobody-may-see.example', $8, 'image/png')
+             'A CAPTION NOBODY MAY SEE', 'https://a-link-nobody-may-see.example', $8, 'image/png', CASE WHEN $3 IN ('paid','minted') THEN now() END)
      RETURNING id`,
     [
       w,

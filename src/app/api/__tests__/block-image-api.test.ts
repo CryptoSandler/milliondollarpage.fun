@@ -10,8 +10,8 @@ const BYTES = Buffer.from([0x52, 0x49, 0x46, 0x46, 0x00, 0x01, 0x02, 0xff, 0xfe]
 async function insert(status: string, image: Buffer | null, mime: string | null): Promise<string> {
   const row = await queryOne<{ id: string }>(
     `INSERT INTO blocks (x, y, w, h, status, expires_at, price_per_pixel_usdc, total_usdc,
-                         pending_image, pending_image_mime)
-     VALUES (0, 0, 10, 10, $1, $2, 1000000, 100000000, $3, $4)
+                         pending_image, pending_image_mime, approved_at)
+     VALUES (0, 0, 10, 10, $1, $2, 1000000, 100000000, $3, $4, CASE WHEN $1 IN ('paid','minted') THEN now() END)
      RETURNING id`,
     [status, status === "reserved" ? "2999-01-01T00:00:00Z" : null, image, mime],
   );

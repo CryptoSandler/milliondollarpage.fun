@@ -25,9 +25,9 @@ async function sell(x: number, bytes: Buffer | null): Promise<string> {
   const rows = await query<{ id: string }>(
     `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
                          owner_address, payment_signature, caption, link,
-                         pending_image, pending_image_mime, image_sha256)
+                         pending_image, pending_image_mime, image_sha256, approved_at)
      VALUES ($1, 0, 10, 10, 'paid', $2, $3, now(), 'AWalletNobodyMayLearn', $4,
-             'a caption', 'https://example.org', $5, $6, $7)
+             'a caption', 'https://example.org', $5, $6, $7, now())
      RETURNING id`,
     [
       x, PER_PIXEL, 100 * PER_PIXEL, `sig-${x}`,

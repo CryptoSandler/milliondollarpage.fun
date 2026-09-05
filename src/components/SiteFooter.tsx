@@ -25,11 +25,12 @@ export default function SiteFooter() {
     <footer className="mt-16 border-t border-hairline-strong pt-5 text-[13px] leading-relaxed text-body">
       <p>
         {/*
-          THE ADDRESS IS TEXT, NOT A LINK, and `src/lib/site.ts` carries the
-          reason: the mailbox is not open yet. When it is, this becomes an `<a>`
-          and nothing else on the page changes.
+          A `mailto:` since the mailbox opened. It was printed as text for as
+          long as an address that bounced would have spent somebody's message
+          without telling them — see `src/lib/site.ts`, which carries both
+          halves of that decision and its date.
         */}
-        Write to <span className="tabular font-semibold text-ink">{CONTACT_EMAIL}</span>. A person
+        Write to <a className="tabular font-semibold text-ink underline decoration-hairline-strong underline-offset-2" href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>. A person
         reads it. Anything about a rectangle is easier to answer if you send the address of its
         page — the one under <span className="tabular">/b/</span>.
       </p>

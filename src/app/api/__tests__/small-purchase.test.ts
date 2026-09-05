@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import { CONTENT_LIMITS, validateContent } from "../../../lib/board/content";
-import { ensureWall, wallPng } from "../../../lib/board/composite";
+import { ensureWall, wallImage } from "../../../lib/board/composite";
 import {
   MAX_INPUT_BYTES,
   STORED_MAX_BYTES,
@@ -18,6 +18,7 @@ import { GET as IMAGE } from "../blocks/[id]/image/route";
 import { POST as POST_CONFIRM } from "../orders/[id]/confirm/route";
 import { POST as POST_CONTENT } from "../orders/[id]/content/route";
 import { SOLD_GROUND } from "../../../lib/board/composite";
+import { approve } from "../../../lib/board/review";
 
 /**
  * The dollar purchase, and the photograph nobody has to shrink by hand.
@@ -146,7 +147,7 @@ async function submitContent(orderId: string, bytes: Buffer, fit: Fit = "cover")
 }
 
 async function confirm(orderId: string): Promise<Response> {
-  return POST_CONFIRM(
+  const response = await POST_CONFIRM(
     new Request("http://localhost/api/orders/x/confirm", {
       method: "POST",
       headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.44" },
@@ -154,6 +155,15 @@ async function confirm(orderId: string): Promise<Response> {
     }),
     ctx(orderId),
   );
+  /*
+    PAYING AND BEING PAINTED ARE TWO EVENTS since migration 018, and every test
+    in this file is about what the WALL shows — so the helper does both. It is
+    spelled out here rather than hidden inside `confirm` elsewhere because the
+    queue is a real step of the product, and a suite that skipped it would be
+    testing a wall that does not exist.
+  */
+  if (response.status === 200) await approve(orderId, "the suite");
+  return response;
 }
 
 /** The bytes the browser would receive for a block's own picture. */
@@ -166,8 +176,11 @@ async function servedImage(id: string): Promise<Buffer> {
 /** One pixel of the wall the browser would be served right now. */
 async function wallPixel(x: number, y: number): Promise<{ r: number; g: number; b: number; a: number }> {
   const wall = await ensureWall();
-  const png = (await wallPng(wall!.version))!;
-  const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const image = (await wallImage(wall!.version))!;
+  const { data, info } = await sharp(image.bytes)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
   const at = (y * info.width + x) * 4;
   return { r: data[at], g: data[at + 1], b: data[at + 2], a: data[at + 3] };
 }

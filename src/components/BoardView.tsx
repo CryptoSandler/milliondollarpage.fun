@@ -9,7 +9,9 @@ import type { Wall } from "../lib/board/composite";
 import type { Point } from "../lib/board/geometry";
 import { holdMinutes } from "../lib/board/hold-clock";
 import { formatUsdc, offerLine, unitOfSale } from "../lib/board/pricing";
-import { walletSigner } from "../lib/board/purchase-client";
+import { signerFor } from "./useWallets";
+import { payWithEvm } from "./useEvmWallet";
+import type { ClientOrder } from "../lib/board/purchase-client";
 import type { Selection } from "../lib/board/selection";
 import type { TapeRow } from "../lib/board/tape";
 import { BAR_TOP_PX, BOARD_INSET, STRIP_H_PX, type Chrome, hoverCardLeft } from "../lib/canvas/viewport";
@@ -25,7 +27,7 @@ import PurchaseTape from "./PurchaseTape";
 import ThemeToggle from "./ThemeToggle";
 import SelectionPanel from "./SelectionPanel";
 import WalletConnect from "./WalletConnect";
-import { useWallet } from "./useWallet";
+import { useWallets } from "./useWallets";
 import type { ProvenOwner } from "../lib/board/owner";
 
 /**
@@ -116,16 +118,22 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
    * things that can disagree about which key is going to sign — and every one
    * of the three signed steps is checked against this exact string.
    */
-  const wallet = useWallet();
+  const wallet = useWallets();
   const buyerPubkey = wallet.connected?.address ?? "";
   /*
-    Every wallet `useWallet` can list is a Solana Wallet Standard wallet, so
-    the chain here is a fact about the code and not a guess about the
-    connection — the same argument `walletSigner` makes where it stamps
-    `sign.chain = "solana"`. A second chain arrives as a second connector,
-    with its own name for its own chain, not as a default silently reused.
+    THE PAIR COMES OFF THE CONNECTION, and the chain with it. It was hardcoded
+    to `solana` for exactly as long as one connector existed — a fact about the
+    code rather than a guess — and the moment `useWallets` could return either,
+    a hardcoded chain became a rectangle registered to the wrong alphabet.
+
+    The empty-address case keeps `solana` because nothing is connected and
+    nothing will be signed; the value is never used, and a null chain would
+    make every caller below branch on a case that cannot buy anything.
   */
-  const buyerOwner: ProvenOwner = { chain: "solana", address: buyerPubkey };
+  const buyerOwner: ProvenOwner = {
+    chain: wallet.connected?.chain ?? "solana",
+    address: buyerPubkey,
+  };
 
   /**
    * The one seam every signed step goes through.
@@ -139,9 +147,20 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
    * Memoised on the signer itself so a re-render for any other reason does not
    * hand PurchaseDialog a new function identity for the same wallet.
    */
-  const sign = useMemo(
-    () => walletSigner(wallet.connected?.signer ?? null),
-    [wallet.connected?.signer],
+  const sign = useMemo(() => signerFor(wallet.connected), [wallet.connected]);
+
+  /**
+   * How money moves, on the rail that needs it moved in the browser.
+   *
+   * Null on Solana, where no rail exists yet, and null with nothing connected.
+   * Memoised on the connection so a re-render for any other reason does not
+   * hand the dialog a new function for the same wallet — the same care `sign`
+   * takes, and for the same reason.
+   */
+  const evmConnection = wallet.connected?.evm ?? null;
+  const payOnChain = useMemo(
+    () => (evmConnection ? (order: ClientOrder) => payWithEvm(evmConnection, order) : null),
+    [evmConnection],
   );
   // The selection a purchase is in progress for. Frozen separately from
   // `selection` so the canvas remains free to change (or clear) the live
@@ -731,7 +750,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
           */}
           <WalletConnect
             ref={walletRef}
-            wallets={wallet.wallets}
+            choices={wallet.choices}
             connected={wallet.connected}
             connecting={wallet.connecting}
             notice={wallet.notice}
@@ -1058,6 +1077,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
         <PurchaseDialog
           selection={purchaseSelection}
           owner={buyerOwner}
+          payOnChain={payOnChain}
           sign={sign}
           knownHoldIds={ownHoldIds}
           onHoldStarted={rememberOwnHold}

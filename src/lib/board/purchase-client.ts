@@ -243,7 +243,21 @@ export async function submitContent(
  * this call does not change shape: the transfer is read from the chain, and
  * this proof is still what says the wallet asked for it.
  */
-export async function confirmOrder(orderId: string, sign: WalletSigner | null): Promise<ClientResult> {
+export async function confirmOrder(
+  orderId: string,
+  sign: WalletSigner | null,
+  /**
+   * The transfer the buyer already made, on a rail that has one.
+   *
+   * IT IS A HASH AND NOTHING ELSE. The server reads the amount, the
+   * destination and the network off the chain; this string only says WHICH
+   * transaction to go and read. Absent on the stub path, which has nothing to
+   * read — see `payment-stub.ts`, and the eight-point contract in
+   * `src/lib/payments/robinhood.ts` for why the body may contribute no more
+   * than this.
+   */
+  txHash?: string,
+): Promise<ClientResult> {
   const proven = await prove(orderId, "pay", sign, PAY_FALLBACK);
   if (!proven.ok) return proven;
 
@@ -251,7 +265,7 @@ export async function confirmOrder(orderId: string, sign: WalletSigner | null): 
     fetch(`/api/orders/${orderId}/confirm`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(proven.proof),
+      body: JSON.stringify(txHash ? { ...proven.proof, txHash } : proven.proof),
     }),
   );
 }

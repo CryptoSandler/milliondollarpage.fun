@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import { execute, query } from "../../db";
 import type { Rect } from "../../board/geometry";
 import { reserveRect } from "../../board/reserve";
-import { RESERVATION_LIMITS, checkReservationLimits } from "../limits";
+import {
+  RESERVATION_LIMITS,
+  SIGNED_WRITE_LIMITS,
+  checkReservationLimits,
+  checkSignedWriteLimits,
+} from "../limits";
 
 // The budget tests below drive real reservations, and each one is several
 // round trips to a remote Neon branch.
@@ -106,8 +111,8 @@ describe("checkReservationLimits", () => {
 
   it("counts a paid order against nothing, because it is no longer a hold", async () => {
     await execute(
-      `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, expires_at, ip_hash)
-       VALUES (0, 0, 10, 10, 'paid', 1000000, 100000000, NULL, $1)`,
+      `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, expires_at, ip_hash, approved_at)
+       VALUES (0, 0, 10, 10, 'paid', 1000000, 100000000, NULL, $1, now())`,
       [CALLER],
     );
     expect(await checkReservationLimits(CALLER, FRESH)).toEqual({ ok: true });
@@ -247,5 +252,41 @@ describe("the pixel-minute budget", () => {
       await expireEverything();
     }
     expect(await checkReservationLimits(CALLER, rect)).toEqual({ ok: true });
+  });
+});
+
+/**
+ * The ceiling the eight-point contract's point 8 asks for, on the three signed
+ * writes that had none until the contract was checked against the code.
+ *
+ * The counter is module-level and per process, so every case here uses an
+ * address of its own — a shared one would make the order of the tests decide
+ * the answers.
+ */
+describe("checkSignedWriteLimits", () => {
+  it("allows a purchase's worth of writes and then refuses, naming when", () => {
+    const caller = "signed-write-ceiling";
+    for (let i = 0; i < SIGNED_WRITE_LIMITS.perWindow; i++) {
+      expect(checkSignedWriteLimits(caller).ok, `attempt ${i + 1}`).toBe(true);
+    }
+    const refused = checkSignedWriteLimits(caller);
+    expect(refused.ok).toBe(false);
+    expect(refused.ok === false && Date.parse(refused.retryAt)).toBeGreaterThan(Date.now());
+  });
+
+  it("counts per caller, so one script cannot spend anybody else's budget", () => {
+    const loud = "signed-write-loud";
+    for (let i = 0; i < SIGNED_WRITE_LIMITS.perWindow; i++) checkSignedWriteLimits(loud);
+    expect(checkSignedWriteLimits(loud).ok).toBe(false);
+    expect(checkSignedWriteLimits("signed-write-quiet").ok).toBe(true);
+  });
+
+  /**
+   * A real purchase is a challenge and a confirm, and a release is a challenge
+   * and a DELETE. The ceiling exists to stop a script, not a buyer, so this
+   * pins that the ordinary path is nowhere near it.
+   */
+  it("leaves room for many more purchases than anybody makes", () => {
+    expect(SIGNED_WRITE_LIMITS.perWindow).toBeGreaterThanOrEqual(4 * 5);
   });
 });

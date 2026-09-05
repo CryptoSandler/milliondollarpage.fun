@@ -1,4 +1,4 @@
-import { isWallVersion, wallPng } from "../../../../lib/board/composite";
+import { isWallVersion, wallImage } from "../../../../lib/board/composite";
 import { problem } from "../../../../lib/http";
 
 /**
@@ -33,13 +33,17 @@ export async function GET(
   const { version } = await params;
   if (!isWallVersion(version)) return problem(404, "There is no wall at that version.");
 
-  const png = await wallPng(version);
-  if (!png) return problem(404, "There is no wall at that version.");
+  const wall = await wallImage(version);
+  if (!wall) return problem(404, "There is no wall at that version.");
 
-  return new Response(new Uint8Array(png), {
+  return new Response(new Uint8Array(wall.bytes), {
     headers: {
-      "content-type": "image/png",
-      "content-length": String(png.byteLength),
+      // FROM THE ROW, NOT ASSUMED. A version is the hash of its bytes and the
+      // build keeps whichever encoding came out smaller, so two versions of the
+      // same wall can be two formats — and a header that guessed would serve a
+      // WebP as a PNG to every browser that asked.
+      "content-type": wall.mime,
+      "content-length": String(wall.bytes.byteLength),
       // A year, immutable, shared caches included. These bytes cannot change
       // under this URL: the URL IS their hash.
       "cache-control": "public, max-age=31536000, immutable",

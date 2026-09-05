@@ -117,7 +117,24 @@ export function notTakenDownSql(): string {
  * `IMAGE_BEARING_STATUSES` array. Nothing is spliced into the string.
  */
 export function publishesTextSql(statusesParam: number): string {
-  return `(status = ANY($${statusesParam}) AND ${notTakenDownSql()})`;
+  return `(status = ANY($${statusesParam}) AND ${notTakenDownSql()} AND ${approvedSql()})`;
+}
+
+/**
+ * "A person has looked at this", as SQL.
+ *
+ * THE THIRD THING A STATUS CANNOT SAY, beside a takedown. Migration 018 put
+ * every paid purchase into a review queue — `DECISIONS.md`, "nothing is painted
+ * until a person has looked at it" — as a COLUMN rather than a status, precisely
+ * so it could be folded in here and reach the composite, the words, the page,
+ * the image, the card, the badge, `/go` and `/buyers` in one edit.
+ *
+ * THE SALE IS NOT WAITING. `toPublicOrder` and the register do not ask this,
+ * and must not: the money settled, the rectangle is held by its owner for ever,
+ * and `/stats` counts its pixels. What waits is the picture appearing.
+ */
+export function approvedSql(): string {
+  return "approved_at IS NOT NULL";
 }
 
 /**

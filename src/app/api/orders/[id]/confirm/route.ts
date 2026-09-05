@@ -14,6 +14,7 @@ import { verifyUsdgPayment, type PaymentVerdict } from "../../../../../lib/payme
 import { robinhoodRailEnabled } from "../../../../../lib/payments/usdg";
 import { NO_STORE, identify, isUuid, json, problem } from "../../../../../lib/http";
 import { sameOwner } from "../../../../../lib/board/owner";
+import { checkSignedWriteLimits } from "../../../../../lib/callers/limits";
 
 /**
  * The one thing every 403 here says, whatever went wrong.
@@ -79,6 +80,18 @@ export async function POST(
 
   const caller = identify(request);
   if (!caller.ok) return problem(400, caller.message);
+  /*
+    POINT 8 OF THE CONTRACT: every write route on the money path is rate
+    limited. This one had no ceiling at all until the contract was checked
+    against the code line by line — see `DECISIONS.md`. One budget covers the
+    challenge, the confirm and the release, because they are steps of one act.
+  */
+  const limit = checkSignedWriteLimits(caller.ipHash);
+  if (!limit.ok) {
+    const seconds = Math.max(1, Math.ceil((Date.parse(limit.retryAt) - Date.now()) / 1000));
+    return problem(429, limit.message, { retryAt: limit.retryAt }, { "retry-after": String(seconds) });
+  }
+
 
   let body: unknown;
   try {

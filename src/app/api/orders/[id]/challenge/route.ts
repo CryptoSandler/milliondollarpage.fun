@@ -1,7 +1,8 @@
 import { getOrder } from "../../../../../lib/board/orders";
 import { issueChallenge } from "../../../../../lib/board/challenge";
 import { readChallengeAction } from "../../../../../lib/wallet/signature";
-import { NO_STORE, isUuid, json, problem } from "../../../../../lib/http";
+import { NO_STORE, identify, isUuid, json, problem } from "../../../../../lib/http";
+import { checkSignedWriteLimits } from "../../../../../lib/callers/limits";
 
 /**
  * Hand a buyer something to sign, so the route that does the writing has
@@ -37,6 +38,24 @@ export async function POST(
 ): Promise<Response> {
   const { id } = await params;
   if (!isUuid(id)) return problem(404, "That order does not exist.");
+
+  /*
+    POINT 8 OF THE CONTRACT: every write route on the money path is rate
+    limited, and this one inserts a row for anybody who asks — an unbounded
+    insert is a way to spend a database. One budget covers the challenge, the
+    confirm and the release, because they are steps of one act.
+
+    IT DOES NOT CHANGE WHAT A STRANGER LEARNS. The ceiling is per caller, not
+    per order, and a 429 says nothing about whether the order exists — which is
+    the property the comment above spends a paragraph protecting.
+  */
+  const caller = identify(request);
+  if (!caller.ok) return problem(400, caller.message);
+  const limit = checkSignedWriteLimits(caller.ipHash);
+  if (!limit.ok) {
+    const seconds = Math.max(1, Math.ceil((Date.parse(limit.retryAt) - Date.now()) / 1000));
+    return problem(429, limit.message, { retryAt: limit.retryAt }, { "retry-after": String(seconds) });
+  }
 
   let body: unknown;
   try {

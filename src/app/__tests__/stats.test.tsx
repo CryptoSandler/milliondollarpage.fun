@@ -20,8 +20,8 @@ const PER_PIXEL = 1_000_000;
 async function sell(x: number, w: number, h: number, at: string, buyer = "AWalletNobodyMayLearn") {
   await execute(
     `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
-                         owner_address, payment_signature)
-     VALUES ($1, 0, $2, $3, 'paid', $4, $5, $6, $7, $8)`,
+                         owner_address, payment_signature, approved_at)
+     VALUES ($1, 0, $2, $3, 'paid', $4, $5, $6, $7, $8, now())`,
     [x, w, h, PER_PIXEL, w * h * PER_PIXEL, at, buyer, `sig-${x}`],
   );
 }
@@ -127,10 +127,10 @@ describe("what sold today", () => {
     // Two today, one yesterday. `now()` rather than a literal, because "today"
     // is a moving target and a fixture with a date in it stops being today.
     await execute(
-      `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at, payment_signature)
-       VALUES (0,   0, 10, 10, 'paid', $1, $2, now(), 'today-a'),
-              (20,  0, 20, 20, 'paid', $1, $3, date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC', 'today-b'),
-              (60,  0, 30, 30, 'paid', $1, $4, now() - interval '2 days', 'older')`,
+      `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at, payment_signature, approved_at)
+       VALUES (0,   0, 10, 10, 'paid', $1, $2, now(), 'today-a', now()),
+              (20,  0, 20, 20, 'paid', $1, $3, date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC', 'today-b', now()),
+              (60,  0, 30, 30, 'paid', $1, $4, now() - interval '2 days', 'older', now())`,
       [PER_PIXEL, 100 * PER_PIXEL, 400 * PER_PIXEL, 900 * PER_PIXEL],
     );
 
@@ -139,10 +139,10 @@ describe("what sold today", () => {
 
   it("counts a minute before midnight UTC as yesterday", async () => {
     await execute(
-      `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at, payment_signature)
+      `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at, payment_signature, approved_at)
        VALUES (0, 0, 10, 10, 'paid', $1, $2,
                (date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') - interval '1 minute',
-               'just-missed')`,
+               'just-missed', now())`,
       [PER_PIXEL, 100 * PER_PIXEL],
     );
 

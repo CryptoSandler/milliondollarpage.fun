@@ -8,9 +8,9 @@ const CALLER = "c".repeat(64);
 
 async function seedBlock(x: number, y: number, status: string, minutesLeft: number | null) {
   await execute(
-    `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, expires_at)
+    `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, expires_at, approved_at)
      VALUES ($1, $2, 20, 20, $3, 1000000, 400000000,
-             CASE WHEN $4::text IS NULL THEN NULL ELSE now() + ($4 || ' minutes')::interval END)`,
+             CASE WHEN $4::text IS NULL THEN NULL ELSE now() + ($4 || ' minutes')::interval END, CASE WHEN $3 IN ('paid','minted') THEN now() END)`,
     [x, y, status, minutesLeft === null ? null : String(minutesLeft)],
   );
 }

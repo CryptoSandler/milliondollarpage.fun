@@ -79,8 +79,8 @@ describe("migration 002", () => {
     // story rests on, so the database enforces it rather than trusting callers.
     const code = await errorCodeOf(() =>
       execute(
-        `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, expires_at)
-         VALUES (0, 0, 10, 10, 'paid', 1000000, 100000000, now() + interval '30 minutes')`,
+        `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, expires_at, approved_at)
+         VALUES (0, 0, 10, 10, 'paid', 1000000, 100000000, now() + interval '30 minutes', now())`,
       ),
     );
     expect(code).toBe("23514");
@@ -88,8 +88,8 @@ describe("migration 002", () => {
 
   it("allows a paid order with a null expiry", async () => {
     await execute(
-      `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, expires_at)
-       VALUES (0, 0, 10, 10, 'paid', 1000000, 100000000, NULL)`,
+      `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, expires_at, approved_at)
+       VALUES (0, 0, 10, 10, 'paid', 1000000, 100000000, NULL, now())`,
     );
     const rows = await query("SELECT id FROM blocks WHERE status = 'paid'");
     expect(rows).toHaveLength(1);

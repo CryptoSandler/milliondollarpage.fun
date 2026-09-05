@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import type { OwnerChain } from "../lib/board/owner";
 import type { UsableWallet } from "../lib/wallet/standard";
+import { walletSigner, type WalletSigner } from "../lib/board/purchase-client";
 import type { EvmWalletOption } from "../lib/wallet/evm-provider";
 import { evmSigner, useEvmWallet, type ConnectedEvmWallet } from "./useEvmWallet";
 import { useWallet, type ConnectedWallet } from "./useWallet";
@@ -153,9 +154,25 @@ function connectionOn(
   return null;
 }
 
-/** The signer for whichever chain is live, in the one shape `prove` accepts. */
-export function signerFor(connected: AnyConnected | null) {
+/**
+ * The signer for whichever chain is live, in the one shape `prove` accepts.
+ *
+ * BOTH ARMS STAMP THEIR OWN CHAIN, and neither takes it as an argument: the
+ * signer IS the chain — ed25519 over base58 on one side, secp256k1 over
+ * `personal_sign` on the other — and `purchase-client.ts` reads `sign.chain`
+ * when it builds a proof. A chain passed in here would be a value that could
+ * disagree with the cryptography standing behind it.
+ */
+export function signerFor(connected: AnyConnected | null): WalletSigner | null {
   if (!connected) return null;
-  if (connected.chain === "robinhood" && connected.evm) return evmSigner(connected.evm);
-  return null;
+  if (connected.chain === "robinhood" && connected.evm) {
+    // `Object.assign` rather than three statements: `WalletSigner` requires
+    // `chain`, so a bare function is not one until the moment it is stamped,
+    // and assigning it first is a type error that says exactly that.
+    return Object.assign(evmSigner(connected.evm), {
+      address: connected.evm.address,
+      chain: "robinhood" as const,
+    });
+  }
+  return walletSigner(connected.solana?.signer ?? null);
 }

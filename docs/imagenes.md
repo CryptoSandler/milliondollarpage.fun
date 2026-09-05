@@ -237,13 +237,23 @@ design.
    written by `purge` inside its own transaction and by `/api/admin/blocked`,
    read by the content route before it accepts an upload. `DECISIONS.md` carries
    the reasoning, including why the uploader is not told the reason.
-2. **Default to `cover` when the aspects differ by more than 2×** (§2) — the
-   flags showed 85–90% of an awkward rectangle going to bars.
-3. **Print the picture's pixel size in the upload step** (§1) — a measurement,
-   not a warning.
-4. **WebP for the wall with a PNG fallback** (§5) — 4 MiB → ~1.3 at the worst
-   case.
-5. **Write the four-surfaces scaling table into `DESIGN.md`** (§3).
+2. ~~**Default to `cover` when the aspects differ by more than 2×** (§2)~~ —
+   **built 2026-09-05.** `defaultFit` in `image-fit.ts`, applied once per
+   picture in `ContentForm` so it is a starting point and not a rule the buyer
+   has to fight. The threshold is exactly the measurement above.
+3. ~~**Print the picture's pixel size in the upload step** (§1)~~ — **built
+   2026-09-04** as part of the exact preview, which prints the stored size and
+   the picture-pixel count beside every view.
+4. ~~**WebP for the wall** (§5)~~ — **built 2026-09-05, and not the way this
+   file recommended.** The `Accept` fallback was refused: the version is a hash
+   of the bytes, so content negotiation would mean one URL with two bodies, a
+   `Vary` header and a split in every shared cache. The build encodes both and
+   keeps the smaller, and migration 017 gives the row a `mime` so the route
+   serves what it stored rather than guessing. **Lossless**, which is where most
+   of this section's saving was: lossy WebP is smoothing, and DESIGN.md says a
+   smoothed bitmap is no longer the picture the buyer uploaded.
+5. ~~**Write the four-surfaces scaling table into `DESIGN.md`** (§3)~~ — **done
+   2026-09-05**, as "The same purchase, on four surfaces, at four scales".
 
 **Left as decisions rather than work:** the perceptual hash and the illegal-imagery
 scan (§4), and the backup story behind "the picture cannot rot" (§6).

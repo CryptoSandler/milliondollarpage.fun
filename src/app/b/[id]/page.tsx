@@ -165,16 +165,39 @@ export default async function BlockPageRoute({ params }: { params: Promise<{ id:
           make a page nobody can scroll: width is the smaller of the column and
           what 60vh of height allows at this rectangle's own ratio.
         */}
-        <div
-          className="block-art mt-8"
-          style={{
-            aspectRatio: `${block.w} / ${block.h}`,
-            maxWidth: `min(100%, calc(60vh * ${block.w} / ${block.h}))`,
-            backgroundImage: `url("${blockImageUrl(block.id)}")`,
-          }}
-          role="img"
-          aria-label={`The artwork on this ${block.w} by ${block.h} rectangle`}
-        />
+        {block.approvedAt === null ? (
+          /*
+            IN REVIEW, AND THE PAGE STILL EXISTS. `DECISIONS.md`: the sale is
+            not pending, the publication is. The money settled, the rectangle is
+            theirs, the exclusion constraint holds it and `/stats` counts its
+            pixels — what is waiting is the picture appearing. A 404 here would
+            be the site losing a purchase in front of the person who just made
+            it, and a blank rectangle with no explanation would be worse.
+
+            The picture is not shown because the image route refuses it, which
+            is the whole point of the queue: nothing is published to anybody,
+            including through this page, until a person has looked.
+          */
+          <div className="mt-8 rounded-xl border border-hairline-strong bg-card px-4 py-6 text-[15px] leading-relaxed text-body">
+            <p className="font-semibold text-ink">This one is in review.</p>
+            <p className="mt-2">
+              It was paid for on {block.paidAt.slice(0, 10)} and these pixels are permanently its
+              buyer&apos;s — the sale is not waiting on anything. What is waiting is the picture
+              going up on the wall, which happens once a person has looked at it.
+            </p>
+          </div>
+        ) : (
+          <div
+            className="block-art mt-8"
+            style={{
+              aspectRatio: `${block.w} / ${block.h}`,
+              maxWidth: `min(100%, calc(60vh * ${block.w} / ${block.h}))`,
+              backgroundImage: `url("${blockImageUrl(block.id)}")`,
+            }}
+            role="img"
+            aria-label={`The artwork on this ${block.w} by ${block.h} rectangle`}
+          />
+        )}
 
         {/*
           ONE COLUMN ON A PHONE, and it is a measured fix rather than a
@@ -217,7 +240,7 @@ export default async function BlockPageRoute({ params }: { params: Promise<{ id:
           />
         </dl>
 
-        {(block.caption || block.link) && (
+        {block.approvedAt !== null && (block.caption || block.link) && (
           <section className="mt-10">
             <h2 className="font-display text-[22px] font-semibold tracking-tight">
               What the buyer put on it

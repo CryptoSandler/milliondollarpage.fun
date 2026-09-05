@@ -32,18 +32,18 @@ export function absoluteUrl(path: string): string {
  * disagreed with itself across two pages is an address half the mail goes
  * nowhere from.
  *
- * IT IS PRINTED AS TEXT AND NOT AS A `mailto:` LINK, and that is a decision
- * with a date on it rather than an oversight. The mailbox does not exist yet:
- * the domain is at Namecheap and the owner has chosen to put Private Email on
- * it at the end of the build rather than now. A `mailto:` on an address that
- * bounces is worse than no link at all — it invites a reader to spend a message
- * that silently fails, and they never learn it failed. Text invites them to
- * copy it, and a copied address that bounces at least bounces visibly.
+ * IT IS A `mailto:` LINK, AS OF 2026-09-05, and it was deliberately not one
+ * before that. The reasoning is kept rather than deleted, because the reason it
+ * was text is the reason it may have to become text again: a `mailto:` on an
+ * address that bounces is worse than no link at all — it invites a reader to
+ * spend a message that silently fails, and they never learn it failed. Text
+ * invites them to copy it, and a copied address that bounces bounces visibly.
  *
- * THE UPGRADE IS ONE LINE, HERE. When the mailbox is live, wrap it in an `<a>`
- * in `SiteFooter` and in the FAQ answer. Nothing else changes.
+ * So the link is a claim that the mailbox receives. If it ever stops, the honest
+ * change is back to a `<span>`, in the three files that print it — the footer,
+ * the FAQ (twice) and `/press` — and `contact.test.tsx` counts them.
  *
- * ponytail: forwarding is the cheaper first step — Namecheap forwards the
+ * ponytail: forwarding is the cheaper arrangement — Namecheap forwards the
  * domain's mail to an existing inbox for nothing, and Private Email is the
  * upgrade when a reply needs to come FROM this address rather than land in it.
  */

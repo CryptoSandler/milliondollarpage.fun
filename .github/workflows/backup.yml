@@ -1,0 +1,108 @@
+# A daily copy of the wall, into a repository this file does not name.
+#
+# WHAT THIS FILE MAY NOT SAY. It lives in a PUBLIC repository, so the
+# destination is a secret and not a literal: no host, no owner, no repository
+# name, no branch, no path. `BACKUP_REPO` carries "owner/name" and
+# `BACKUP_TOKEN` is what may push to it. Somebody reading this file learns that
+# a backup exists and nothing about where.
+#
+# WHY IT COULD NOT BE TURNED ON EARLIER. A daily copy of every image is a second
+# place a purged picture lives, and a purge that covers the database and not the
+# copies is a purge that does not do what SECURITY.md says. The owner's rule was
+# that the backup does not start before the script that can expunge it exists:
+# `scripts/backup-expunge.mts`, and `src/lib/__tests__/backup-expunge.test.ts`
+# which builds a three-commit repository and requires the bytes to be gone from
+# every one of them.
+#
+# THE ROLE THAT READS CANNOT WRITE. `DATABASE_URL` here is `mdp_backup_reader`,
+# a Neon role with SELECT and nothing else — verified by attempting an INSERT
+# and being refused. A backup job with the owner's credentials would be a
+# scheduled process holding the keys to the wall.
+name: backup
+
+on:
+  schedule:
+    # 04:12 UTC: off the hour, because every scheduled job in the world runs at
+    # :00 and GitHub delays the ones that pile up there.
+    - cron: "12 4 * * *"
+  workflow_dispatch:
+
+# Only what `actions/checkout` needs to read THIS repository. The push to the
+# destination uses `BACKUP_TOKEN`, never the workflow's own token — which has no
+# access there anyway, and saying so is cheaper than somebody discovering later
+# that it might have.
+permissions:
+  contents: read
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: The scripts
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Clone the destination
+        env:
+          BACKUP_REPO: ${{ secrets.BACKUP_REPO }}
+          BACKUP_TOKEN: ${{ secrets.BACKUP_TOKEN }}
+        run: |
+          # The URL is assembled here and never printed. `--quiet` because a
+          # clone line would put the destination in a public log.
+          git clone --quiet "https://x-access-token:${BACKUP_TOKEN}@github.com/${BACKUP_REPO}.git" destination
+          cd destination
+          git config user.name "milliondollarpage backup"
+          git config user.email "backup@milliondollarpage.fun"
+
+      - name: Dump the wall
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx tsx scripts/backup-dump.mts --out destination
+
+      - name: Commit, and say nothing if nothing changed
+        working-directory: destination
+        run: |
+          git add -A
+          # Content-addressed images mean a day on which nothing was bought is a
+          # day with no changes at all, and an empty commit every night would be
+          # noise in a history somebody may one day have to read.
+          if git diff --cached --quiet; then
+            echo "nothing changed today"
+            exit 0
+          fi
+          git commit -q -m "the wall on $(date -u +%Y-%m-%d)"
+
+      - name: On the first of the month, drop what is older than ninety days
+        working-directory: destination
+        run: |
+          if [ "$(date -u +%d)" != "01" ]; then
+            echo "not the first; history untouched"
+            exit 0
+          fi
+          # The newest commit that is ALREADY older than the window. Everything
+          # up to and including it becomes one root commit; every daily commit
+          # inside the window is kept as its own restore point, which is what
+          # ninety-day retention means.
+          OLD=$(git rev-list -1 --before="90 days ago" HEAD || true)
+          if [ -z "$OLD" ]; then
+            echo "nothing older than ninety days"
+            exit 0
+          fi
+          git checkout --quiet --orphan squashed "$OLD"
+          git commit -q -m "the wall as it stood ninety days ago"
+          git rebase --onto squashed "$OLD" main
+          git branch -D squashed || true
+
+      - name: Push
+        working-directory: destination
+        run: git push --quiet --force-with-lease origin HEAD:main

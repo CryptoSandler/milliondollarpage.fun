@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canHonourContain, centredCrop, placeImage } from "../image-fit";
+import { canHonourContain, centredCrop, defaultFit, placeImage } from "../image-fit";
 
 /**
  * The arithmetic that stopped the board squashing people's photographs.
@@ -275,5 +275,55 @@ describe("canHonourContain", () => {
     // all, nothing to fail to draw, and the choice stays a choice.
     expect(bar({ width: 1200, height: 300 }, block)).toBeCloseTo(0, 10);
     expect(canHonourContain({ width: 1200, height: 300 }, block)).toBe(true);
+  });
+});
+
+/**
+ * The fit the form OPENS on, which is a default and not a rule.
+ *
+ * The numbers below are the three rectangles `docs/imagenes.md` measured — a
+ * 31×169 column, a 173×16 strip, a 6×40 block — against the flag that was
+ * really uploaded into them. Each one spent 85–90% of a paid rectangle on flat
+ * grey under the old default, and each one is well past a factor of two.
+ */
+describe("defaultFit", () => {
+  const flag = { width: 900, height: 600 };
+
+  it("opens on cover for the shapes that were spending 85-90% on bars", () => {
+    for (const block of [
+      { width: 31, height: 169 },
+      { width: 173, height: 16 },
+      { width: 6, height: 40 },
+    ]) {
+      expect(defaultFit(flag, block), `${block.width}x${block.height}`).toBe("cover");
+    }
+  });
+
+  it("leaves contain alone when the two shapes nearly agree", () => {
+    // 3:2 into 4:3 is a gap of 1.125 — bars, but a sliver of them.
+    expect(defaultFit(flag, { width: 400, height: 300 })).toBe("contain");
+    expect(defaultFit(flag, { width: 300, height: 200 })).toBe("contain");
+  });
+
+  /**
+   * THE THRESHOLD IS A BOUNDARY AND IS TESTED AS ONE. Exactly two is still
+   * `contain`: the rule is "more than about 2x", and a default that flipped ON
+   * the round number would flip for the commonest deliberate shape there is —
+   * a square picture in a 2:1 banner.
+   */
+  it("flips just past two, and not at it", () => {
+    const square = { width: 100, height: 100 };
+    expect(defaultFit(square, { width: 200, height: 100 })).toBe("contain");
+    expect(defaultFit(square, { width: 201, height: 100 })).toBe("cover");
+  });
+
+  it("still forces cover where contain cannot be drawn at all", () => {
+    // A rectangle so thin the bars leave nothing: `canHonourContain` is false
+    // and the aspect arithmetic never gets a say.
+    expect(defaultFit(flag, { width: 1, height: 40 })).toBe("cover");
+  });
+
+  it("answers contain rather than dividing by zero for a degenerate box", () => {
+    expect(defaultFit({ width: 0, height: 0 }, { width: 10, height: 10 })).toBe("contain");
   });
 });

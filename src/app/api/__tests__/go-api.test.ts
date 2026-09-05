@@ -20,10 +20,10 @@ async function block(fields: {
 }): Promise<string> {
   const row = await queryOne<{ id: string }>(
     `INSERT INTO blocks (x, y, w, h, status, caption, link, price_per_pixel_usdc, total_usdc,
-                         expires_at, hidden_at)
+                         expires_at, hidden_at, approved_at)
      VALUES (0, 0, 10, 10, $1, 'A caption', $2, 1000000, 100000000,
              CASE WHEN $1 = 'reserved' THEN now() + interval '30 minutes' END,
-             CASE WHEN $3 THEN now() END)
+             CASE WHEN $3 THEN now() END, CASE WHEN $1 IN ('paid','minted') THEN now() END)
      RETURNING id`,
     /*
       `"link" in fields`, not `??`. The first version wrote `fields.link ??

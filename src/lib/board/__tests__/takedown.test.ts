@@ -4,7 +4,7 @@ import { execute, query, queryOne } from "../../db";
 import { GET as detailsRoute } from "../../../app/api/blocks/[id]/route";
 import { GET as imageRoute } from "../../../app/api/blocks/[id]/image/route";
 import { getBlockImage } from "../blocks";
-import { ensureWall, wallPng } from "../composite";
+import { ensureWall, wallImage } from "../composite";
 import { reserveRect } from "../reserve";
 import { hide, listHidden, purge, unhide } from "../takedown";
 
@@ -35,9 +35,9 @@ async function sold(x = 0): Promise<string> {
   const row = await queryOne<{ id: string }>(
     `INSERT INTO blocks (x, y, w, h, status, owner_address, caption, link,
                          price_per_pixel_usdc, total_usdc,
-                         pending_image, pending_image_mime, image_sha256)
+                         pending_image, pending_image_mime, image_sha256, approved_at)
      VALUES ($1, 0, 20, 20, 'paid', $2, 'My shop', 'https://example.com/shop',
-             1000000, 400000000, $3, 'image/webp', $4)
+             1000000, 400000000, $3, 'image/webp', $4, now())
      RETURNING id`,
     [x, OWNER, PICTURE, "a".repeat(64)],
   );
@@ -68,8 +68,11 @@ async function fetchDetails(id: string): Promise<Response> {
 async function wallPixelAt(x: number, y: number) {
   const wall = await ensureWall();
   if (!wall) throw new Error("there should be a wall");
-  const png = await wallPng(wall.version);
-  const { data, info } = await sharp(png!).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const image = await wallImage(wall.version);
+  const { data, info } = await sharp(image!.bytes)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
   const at = (y * info.width + x) * 4;
   return { r: data[at], g: data[at + 1], b: data[at + 2], a: data[at + 3] };
 }

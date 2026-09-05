@@ -1,6 +1,7 @@
 import { requireAdmin } from "../../../../../lib/admin-guard";
 import { purgeConfirmation } from "../../../../../lib/board/admin-client";
 import { hide, purge, unhide } from "../../../../../lib/board/takedown";
+import { approve } from "../../../../../lib/board/review";
 import { NO_STORE, isUuid, json } from "../../../../../lib/http";
 
 /**
@@ -27,7 +28,15 @@ import { NO_STORE, isUuid, json } from "../../../../../lib/http";
  * confirms which block ids exist, to callers who have not authenticated.
  */
 
-const ACTIONS = ["hide", "unhide", "purge"] as const;
+/*
+  FOUR NOW, AND THE FOURTH IS NOT A TAKEDOWN. `approve` lets a purchase onto
+  the wall; the other three take one off it. The file's header says there is
+  "deliberately no fourth action" and the sentence after it says why — a route
+  that could hide something `SECURITY.md` does not describe. This one hides
+  nothing: it is the review queue `DECISIONS.md` settled on 2026-09-04, and the
+  thing it changes is `approved_at`, which no takedown reads.
+*/
+const ACTIONS = ["hide", "unhide", "purge", "approve"] as const;
 type Action = (typeof ACTIONS)[number];
 
 /**
@@ -87,11 +96,26 @@ export async function POST(
   // route in this repository walks this ladder for that reason.
   if (!isUuid(id)) return json({ error: NOTHING_HAPPENED }, { status: 404, headers: NO_STORE });
 
+  /*
+    JSON OR A FORM, because there are two callers and they are different kinds
+    of thing. The takedown console is a client component and sends JSON; the
+    review queue on the same page is server-rendered markup with one button per
+    row, and a `<form>` posting straight here is the laziest thing that works —
+    no state, no fetch, no optimistic list to reconcile, and the page reload IS
+    the confirmation.
+
+    THIS IS NOT A CSRF SURFACE. The admin cookie is `SameSite=Strict` (see
+    `/api/admin/session`), so a form on somebody else's page carries no session
+    at all and lands on `requireAdmin`'s single refusal above.
+  */
+  const contentType = request.headers.get("content-type") ?? "";
   let body: unknown;
   try {
-    body = await request.json();
+    body = contentType.includes("application/json")
+      ? await request.json()
+      : Object.fromEntries(await request.formData());
   } catch {
-    return badRequest("That request body is not JSON.");
+    return badRequest("That request body is neither JSON nor a form.");
   }
 
   const { action, reason, confirm } = (body ?? {}) as Record<string, unknown>;
@@ -105,7 +129,10 @@ export async function POST(
   // indistinguishable from a takedown nobody can account for. `unhide` needs
   // none: it clears the column.
   const words = typeof reason === "string" ? reason.trim() : "";
-  if (action !== "unhide" && words === "") {
+  // `approve` joins `unhide` here: a note is welcome and is stored, but
+  // requiring one for the ordinary outcome would make the ordinary outcome the
+  // slow one, and a queue that is slow to clear is a queue that is not cleared.
+  if (action !== "unhide" && action !== "approve" && words === "") {
     return badRequest("A reason is required, and it is what the row will record.");
   }
 
@@ -122,11 +149,25 @@ export async function POST(
   const block = await perform(action as Action, id, words);
   if (!block) return json({ error: NOTHING_HAPPENED }, { status: 404, headers: NO_STORE });
 
+  /*
+    A FORM GETS A REDIRECT AND A FETCH GETS JSON. 303 rather than 302 so the
+    browser turns the POST into a GET — without it a reload re-submits the
+    approval, which is harmless here (approving twice changes nothing) and is
+    still a browser warning nobody should have to read.
+  */
+  if (!contentType.includes("application/json")) {
+    return new Response(null, {
+      status: 303,
+      headers: { location: "/admin", "cache-control": "no-store" },
+    });
+  }
+
   return json({ block }, { headers: NO_STORE });
 }
 
 async function perform(action: Action, id: string, reason: string) {
   if (action === "hide") return hide(id, reason);
   if (action === "unhide") return unhide(id);
+  if (action === "approve") return approve(id, reason);
   return purge(id, reason);
 }

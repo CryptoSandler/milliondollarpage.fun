@@ -273,7 +273,9 @@ async function layer(row: PurchaseRow): Promise<Buffer> {
  * accumulator as raw — the output is identical either way, because the
  * rectangles cannot overlap.
  */
-export async function composeWall(rows: PurchaseRow[]): Promise<Buffer> {
+export type EncodedWall = { bytes: Buffer; mime: "image/png" | "image/webp" };
+
+export async function composeWall(rows: PurchaseRow[]): Promise<EncodedWall> {
   const layers = await Promise.all(
     rows.map(async (row) => ({
       input: await layer(row),
@@ -283,17 +285,44 @@ export async function composeWall(rows: PurchaseRow[]): Promise<Buffer> {
     })),
   );
 
-  return sharp({
+  const composed = sharp({
     create: {
       width: BOARD_WIDTH,
       height: BOARD_HEIGHT,
       channels: 4,
       background: { r: 0, g: 0, b: 0, alpha: 0 },
     },
-  })
-    .composite(layers)
-    .png({ compressionLevel: 9 })
-    .toBuffer();
+  }).composite(layers);
+
+  /*
+    BOTH ENCODINGS, AND THE SMALLER ONE WINS. `docs/imagenes.md` §5 measured a
+    photographic wall at 3.8 MiB of PNG and recommended WebP; what it also
+    recommended — a PNG fallback chosen by `Accept` — is not what shipped.
+    Content negotiation means one URL with two bodies, which needs `Vary`,
+    splits every shared cache, and undoes the property the version exists for.
+    The version is the hash of the bytes, so an encoding is just a different
+    URL, and the build can simply pick the smaller.
+
+    LOSSLESS, AND THAT IS THE PRODUCT DECISION IN THIS FILE. Lossy WebP is where
+    most of §5's saving lives, and it is the one thing this wall may not do:
+    DESIGN.md says a bitmap that has been smoothed is no longer the picture the
+    buyer uploaded, and a buyer of a 6×40 block paid for forty exact pixels.
+    Lossless WebP still beats PNG on flat art — which is what most of this wall
+    is — and where it does not, PNG is kept and nothing is lost either way.
+
+    // ponytail: two encodes per rebuild, which is milliseconds beside the
+    // compositing (§5 measured 1.6s for 10,000 layers against 45ms to encode).
+    // If a rebuild ever becomes hot, encode WebP only and keep PNG for walls
+    // under a size where the difference cannot matter.
+  */
+  const [png, webp] = await Promise.all([
+    composed.clone().png({ compressionLevel: 9 }).toBuffer(),
+    composed.clone().webp({ lossless: true, effort: 6 }).toBuffer(),
+  ]);
+
+  return webp.length < png.length
+    ? { bytes: webp, mime: "image/webp" }
+    : { bytes: png, mime: "image/png" };
 }
 
 /** The wall currently being served, or null before the first one is built. */
@@ -352,15 +381,18 @@ function published(wall: CurrentWall): Wall {
 }
 
 async function rebuild(fingerprint: string): Promise<Wall> {
-  const png = await composeWall(await visiblePurchases());
-  const version = createHash("sha256").update(png).digest("hex");
+  const wall = await composeWall(await visiblePurchases());
+  // The hash is of the BYTES, so the encoding is part of the identity: the
+  // same pixels encoded twice are two versions, and a browser holding either
+  // URL is holding a URL that is still correct.
+  const version = createHash("sha256").update(wall.bytes).digest("hex");
 
   await execute(
-    `INSERT INTO board_composites (version, png, fingerprint)
-     VALUES ($1, $2, $3)
+    `INSERT INTO board_composites (version, png, mime, fingerprint)
+     VALUES ($1, $2, $3, $4)
      ON CONFLICT (version) DO UPDATE
        SET built_at = now(), fingerprint = EXCLUDED.fingerprint`,
-    [version, png, fingerprint],
+    [version, wall.bytes, wall.mime, fingerprint],
   );
 
   // Old walls stay reachable for a little while rather than vanishing the
@@ -378,13 +410,22 @@ async function rebuild(fingerprint: string): Promise<Wall> {
   return { version, url: wallUrl(version), width: BOARD_WIDTH, height: BOARD_HEIGHT };
 }
 
-/** One version's bytes, or null — the route answers both with its own 404. */
-export async function wallPng(version: string): Promise<Buffer | null> {
-  const row = await queryOne<{ png: Buffer }>(
-    "SELECT png FROM board_composites WHERE version = $1",
+/**
+ * One version's bytes and what they are, or null — the route answers both with
+ * its own 404.
+ *
+ * The column is still called `png`, because an applied migration is never
+ * edited and the bytes are what they always were: a picture of the wall. What
+ * changed is that the row now says which encoding, rather than the route
+ * assuming.
+ */
+export async function wallImage(version: string): Promise<EncodedWall | null> {
+  const row = await queryOne<{ png: Buffer; mime: string }>(
+    "SELECT png, mime FROM board_composites WHERE version = $1",
     [version],
   );
-  return row?.png ?? null;
+  if (!row) return null;
+  return { bytes: row.png, mime: row.mime === "image/webp" ? "image/webp" : "image/png" };
 }
 
 /** True for the 64-hex shape `version` always has. Checked before any query. */
