@@ -46,41 +46,40 @@ if (!connectionString) {
   process.exit(2);
 }
 
-type Row = {
-  id: string;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  status: string;
-  owner_address: string | null;
-  owner_chain: string;
-  price_per_pixel_usdc: string;
-  total_usdc: string;
-  payment_signature: string | null;
-  caption: string | null;
-  link: string | null;
-  image_fit: string | null;
-  image_sha256: string | null;
-  is_animated: boolean | null;
-  paid_at: Date | null;
-  created_at: Date;
-  hidden_at: Date | null;
-  purged_at: Date | null;
-  approved_at: Date | null;
-  pending_image: Buffer | null;
-  pending_image_mime: string | null;
-};
+type Row = Record<string, unknown> & { id: string; pending_image: Buffer | null };
 
 const pool = new Pool({ connectionString });
 
+/*
+  EVERY COLUMN THE TABLE HAS, discovered rather than listed.
+
+  THIS IS THE FIRST REHEARSAL'S FINDING, and it is the reason rehearsals exist.
+  The first version of this file named twenty-three columns by hand and the
+  table has thirty-five: the restore fell over on `blocks_paid_never_expires`
+  because `expires_at` was never copied, and behind that were
+  `payment_fraction`, `takedown_reason`, `owner_wallet`, `mint_address`,
+  `minted_at`, `approval_note`, `ip_hash` and both Arweave ids. A hand-written
+  list is a list that goes stale on the next migration, silently, and the
+  backup that results looks exactly like a working one.
+
+  The two generated columns are excluded because Postgres refuses to be told
+  what they are — they are the exclusion constraint's own ranges, derived from
+  x, y, w and h, which ARE copied.
+*/
+const { rows: columns } = await pool.query<{ column_name: string }>(
+  `SELECT column_name
+     FROM information_schema.columns
+    WHERE table_name = 'blocks' AND is_generated <> 'ALWAYS'
+    ORDER BY ordinal_position`,
+);
+const names = columns.map((c) => c.column_name);
+if (!names.includes("id") || !names.includes("pending_image")) {
+  console.error("The blocks table does not look like the blocks table. Nothing was dumped.");
+  process.exit(2);
+}
+
 const { rows } = await pool.query<Row>(
-  `SELECT id, x, y, w, h, status, owner_address, owner_chain, price_per_pixel_usdc, total_usdc,
-          payment_signature, caption, link, image_fit, image_sha256, is_animated,
-          paid_at, created_at, hidden_at, purged_at, approved_at,
-          pending_image, pending_image_mime
-     FROM blocks
-    ORDER BY created_at ASC`,
+  `SELECT ${names.map((n) => `"${n}"`).join(", ")} FROM blocks ORDER BY created_at ASC`,
 );
 await pool.end();
 
@@ -105,12 +104,14 @@ const manifest: { generatedAt: string; blocks: { id: string; rowSha256: string; 
 };
 
 for (const row of rows) {
-  const { pending_image: image, pending_image_mime: mime, ...record } = row;
+  const { pending_image: image, ...record } = row;
 
   const imageSha256 = image ? createHash("sha256").update(image).digest("hex") : null;
   if (image && imageSha256) writeFileSync(join(out, "images", `${imageSha256}.bin`), image);
 
-  const body = { ...record, imageMime: mime, imageSha256 };
+  // The bytes leave the row and become a file; everything else stays exactly
+  // as the column list found it, so a column added tomorrow is copied tomorrow.
+  const body = { ...record, imageSha256 };
   const json = `${JSON.stringify(body, null, 2)}\n`;
   writeFileSync(join(out, "blocks", `${row.id}.json`), json);
 
