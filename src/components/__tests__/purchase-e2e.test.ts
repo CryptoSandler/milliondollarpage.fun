@@ -462,16 +462,16 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
       //    caption and the link the browser typed.
       const row = await queryOne<{
         status: string;
-        buyer_pubkey: string;
+        owner_address: string;
         caption: string | null;
         link: string | null;
         w: number;
         h: number;
         image_sha256: string | null;
       }>(
-        `SELECT status, buyer_pubkey, caption, link, w, h, image_sha256
+        `SELECT status, owner_address, caption, link, w, h, image_sha256
            FROM blocks
-          WHERE buyer_pubkey = $1`,
+          WHERE owner_address = $1`,
         [wallet.address],
       );
 
@@ -1797,7 +1797,11 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
       const reserved = await fetch(`${server.origin}/api/reserve`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ rect: { x: 500, y: 500, w: 10, h: 10 }, buyerPubkey: buyer.address }),
+        body: JSON.stringify({
+          rect: { x: 500, y: 500, w: 10, h: 10 },
+          buyerPubkey: buyer.address,
+          chain: "solana",
+        }),
       });
       expect(reserved.status).toBe(201);
       const { id } = (await reserved.json()) as { id: string };
@@ -1874,7 +1878,7 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
     async () => {
       await execute(
         `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
-                             buyer_pubkey, payment_signature, caption)
+                             owner_address, payment_signature, caption)
          VALUES (200, 200, 300, 200, 'paid', $1, $2, now(), $3, $4, $5)`,
         [1_000_000, 300 * 200 * 1_000_000, testWallet().address, "sig-hover", "A caption to read"],
       );
@@ -2031,7 +2035,7 @@ describeIfChrome("buying a rectangle from a browser, with a wallet", () => {
       for (const [i, block] of seeded.entries()) {
         await execute(
           `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
-                               buyer_pubkey, payment_signature, caption)
+                               owner_address, payment_signature, caption)
            VALUES ($1, $2, 140, 100, 'paid', $3, $4, now(), $5, $6, $7)`,
           [block.x, block.y, 1_000_000, 140 * 100 * 1_000_000, wallet, `sig-chip-${i}`, block.caption],
         );

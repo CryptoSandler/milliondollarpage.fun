@@ -2,6 +2,7 @@ import { rectIsValid } from "../../../lib/board/geometry";
 import { reserveRect, RectangleInvalid, RectangleTaken } from "../../../lib/board/reserve";
 import { checkReservationLimits } from "../../../lib/callers/limits";
 import { NO_STORE, identify, json, problem } from "../../../lib/http";
+import { isOwnerChain, type ProvenOwner } from "../../../lib/board/owner";
 
 const NOT_A_RECTANGLE = "That is not a rectangle this board can sell.";
 
@@ -43,7 +44,7 @@ export async function POST(request: Request): Promise<Response> {
     // an ordinary reservation rather than a 409 — they are resuming their own
     // purchase, not competing for it. 201 either way: from the client's side
     // the outcome is identical, "these pixels are held for you".
-    const held = await reserveRect(parsed.rect, parsed.buyerPubkey, caller.ipHash);
+    const held = await reserveRect(parsed.rect, parsed.owner, caller.ipHash);
     return json(held, { status: 201, headers: NO_STORE });
   } catch (error) {
     if (error instanceof RectangleTaken) {
@@ -86,12 +87,22 @@ function rectangleTakenMessage(availableAt: string | null, yourOrderIds: string[
     `It frees up at ${time} if they don't complete the purchase.`;
 }
 
-function parseReserveBody(body: unknown): { rect: { x: number; y: number; w: number; h: number }; buyerPubkey: string } | null {
+function parseReserveBody(body: unknown): { rect: { x: number; y: number; w: number; h: number }; owner: ProvenOwner } | null {
   if (typeof body !== "object" || body === null) return null;
-  const { rect, buyerPubkey } = body as Record<string, unknown>;
+  const { rect, buyerPubkey, chain } = body as Record<string, unknown>;
   if (typeof buyerPubkey !== "string" || buyerPubkey.trim() === "") return null;
+  /*
+    THE CHAIN IS REQUIRED AND HAS NO DEFAULT, here as everywhere else an owner
+    is named. A hold is where ownership begins, so a reservation that did not
+    say which alphabet its address is written in would be a row nobody could
+    later prove they owned — the signed routes compare the PAIR.
+  */
+  if (!isOwnerChain(chain)) return null;
   if (typeof rect !== "object" || rect === null) return null;
   const { x, y, w, h } = rect as Record<string, unknown>;
   if (![x, y, w, h].every((n) => typeof n === "number" && Number.isInteger(n))) return null;
-  return { rect: { x: x as number, y: y as number, w: w as number, h: h as number }, buyerPubkey };
+  return {
+    rect: { x: x as number, y: y as number, w: w as number, h: h as number },
+    owner: { chain, address: buyerPubkey },
+  };
 }

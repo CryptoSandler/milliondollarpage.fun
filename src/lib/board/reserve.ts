@@ -4,6 +4,7 @@ import { chargeHold } from "../callers/hold-meter";
 import { LIVE, sweepExpiredReservations } from "./blocks";
 import { type Rect, rectIsValid, rectPixels } from "./geometry";
 import { holdMinutes } from "./hold-clock";
+import { sameOwner, type OwnerChain, type ProvenOwner } from "./owner";
 import { totalBaseUnits } from "./pricing";
 
 /**
@@ -107,7 +108,16 @@ export type Reservation = {
 
 export async function reserveRect(
   rect: Rect,
-  buyerPubkey: string,
+  /*
+    THE OWNER, AS A PAIR, FROM THE MOMENT THE ROW IS WRITTEN.
+
+    A hold is where ownership begins — the address that reserves is the only one
+    that can attach content, pay or release — so the chain has to be decided
+    here rather than at payment. Deciding it later would mean a row that existed
+    for half an hour without knowing which alphabet its own owner was written
+    in, and the three signed routes would have had nothing to compare against.
+  */
+  owner: ProvenOwner,
   ipHash: string,
 ): Promise<Reservation> {
   // Checked before opening a transaction: a malformed rectangle is the
@@ -135,14 +145,14 @@ export async function reserveRect(
 
       const inserted = await client.query<{ id: string; expires_at: Date }>(
         `INSERT INTO blocks
-           (x, y, w, h, status, buyer_pubkey, ip_hash,
+           (x, y, w, h, status, owner_address, owner_chain, ip_hash,
             price_per_pixel_usdc, total_usdc, payment_fraction, expires_at)
-         VALUES ($1, $2, $3, $4, 'reserved', $5, $6, $7, $8, $9,
-                 now() + ($10 || ' minutes')::interval)
+         VALUES ($1, $2, $3, $4, 'reserved', $5, $6, $7, $8, $9, $10,
+                 now() + ($11 || ' minutes')::interval)
          RETURNING id, expires_at`,
         [
           rect.x, rect.y, rect.w, rect.h,
-          buyerPubkey, ipHash,
+          owner.address, owner.chain, ipHash,
           perPixel, total, fraction,
           String(holdMinutes(pixels)),
         ],
@@ -178,10 +188,10 @@ export async function reserveRect(
       // The one refusal that isn't one: the only thing in the way is this
       // caller's own hold on exactly these pixels. Hand it back as if it had
       // just been created and let them carry on where they left off.
-      const mine = resumableHold(blocking, rect, buyerPubkey);
+      const mine = resumableHold(blocking, rect, owner);
       if (mine) return toReservation(mine, rect, pixels);
 
-      throw new RectangleTaken(earliestAvailability(blocking), ownOrderIds(blocking, buyerPubkey));
+      throw new RectangleTaken(earliestAvailability(blocking), ownOrderIds(blocking, owner));
     }
     throw error;
   }
@@ -194,7 +204,7 @@ export async function reserveRect(
  * agree on (see `blocks.ts`), restricted to rows overlapping the requested
  * rectangle via the same generated int4range columns the constraint uses.
  *
- * `buyer_pubkey` IS selected here, and that is safe precisely because nothing
+ * `owner_address` IS selected here, and that is safe precisely because nothing
  * below ever returns it: it is compared against the caller's own address and
  * then discarded. Everything derived from these rows and handed outwards —
  * `availableAt`, `yourOrderIds`, a resumed reservation — is either about the
@@ -203,7 +213,8 @@ export async function reserveRect(
 type BlockingRow = {
   id: string;
   status: string;
-  buyer_pubkey: string | null;
+  owner_address: string | null;
+  owner_chain: string;
   x: number;
   y: number;
   w: number;
@@ -216,7 +227,7 @@ type BlockingRow = {
 
 async function blockingRows(rect: Rect): Promise<BlockingRow[]> {
   return query<BlockingRow>(
-    `SELECT id, status, buyer_pubkey, x, y, w, h,
+    `SELECT id, status, owner_address, owner_chain, x, y, w, h,
             price_per_pixel_usdc, total_usdc, payment_fraction, expires_at
        FROM blocks
       WHERE ${LIVE}
@@ -253,12 +264,21 @@ async function blockingRows(rect: Rect): Promise<BlockingRow[]> {
  *   worse than refusing, so that case falls through to a 409 that carries
  *   `yourOrderIds` and lets the buyer decide to release it.
  */
-function resumableHold(rows: BlockingRow[], rect: Rect, buyerPubkey: string): BlockingRow | null {
+function resumableHold(rows: BlockingRow[], rect: Rect, owner: ProvenOwner): BlockingRow | null {
   if (rows.length !== 1) return null;
   const row = rows[0];
   if (row.status !== "reserved") return null;
-  if (typeof row.buyer_pubkey !== "string" || row.buyer_pubkey === "") return null;
-  if (row.buyer_pubkey !== buyerPubkey) return null;
+  if (typeof row.owner_address !== "string" || row.owner_address === "") return null;
+  /*
+    THE PAIR, not the address, and through `sameOwner` rather than by hand.
+    Two people can hold the same twenty bytes on two chains, and resuming
+    somebody else's hold because their address happens to look like yours would
+    hand them your rectangle and your unpaid words. Case is the other half:
+    `sameOwner` folds it, so a wallet that hands back a checksummed address
+    still recognises its own hold.
+  */
+  if (!sameOwner(owner, { chain: row.owner_chain as OwnerChain, address: row.owner_address }))
+    return null;
   if (row.x !== rect.x || row.y !== rect.y || row.w !== rect.w || row.h !== rect.h) return null;
   if (row.expires_at === null) return null;
   return row;
@@ -290,9 +310,15 @@ function toReservation(row: BlockingRow, rect: Rect, pixels: number): Reservatio
 }
 
 /** The blocking rows that are this caller's own, and only those. */
-function ownOrderIds(rows: BlockingRow[], buyerPubkey: string): string[] {
-  if (buyerPubkey === "") return [];
-  return rows.filter((row) => row.buyer_pubkey === buyerPubkey).map((row) => row.id);
+function ownOrderIds(rows: BlockingRow[], owner: ProvenOwner): string[] {
+  if (owner.address === "") return [];
+  return rows
+    .filter(
+      (row) =>
+        typeof row.owner_address === "string" &&
+        sameOwner(owner, { chain: row.owner_chain as OwnerChain, address: row.owner_address }),
+    )
+    .map((row) => row.id);
 }
 
 /**
@@ -305,7 +331,7 @@ function ownOrderIds(rows: BlockingRow[], buyerPubkey: string): string[] {
  * expiries is the first moment anything could change, which is the most
  * useful single instant to tell the caller.
  *
- * Reads only `status` and `expires_at` off the rows: never `buyer_pubkey`.
+ * Reads only `status` and `expires_at` off the rows: never `owner_address`.
  * A 409 explains what happened, not who is holding it.
  */
 function earliestAvailability(rows: BlockingRow[]): string | null {

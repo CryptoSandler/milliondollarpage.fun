@@ -1,6 +1,7 @@
 import { expect } from "vitest";
 import type { ChallengeAction } from "../../../lib/wallet/signature";
 import type { TestWallet } from "../../../lib/wallet/__tests__/keypair";
+import type { OwnerChain } from "../../../lib/board/owner";
 import { POST as POST_CHALLENGE } from "../orders/[id]/challenge/route";
 
 /**
@@ -37,15 +38,26 @@ export async function challengeFor(orderId: string, action: ChallengeAction): Pr
   return (await response.json()) as Challenge;
 }
 
-/** The proof a wallet would build: ask for a challenge, sign it, present it. */
+/**
+ * The proof a wallet would build: ask for a challenge, sign it, present it.
+ *
+ * `chain` is spelled out rather than defaulted inside `readProof`, because
+ * that is exactly what a real client has to do since migration 016 — a proof
+ * that names no chain is refused, and a helper that quietly supplied one would
+ * be testing a leniency the server does not have. It is a parameter so a test
+ * can present the wrong chain deliberately; every caller here signs with an
+ * ed25519 `TestWallet`, so the default is the chain that judges those.
+ */
 export async function proofFor(
   orderId: string,
   action: ChallengeAction,
   wallet: TestWallet,
+  chain: OwnerChain = "solana",
 ): Promise<Record<string, string>> {
   const challenge = await challengeFor(orderId, action);
   return {
     nonce: challenge.nonce,
+    chain,
     publicKey: wallet.address,
     signature: wallet.sign(challenge.message),
   };

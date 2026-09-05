@@ -20,6 +20,7 @@ import { TimedOut, withTimeout } from "../lib/board/with-timeout";
 import ConfirmationStep from "./ConfirmationStep";
 import ContentForm, { EMPTY_DRAFT, type ContentDraft } from "./ContentForm";
 import HoldTimer from "./HoldTimer";
+import type { ProvenOwner } from "../lib/board/owner";
 
 type Step = "holding" | "describing" | "confirming" | "paying" | "done";
 
@@ -109,7 +110,7 @@ const NO_WALLET_TO_SIGN =
  */
 export default function PurchaseDialog({
   selection,
-  buyerPubkey,
+  owner,
   sign,
   knownHoldIds,
   onHoldStarted,
@@ -121,13 +122,21 @@ export default function PurchaseDialog({
   returnFocusRef,
 }: {
   selection: Selection;
-  buyerPubkey: string;
+  /**
+   * Who is buying, as the pair the database stores: a chain and an address.
+   *
+   * The chain travels WITH the address rather than being assumed further
+   * down, because an address on its own does not say which cryptography
+   * proves it — and the moment a second chain can buy, "assumed Solana" is a
+   * silent wrong answer rather than a compile error.
+   */
+  owner: ProvenOwner;
   /**
    * The connected wallet's signer, or null when nothing is connected.
    *
    * A prop rather than something this dialog reaches for, because the wallet
-   * and the address have to be the same decision: `ownerPubkey` below is
-   * snapshotted from `buyerPubkey` at open time and every signed step is
+   * and the address have to be the same decision: `ownerHeld` below is
+   * snapshotted from `owner` at open time and every signed step is
    * checked against it, so a dialog that read the connection separately could
    * end up holding one buyer's rectangle and another buyer's key. BoardView
    * derives both from the one connection and hands both down.
@@ -154,7 +163,8 @@ export default function PurchaseDialog({
   // brace: later calls must keep using the address the hold was created with,
   // or attachContent/markPaid would see a mismatch and answer 403 "not yours"
   // against their own hold.
-  const [ownerPubkey] = useState(buyerPubkey);
+  const [ownerHeld] = useState(owner);
+  const ownerPubkey = ownerHeld.address;
 
   const dialogRef = useRef<HTMLDialogElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -254,7 +264,7 @@ export default function PurchaseDialog({
   const attemptHold = useCallback(async (isLive: () => boolean = () => true, afterTimeout = false) => {
     let result;
     try {
-      result = await call.hold(selection.rect, ownerPubkey);
+      result = await call.hold(selection.rect, ownerHeld);
     } catch (error) {
       if (!isLive()) return;
       // A rejection out of purchase-client has exactly one cause: the ceiling.

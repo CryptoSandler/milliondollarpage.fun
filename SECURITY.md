@@ -207,6 +207,19 @@ They are different things and must never be confused.
 The treasury is receive-only from the application's point of view. There is no
 withdrawal path, no signing, and no code that could construct one.
 
+**There is now a second treasury, on a second chain, and the same sentence
+covers it.** `ROBINHOOD_TREASURY_ADDRESS` is the public address that receives
+USDG on Robinhood Chain — a `to`, compared against the `to` of a `Transfer`
+event and nothing more. No key for it exists in this repository, in Vercel, or
+in any file this codebase reads. It is deliberately EMPTY by default: a default
+here would be somebody else's wallet, and `assertRobinhoodRailConfigured`
+refuses to boot an instance that has the rail switched on without it, or any
+instance where the value present is not an EVM address.
+
+The node URL beside it, `ROBINHOOD_RPC_URL`, IS a secret — it carries a provider
+key in its path — and it is in `scripts/check-build-secrets.mts`'s list, so a
+build that leaked it into client output fails.
+
 ## Why the second key exists
 
 Every purchased block is a Metaplex Core NFT in a single collection covering the

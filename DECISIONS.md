@@ -844,3 +844,228 @@ more than 2:1 away from the picture's shape names the exact share being spent on
 bars — 88% on a 31×169. **None of them refuses anything.** The buyer chose the
 rectangle; these are offered before payment, and the re-upload loop is the
 mechanism.
+
+---
+
+## Settled: an owner is a chain and an address, and neither half is ever assumed
+
+**Status: settled 2026-09-04, by the owner, as the batch BEFORE the Robinhood
+Chain payment rail.**
+
+**What shipped.** `blocks.buyer_pubkey` is now `blocks.owner_address`, beside a
+new `owner_chain` that backfilled to `'solana'` for every existing row and is
+constrained by `CHECK (owner_chain IN ('solana','robinhood'))`. `owner.ts`
+holds the type, the list, the labels and `sameOwner`; `evm.ts` holds
+`personal_sign` verification by public-key recovery. The reservation route, the
+three signed routes, the purchase dialog and the client all carry the pair.
+Nothing about the money path moved: no rail is built yet, and this batch was
+deliberately sequenced first.
+
+**Why the pair rather than the address alone.** An address does not say which
+cryptography proves it. Today the two alphabets happen not to overlap — twenty
+bytes of hex is never thirty-two bytes of base58 — but that is an accident of
+two encodings, not a rule anybody wrote, and building on it would mean the
+first chain that shares an address format with another silently merges two
+people's ownership. `sameOwner` compares both halves and folds case on the
+address, because an EVM address is the same account checksummed or not, and a
+wallet that hands back `0xAb…` must recognise the hold it created as `0xab…`.
+
+**The chain is required and has no default, at every boundary.** `readProof`
+refuses a proof that does not name one; `parseReserveBody` answers 400 rather
+than assuming Solana. Defaulting would be the cheap move and the wrong one: the
+row a reservation writes is the row a signature is later checked against, so a
+hold that guessed would be a rectangle its own buyer could not prove they
+owned, with nothing in the failure to say why. Pre-migration clients are broken
+LOUDLY rather than served a guess.
+
+**One verifier per chain, picked by what the proof says it is — never tried in
+turn.** ed25519 and secp256k1 refuse each other's signatures outright, so
+falling through from one to the other would not be leniency; it would let the
+CLAIM decide which cryptography applies, and the chain field would be
+decorative. `challenge.test.ts` presents a real Solana signature as a Robinhood
+one and requires null.
+
+**The trigger names the pair too.** Migration 011's `blocks_owner_is_final`
+watched `owner_address` alone. Migration 016 rewrote its WHEN clause to fire on
+either column, because an UPDATE that moved a sale from one chain to the other
+would hand the row to whoever controls those same characters on the chain it
+was moved to, without a single character of the address changing.
+`permanence.test.ts` runs that statement and requires the database to refuse it.
+
+### The migration is an ATOMIC RENAME, and expand/contract was refused on purpose
+
+**Decided by the owner, 2026-09-04.** Migration 016 renames `buyer_pubkey` to
+`owner_address` in one statement, which means the currently-deployed build —
+which selects that column by its old name — is broken from the instant the
+migration lands until the new build is serving. The migration and the deploy go
+out **in one sequence**, and the window between them is the only outage this
+change has.
+
+**The alternative was expand/contract**, and it is the textbook answer: add
+`owner_address` beside `buyer_pubkey`, teach the code to write both, deploy,
+backfill, deploy again reading only the new one, then drop the old column in a
+third migration. Three deploys and two weeks of a table with two columns meaning
+one thing. It was refused for three reasons, in order of weight:
+
+1. **The site is `noindex` and has no payment rail.** There is no buyer to
+   inconvenience and no money in flight. The whole cost of the window is that a
+   page might 500 for whoever happens to be looking, and the owner weighed that
+   against the alternative and took it.
+2. **A period where both columns exist is a period where they can disagree**,
+   and the thing they hold is who owns a rectangle. `blocks_owner_is_final` can
+   only guard the column it names; during the expand phase the trigger watches
+   one of the two, and the other is writable. That is a worse hazard than a
+   minute of 500s.
+3. **A `contract` step is a migration somebody has to remember to run.** Two of
+   the three deploys are the easy ones and the third is the one that gets
+   forgotten, and a `buyer_pubkey` column left behind for a year is exactly the
+   lie migration 016 exists to remove.
+
+**What this does NOT license.** Once a rectangle has been sold for money, this
+argument stops working — reason 1 is the load-bearing one and it expires on the
+first real purchase. A rename after that is expand/contract or it does not
+happen.
+
+**What did not change.** `/buyers` still selects no owner column at all, and
+`blocks.ts` still refuses to let one join the board payload — the chain is not
+identifying, but the rule there is about the SELECT list and not about how
+identifying each column happens to be. The takedown console never read the
+owner and still does not.
+
+### Open: ETH native as a later rail
+
+A second rail on the same chain, paying in native ETH rather than a dollar
+stablecoin, **requires an oracle, a staleness policy and a slippage policy
+decided in writing** before any of it is built. The wall is priced in USDC base
+units and there is no exchange rate anywhere in this repository; introducing one
+is a product decision about who absorbs a move between quote and settlement, not
+an implementation detail. Nothing here blocks it: the owner is already a pair,
+and a rail is a way of paying, not a way of owning.
+
+---
+
+## Settled: the first payment rail is Robinhood Chain, and it is paid in USDG
+
+**Status: settled 2026-09-04, by the owner, after an adversarial round. Built
+against the eight-point contract above; not switched on — the treasury address
+is the owner's to provide.**
+
+**What ships.** `src/lib/payments/usdg.ts` (the token and the treasury),
+`robinhood-rpc.ts` (the only place this repository speaks to an EVM node),
+`robinhood.ts` (the verifier), a boot guard, `scripts/usdg-check.mts`, and the
+confirm route choosing its verifier off the ORDER'S OWN CHAIN. `/faq` names both
+ways to pay, `/how-to-buy` carries the Robinhood route as a second way in, and
+`/b/<id>` prints which rail each sale was settled on.
+
+**A dollar stablecoin, not native ETH — and this is the decision, not an
+implementation detail.** The wall is priced in USDC base units and there is no
+exchange rate anywhere in this repository. Paying in ETH would require one, and
+an exchange rate is three product decisions in a trench coat: which oracle, how
+stale is too stale, and who absorbs a move between the quote and the
+settlement. USDG has six decimals, exactly as USDC does, so **the price quoted
+and the integer the chain must show are the same number.** Nothing is converted,
+so nothing can be converted wrongly.
+
+**The token was verified three ways, on 2026-09-04**: Paxos — the issuer —
+publishes `0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168` for "Robinhood Mainnet";
+the Global Dollar Network states USDG is the first stablecoin natively issued on
+that chain and Robinhood Wallet lists it among the assets it manages; and the
+contract itself, called on chain id 4663, answers `symbol() = "USDG"`,
+`name() = "Global Dollar"`, `decimals() = 6`, with a total supply of about 627
+million. **It is an ERC-1967 proxy**, so `decimals` is a fact with a date on it
+rather than a fact for ever — `scripts/usdg-check.mts` is what re-asks the
+chain, and it passed against mainnet on the day this was written.
+
+**No custom contract, deliberately.** A plain ERC-20 transfer to a treasury
+address is the whole payment. A contract of ours would be a second thing to
+audit, a second thing to upgrade, and a second thing a wallet has to be
+persuaded is safe to sign — for a mechanism that adds nothing a `Transfer` log
+does not already carry.
+
+**The transfer is matched on the conjunction of four facts**, never one at a
+time: emitted BY the USDG contract, TO the treasury, FROM the order's own owner,
+for EXACTLY the amount that order was quoted — the unique fraction included. The
+`from` check is what closes the pixelwar C-1 class outright: a stranger who
+copies a hash out of an explorer credits nothing, because they are not the
+address that sent it.
+
+**The chain is checked first and from our own node.** `eth_chainId` must answer
+4663 before a single log is read. A testnet payment costs nothing to make and
+looks identical in every other respect, and that is precisely how a wall becomes
+free.
+
+### The rail ships OFF, and `/api/status` is how anybody can tell
+
+**Decided by the owner, 2026-09-04.** `ROBINHOOD_TREASURY_ADDRESS` stays empty
+and `ROBINHOOD_PAYMENTS` stays unset until the owner hands over the mainnet
+address. Everything below is built and tested behind that flag.
+
+`GET /api/status` answers the question that until now could only be answered by
+reading Vercel's environment page — **"robinhood rail: off by flag, no
+treasury"** — because a deploy that turned the rail on and a deploy that thought
+it had are otherwise indistinguishable. It reports STATE and never VALUES:
+whether a treasury is set, never which address; that the rail is off, never
+which node it would have used. `status-api.test.ts` reads the whole body in
+every configuration the route can be in and requires neither the address nor the
+node URL to appear in any of them.
+
+### The boot guard fires only when the rail is on — confirmed by the owner
+
+Raised as a judgement call and settled the same day. The owner asked for the
+treasury to be an empty variable "with a test that refuses to start without it";
+a guard that fired on **every** deployed instance would take this site — which
+has no payment rail at all today — down at the next deploy. So the guard is tied
+to the rail being switched on: `ROBINHOOD_PAYMENTS=true` is the deliberate act,
+and the moment it is taken, an empty or absent treasury refuses the boot. With
+the rail off the instance starts normally and `/api/status` says why.
+
+A treasury that is present but MALFORMED refuses the boot either way, rail on or
+off, because a typo boots, takes money, and sends it where nobody holds a key.
+
+### The testnet rehearsal RAN, against real data and with no faucet
+
+**2026-09-04, testnet 46630.** The first plan needed a funded account and a
+stablecoin deployed there, and both were blocked: USDG's mainnet address has no
+code on 46630 (checked), and the deployer key that put `keys` on that chain is
+in no repository, correctly. Every faucet on that chain is behind a captcha.
+
+**So the rehearsal reads a transfer that already exists** rather than making
+one. `scripts/rail-rehearsal.mts` points the REAL verifier at a real ERC-20
+transfer on 46630 — a receipt this repository did not write and could not have
+tailored to itself — and then re-reads the same receipt four more times with one
+fact moved each time:
+
+```
+  ok  the transfer as it really happened         settles  0x538391f5…7c83cb
+  ok  one base unit more than was sent           refused
+  ok  the same transfer, a different treasury    refused
+  ok  presented by somebody who did not send it  refused
+  ok  read as if this node were mainnet          refused  wrong_chain
+```
+
+**It found a bug on its first run**, which is the entire argument for rehearsing
+against real data. The token it was pointed at has eighteen decimals, and the
+transfer moved 2.98 × 10¹⁶ base units — past 2⁵³. `Order.paymentBaseUnits` is a
+JavaScript number, so the amount rounded on the way into the comparison and a
+transfer that really happened was **refused**. It cannot reach a real order here
+(six decimals put the whole wall at 10¹²), but the verifier now refuses an
+amount it cannot represent exactly instead of comparing a rounded one, and
+`robinhood.test.ts` carries the case with the incident in its comment. No
+fixture would have produced it.
+
+**What the rehearsal does NOT cover**: the wallet. A person pressing a button in
+Robinhood Wallet, and what that prompt says, is the other half — see
+`docs/wallet-warnings.md` — and it needs a funded account somebody claims from a
+faucet by hand.
+
+**The testnet treasury is ours and receive-only.** `0x9f8666d8d7ba0c3ac5ef1b936483ea2a21f9c09d`,
+generated for this, with its private key **discarded rather than stored** — which
+is exactly the shape of the mainnet one: `SECURITY.md`'s rule is that this
+repository holds no key that spends, and a testnet exception would be a habit
+rather than a convenience.
+
+### What is not built, and what it is waiting on
+- **The treasury address itself**, which is the owner's to provide and is the
+  reason the rail is off.
+- **A Solana rail.** Still unbuilt. `stubVerifyPayment` remains the only path a
+  Solana-owned order has, and it is refused on any deployed instance.

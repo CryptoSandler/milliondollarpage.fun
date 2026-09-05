@@ -48,7 +48,7 @@ async function seed(fields: Seed = {}): Promise<string> {
   const settled = status === "paid" || status === "minted";
   const rows = await query<{ id: string }>(
     `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
-                         buyer_pubkey, owner_wallet, payment_signature, caption, link, image_fit,
+                         owner_address, owner_wallet, payment_signature, caption, link, image_fit,
                          expires_at)
      VALUES ($10, 34, 50, 20, $1, $2, $3, $8,
              $4, $4, $5, $6, $7, 'contain', $9)

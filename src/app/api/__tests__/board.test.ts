@@ -150,7 +150,7 @@ describe("GET /api/board", () => {
 
   it("never ships the bytes themselves, or the one credential the site has", async () => {
     await execute(
-      `INSERT INTO blocks (x, y, w, h, status, buyer_pubkey, price_per_pixel_usdc, total_usdc,
+      `INSERT INTO blocks (x, y, w, h, status, owner_address, price_per_pixel_usdc, total_usdc,
                            pending_image, pending_image_mime)
        VALUES (0, 0, 10, 10, 'paid', 'AWalletNobodyMayLearn', 1000000, 100000000, $1, 'image/webp')`,
       [Buffer.from([1, 2, 3])],
@@ -160,7 +160,10 @@ describe("GET /api/board", () => {
     // surfaces in this payload — the rectangle list and the settled-purchase
     // tape — so this single assertion covers both.
     expect(raw).not.toContain("AWalletNobodyMayLearn");
+    // Both spellings the column has had, so the rename did not turn this
+    // guard into an assertion about a field name nothing uses any more.
     expect(raw).not.toContain("buyerPubkey");
+    expect(raw).not.toContain("ownerAddress");
     expect(raw).not.toContain("pending_image");
 
     /*

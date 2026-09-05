@@ -50,7 +50,7 @@ async function hold(rect: { x: number; y: number; w: number; h: number }): Promi
     new Request("http://localhost/api/reserve", {
       method: "POST",
       headers: { "content-type": "application/json", "x-forwarded-for": ADDRESS },
-      body: JSON.stringify({ rect, buyerPubkey: BUYER }),
+      body: JSON.stringify({ rect, buyerPubkey: BUYER, chain: "solana" }),
     }),
   );
 }

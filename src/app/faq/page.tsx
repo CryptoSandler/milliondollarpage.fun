@@ -251,7 +251,14 @@ export default function AboutPage() {
           The wall is {BOARD_WIDTH} × {BOARD_HEIGHT}, which is exactly{" "}
           {pixelCount(TOTAL_PIXELS)}. Every one of them is for sale on its own at a dollar. You draw
           any free rectangle — one pixel or ten thousand, no grid to snap to and no minimum — pay for
-          its area in USDC with a Solana wallet, and those pixels are yours.
+          its area in a dollar stablecoin, and those pixels are yours.
+        </p>
+        <p className="mt-3 text-[16px] leading-relaxed text-body">
+          There are two ways to pay, and they cost the same:{" "}
+          <span className="font-semibold text-ink">USDC on Solana</span>, or{" "}
+          <span className="font-semibold text-ink">USDG on Robinhood Chain</span>. Both are dollars
+          with six decimals, so the price on the label is the amount your wallet is asked for — there
+          is no exchange rate anywhere on this site, and nothing is converted on the way.
         </p>
         <p className="mt-3 text-[16px] leading-relaxed text-body">
           There is no auction, no tier and no price that goes up. The last pixel costs what the first
@@ -388,7 +395,7 @@ export default function AboutPage() {
           arithmetic rather than about a chain.
         </p>
         <p className="mt-3 text-[16px] leading-relaxed text-body">
-          The rest follows from it: payment in USDC so the price on the label is the price you pay,
+          The rest follows from it: payment in a dollar stablecoin so the price on the label is the price you pay,
           settlement in seconds so a held rectangle does not sit waiting, and one signature per step
           so nothing about your rectangle can be changed by anybody who is not you — including us.
         </p>

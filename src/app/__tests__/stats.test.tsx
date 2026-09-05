@@ -20,7 +20,7 @@ const PER_PIXEL = 1_000_000;
 async function sell(x: number, w: number, h: number, at: string, buyer = "AWalletNobodyMayLearn") {
   await execute(
     `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
-                         buyer_pubkey, payment_signature)
+                         owner_address, payment_signature)
      VALUES ($1, 0, $2, $3, 'paid', $4, $5, $6, $7, $8)`,
     [x, w, h, PER_PIXEL, w * h * PER_PIXEL, at, buyer, `sig-${x}`],
   );

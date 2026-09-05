@@ -10,7 +10,10 @@ import {
 } from "../../../../../lib/board/orders";
 import { consumeChallenge } from "../../../../../lib/board/challenge";
 import { stubPaymentsAllowed, stubVerifyPayment } from "../../../../../lib/board/payment-stub";
+import { verifyUsdgPayment, type PaymentVerdict } from "../../../../../lib/payments/robinhood";
+import { robinhoodRailEnabled } from "../../../../../lib/payments/usdg";
 import { NO_STORE, identify, isUuid, json, problem } from "../../../../../lib/http";
+import { sameOwner } from "../../../../../lib/board/owner";
 
 /**
  * The one thing every 403 here says, whatever went wrong.
@@ -34,7 +37,7 @@ const UNSIGNED =
  * ## What replaced the address in the body
  *
  * This route used to take `buyerPubkey` in its body and compare it against
- * `blocks.buyer_pubkey`. A wallet address is public by construction, so that
+ * `blocks.owner_address`. A wallet address is public by construction, so that
  * compared one public value with another and proved nothing — the same hole
  * `migrations/003_release_challenges.sql` closed for the DELETE and the
  * 2026-08-28 audit found still open here (F1). Now the caller asks
@@ -45,7 +48,7 @@ const UNSIGNED =
  *
  * That is the client's half of proving a purchase, and it stays necessary
  * when the on-chain half lands: the payer read off a confirmed transfer is
- * compared against `blocks.buyer_pubkey` as well, and neither check stands in
+ * compared against `blocks.owner_address` as well, and neither check stands in
  * for the other.
  *
  * Ownership is proved immediately after the order loads, before
@@ -61,7 +64,15 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  if (!stubPaymentsAllowed()) return problem(404, "Not found.");
+  /*
+    THE ROUTE EXISTS WHEN THERE IS A WAY TO PAY, and there are two of them: the
+    stub, which cannot be switched on in a deployed environment, and the
+    Robinhood rail. Which one applies is decided per ORDER a few lines down —
+    off its owner's chain — because a board that sells to two chains has to be
+    able to say "not this way" to one of them without pretending the route is
+    missing.
+  */
+  if (!stubPaymentsAllowed() && !robinhoodRailEnabled()) return problem(404, "Not found.");
 
   const { id } = await params;
   if (!isUuid(id)) return problem(404, "That order does not exist.");
@@ -81,13 +92,39 @@ export async function POST(
 
   // Spent before it is examined, and before anything is verified or written.
   const proven = await consumeChallenge(id, "pay", body);
-  if (proven === null || proven !== order.buyerPubkey) return problem(403, UNSIGNED);
+  /*
+    BOTH HALVES OF THE OWNER, and `sameOwner` is where that is written once.
+    Comparing addresses alone is the shape this code had before migration 016
+    and is the bug that migration exists to prevent: the same twenty bytes
+    proved on one chain would have satisfied a rectangle owned on the other.
+  */
+  if (proven === null || !sameOwner(proven, { chain: order.ownerChain, address: order.ownerAddress })) {
+    return problem(403, UNSIGNED);
+  }
 
-  const verified = await stubVerifyPayment(order);
-  if (!verified.ok) return problem(409, verified.reason);
+  /*
+    ONE VERIFIER PER CHAIN, PICKED BY THE ORDER'S OWN OWNER — never by anything
+    in the request. A rectangle held on Robinhood Chain is settled by a transfer
+    read back off that chain; anything else falls to the stub, which is refused
+    outright on a deployed instance and is the only reason this branch exists at
+    all before a Solana rail is built.
+  */
+  const verified =
+    order.ownerChain === "robinhood" && robinhoodRailEnabled()
+      ? await verifyUsdgPayment(order, (body as { txHash?: unknown }).txHash)
+      : stubAsVerdict(await stubVerifyPayment(order));
+
+  if (!verified.ok) {
+    // A node we cannot reach is OUR problem and is worth retrying; a hash that
+    // is not a hash is the caller's; everything else is a payment that exists
+    // but does not settle this rectangle.
+    if (verified.reason === "unavailable") return problem(503, verified.message);
+    if (verified.reason === "malformed") return problem(400, verified.message);
+    return problem(409, verified.message);
+  }
 
   try {
-    const paid = await markPaid(id, proven, verified.signature);
+    const paid = await markPaid(id, proven.address, verified.signature);
     // Paid, and to the wallet that just proved itself: the amount it was
     // asked to send comes back with the receipt and goes nowhere else.
     return json(toProvenOrder(paid), { headers: NO_STORE });
@@ -99,4 +136,19 @@ export async function POST(
     if (error instanceof SignatureAlreadyUsed) return problem(409, error.message);
     throw error;
   }
+}
+
+/**
+ * The stub's answer in the rail's shape, so this route has one verdict type.
+ *
+ * The stub predates the rail and says `{ ok, reason }` where the rail says
+ * `{ ok, reason, message }`. Adapting here rather than editing `payment-stub.ts`
+ * keeps the module that will be DELETED from growing a vocabulary it only needs
+ * in order to be deleted.
+ */
+function stubAsVerdict(
+  result: { ok: true; signature: string } | { ok: false; reason: string },
+): PaymentVerdict {
+  if (result.ok) return result;
+  return { ok: false, reason: "no_matching_transfer", message: result.reason };
 }

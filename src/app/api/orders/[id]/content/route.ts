@@ -12,6 +12,7 @@ import {
 import { consumeChallenge } from "../../../../../lib/board/challenge";
 import { checkContentSubmissionLimits } from "../../../../../lib/callers/limits";
 import { NO_STORE, identify, isUuid, json, problem } from "../../../../../lib/http";
+import { sameOwner } from "../../../../../lib/board/owner";
 
 const MAX_REQUEST_BYTES = CONTENT_LIMITS.maxBytes + MULTIPART_FRAMING_ALLOWANCE_BYTES;
 
@@ -34,7 +35,7 @@ const UNSIGNED =
  * ## What replaced the address in the form
  *
  * This route used to read `buyerPubkey` out of the multipart body and treat a
- * match against `blocks.buyer_pubkey` as proof the caller was the buyer. That
+ * match against `blocks.owner_address` as proof the caller was the buyer. That
  * proved nothing: a wallet address is public by construction, `/api/board`
  * publishes every live block's id, and the payable amount published beside it
  * made the pair (order id, payer) readable off a public chain the moment a
@@ -116,10 +117,19 @@ export async function POST(
   // nothing from which mistake they made.
   const proven = await consumeChallenge(id, "attach", {
     nonce: form.get("nonce"),
+    chain: form.get("chain"),
     publicKey: form.get("publicKey"),
     signature: form.get("signature"),
   });
-  if (proven === null || proven !== order.buyerPubkey) return problem(403, UNSIGNED);
+  /*
+    BOTH HALVES OF THE OWNER, and `sameOwner` is where that is written once.
+    Comparing addresses alone is the shape this code had before migration 016
+    and is the bug that migration exists to prevent: the same twenty bytes
+    proved on one chain would have satisfied a rectangle owned on the other.
+  */
+  if (proven === null || !sameOwner(proven, { chain: order.ownerChain, address: order.ownerAddress })) {
+    return problem(403, UNSIGNED);
+  }
 
   if (order.status === "reserved" && order.expiresAt !== null && Date.parse(order.expiresAt) <= Date.now()) {
     return problem(410, new OrderExpired().message);
@@ -174,7 +184,7 @@ export async function POST(
   }
 
   try {
-    const updated = await attachContent(id, proven, validated.content);
+    const updated = await attachContent(id, proven.address, validated.content);
     // The caller proved the key a few statements ago, so they get back their
     // own caption and link — and the payable amount, which is the number they
     // need next and the one `toPublicOrder` withholds from everybody else.

@@ -1,3 +1,5 @@
+import { isEvmAddress, robinhoodRailEnabled } from "./payments/usdg";
+
 /**
  * Environment readers.
  *
@@ -102,6 +104,48 @@ export function assertPaymentClusterNotMisconfigured(): void {
     throw new Error(
       "SOLANA_RPC_URL points at a test cluster on a deployed instance. A payment " +
         "proven there is free to fabricate, so it must never settle an order here.",
+    );
+  }
+}
+
+/**
+ * Refuses to start with the Robinhood rail on and nowhere to send the money.
+ *
+ * WHAT THIS IS SCOPED TO, AND WHY IT IS NOT UNCONDITIONAL. The owner asked for
+ * the treasury to be an empty variable "with a test that refuses to start
+ * without it". A guard that fired on every deployed instance would take THIS
+ * SITE — which has no payment rail at all today — down at the next deploy, so
+ * the guard is tied to the rail being switched on: `ROBINHOOD_PAYMENTS=true` is
+ * the deliberate act, and the moment it is taken the treasury stops being
+ * optional. The malformed case is checked whenever a value is present at all,
+ * because a treasury with a typo in it is worse than none: it boots, it takes
+ * payments, and the money lands nowhere anybody holds a key for.
+ */
+export function assertRobinhoodRailConfigured(): void {
+  const raw = process.env.ROBINHOOD_TREASURY_ADDRESS?.trim();
+
+  if (raw && !isEvmAddress(raw)) {
+    throw new Error(
+      "ROBINHOOD_TREASURY_ADDRESS is set but is not an EVM address (0x and forty hex " +
+        "characters). A malformed treasury is a payment nobody receives.",
+    );
+  }
+
+  if (!robinhoodRailEnabled()) return;
+
+  if (!raw) {
+    throw new Error(
+      "ROBINHOOD_PAYMENTS is true but ROBINHOOD_TREASURY_ADDRESS is empty. The rail " +
+        "would take USDG from buyers and credit rectangles against a transfer to " +
+        "nobody. Set the treasury's public address, or turn the rail off.",
+    );
+  }
+
+  if (!process.env.ROBINHOOD_RPC_URL?.trim()) {
+    throw new Error(
+      "ROBINHOOD_PAYMENTS is true but ROBINHOOD_RPC_URL is empty. A payment is only " +
+        "settled after it has been read back off the chain, and there is no node to " +
+        "read it from.",
     );
   }
 }

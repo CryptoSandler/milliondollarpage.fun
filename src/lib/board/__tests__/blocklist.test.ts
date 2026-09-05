@@ -24,7 +24,7 @@ const sha = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 async function sell(x: number, bytes: Buffer | null): Promise<string> {
   const rows = await query<{ id: string }>(
     `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
-                         buyer_pubkey, payment_signature, caption, link,
+                         owner_address, payment_signature, caption, link,
                          pending_image, pending_image_mime, image_sha256)
      VALUES ($1, 0, 10, 10, 'paid', $2, $3, now(), 'AWalletNobodyMayLearn', $4,
              'a caption', 'https://example.org', $5, $6, $7)

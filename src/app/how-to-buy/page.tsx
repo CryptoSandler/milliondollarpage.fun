@@ -40,7 +40,7 @@ export const dynamic = "force-static";
 export const metadata: Metadata = {
   title: "How to buy · milliondollarpage.fun",
   description:
-    "Three steps, from no wallet at all to a rectangle of the wall that is yours: install Phantom, put some SOL and USDC in it, then choose your pixels and sign.",
+    "Three steps, from no wallet at all to a rectangle of the wall that is yours: install Phantom, put some SOL and USDC in it, then choose your pixels and sign. Or pay in USDG from a Robinhood Wallet you already have.",
 };
 
 export default function HowToBuyPage() {
@@ -149,9 +149,10 @@ export default function HowToBuyPage() {
           </p>
           <p>
             Then your wallet opens and asks you to sign. Read what it says: it should be one
-            transfer, in USDC, on Solana, for the amount the panel showed you. We never ask for your
-            recovery phrase — no site ever should — and there is no second signature and no approval
-            for us to spend anything later.
+            transfer, in the stablecoin you are paying with, on the chain you connected from, for
+            the amount the panel showed you. We never ask for your recovery phrase — no site ever
+            should — and there is no second signature and no approval for us to spend anything
+            later.
           </p>
           <p>
             <strong className="font-semibold text-ink">What you get, the moment it settles:</strong>{" "}
@@ -163,6 +164,43 @@ export default function HowToBuyPage() {
             them, and they never expire.
           </p>
         </Step>
+
+        <section className="mt-14 rounded-xl border border-hairline-strong bg-card p-5">
+          <h2 className="font-display text-[19px] font-semibold tracking-tight">
+            The other way in: Robinhood Chain, paying in USDG
+          </h2>
+          <p className="mt-3 text-[15px] leading-relaxed text-body">
+            Everything above is the Solana route. There is a second one, and it exists because the
+            first two steps are the hard ones: if you already keep money in the{" "}
+            <strong className="font-semibold text-ink">Robinhood Wallet</strong>, you have a wallet
+            and you have dollars, and there is nothing to install.
+          </p>
+          <ul className="mt-4 flex list-disc flex-col gap-2 pl-5 text-[15px] leading-relaxed text-body">
+            <li>
+              You pay in <strong className="font-semibold text-ink">USDG</strong>, the dollar
+              stablecoin issued on Robinhood Chain. It has six decimals, the same as USDC, so{" "}
+              <strong className="font-semibold text-ink">the price is the same number</strong> — a
+              thousand pixels is a thousand dollars on either route, and nothing is converted
+              anywhere.
+            </li>
+            <li>
+              The network fee is paid in a very small amount of ETH on that chain, the way the
+              Solana route needs a little SOL.
+            </li>
+            <li>
+              Your rectangle is registered to the address you connected with, on that chain, and it
+              is that address — not any other — that can attach the picture, pay and later prove the
+              rectangle is yours. The two chains are kept apart on purpose: a signature made on one
+              proves nothing on the other.
+            </li>
+          </ul>
+          <p className="mt-3 text-[14px] text-body">
+            The rest is identical: draw a rectangle, it is held for half an hour, upload a picture,
+            sign one transfer for the amount shown. The page at{" "}
+            <code className="rounded bg-card-lift px-1 py-0.5 text-[13.5px]">/b/&lt;id&gt;</code>{" "}
+            says which chain each rectangle was bought on, and nothing else about who bought it.
+          </p>
+        </section>
 
         <section className="mt-14 rounded-xl border border-hairline-strong bg-card p-5">
           <h2 className="font-display text-[19px] font-semibold tracking-tight">

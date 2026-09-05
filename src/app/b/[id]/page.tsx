@@ -7,6 +7,7 @@ import { badgeUrl, blockImageUrl, shareCardUrl } from "../../../lib/board/block-
 import { blockPageUrl } from "../../../lib/board/block-details";
 import { renderBadge } from "../../../lib/board/badge";
 import { getBlockPage, type BlockPage } from "../../../lib/board/blocks";
+import type { OwnerChain } from "../../../lib/board/owner";
 import { formatUsdc, pixelCount } from "../../../lib/board/pricing";
 import { isUuid } from "../../../lib/http";
 import { absoluteUrl } from "../../../lib/site";
@@ -115,6 +116,12 @@ export async function generateMetadata({
   };
 }
 
+/** What the "Paid" figure says under it, per rail. One dollar, two rails. */
+const PAID_ON: Record<OwnerChain, string> = {
+  solana: "USDC, on Solana",
+  robinhood: "USDG, on Robinhood Chain",
+};
+
 export default async function BlockPageRoute({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const block = await pageFor(id);
@@ -179,7 +186,19 @@ export default async function BlockPageRoute({ params }: { params: Promise<{ id:
         */}
         <dl className="mt-8 grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-hairline-strong bg-hairline-strong sm:grid-cols-2 md:grid-cols-4">
           <Figure term="Pixels" value={block.pixels.toLocaleString("en-US")} note="one dollar each" />
-          <Figure term="Paid" value={formatUsdc(block.totalBaseUnits)} note="USDC, on Solana" />
+          <Figure
+            term="Paid"
+            value={formatUsdc(block.totalBaseUnits)}
+            /*
+              THE RAIL THIS RECTANGLE WAS ACTUALLY PAID ON. This line said
+              "USDC, on Solana" for every block until the second rail existed,
+              which was true of every block at the time and is a sentence that
+              quietly becomes wrong rather than absent. A dollar is a dollar
+              either way — the wall is priced in six-decimal base units and both
+              stablecoins carry six — so the figure above does not change.
+            */
+            note={PAID_ON[block.ownerChain]}
+          />
           <Figure
             term="Settled"
             value={block.paidAt.slice(0, 10)}

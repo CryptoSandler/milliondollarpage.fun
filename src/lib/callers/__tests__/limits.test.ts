@@ -201,7 +201,7 @@ describe("the pixel-minute budget", () => {
 
   it("survives the sweep, so a lapsed hold still counts against its caller", async () => {
     const rect = { x: 0, y: 0, w: 100, h: 100 };
-    await reserveRect(rect, BUYER, CALLER);
+    await reserveRect(rect, { chain: "solana", address: BUYER }, CALLER);
     await expireEverything();
 
     // The sweep runs inside this check and deletes the block. The charge must
@@ -227,7 +227,7 @@ describe("the pixel-minute budget", () => {
         expect(Date.parse(decision.retryAt)).toBeGreaterThan(Date.now());
         break;
       }
-      await reserveRect(rect, BUYER, CALLER);
+      await reserveRect(rect, { chain: "solana", address: BUYER }, CALLER);
       taken += 1;
       await expireEverything();
     }
@@ -243,7 +243,7 @@ describe("the pixel-minute budget", () => {
     for (let attempt = 0; attempt < 4; attempt++) {
       const decision = await checkReservationLimits(OTHER, rect);
       if (!decision.ok) break;
-      await reserveRect(rect, BUYER, OTHER);
+      await reserveRect(rect, { chain: "solana", address: BUYER }, OTHER);
       await expireEverything();
     }
     expect(await checkReservationLimits(CALLER, rect)).toEqual({ ok: true });

@@ -27,7 +27,7 @@ async function soldBlock(): Promise<string> {
   // the point, so a fixed rectangle would collide with the previous test's.
   const x = 200 + slot++ * 20;
   await execute(
-    `INSERT INTO blocks (id, x, y, w, h, status, price_per_pixel_usdc, total_usdc, buyer_pubkey, created_at)
+    `INSERT INTO blocks (id, x, y, w, h, status, price_per_pixel_usdc, total_usdc, owner_address, created_at)
      VALUES ($1, $2, 500, 10, 10, 'paid', 1000000, 100000000, $3, now())`,
     [id, x, OWNER],
   );
@@ -35,11 +35,11 @@ async function soldBlock(): Promise<string> {
 }
 
 async function ownerOf(id: string): Promise<string | null> {
-  const rows = await query<{ buyer_pubkey: string | null }>(
-    "SELECT buyer_pubkey FROM blocks WHERE id = $1",
+  const rows = await query<{ owner_address: string | null }>(
+    "SELECT owner_address FROM blocks WHERE id = $1",
     [id],
   );
-  return rows[0]?.buyer_pubkey ?? null;
+  return rows[0]?.owner_address ?? null;
 }
 
 beforeEach(() => {
@@ -50,9 +50,31 @@ describe("a sale cannot change hands", () => {
   it("refuses the direct owner change", async () => {
     const id = await soldBlock();
     await expect(
-      execute("UPDATE blocks SET buyer_pubkey = $2 WHERE id = $1", [id, THIEF]),
+      execute("UPDATE blocks SET owner_address = $2 WHERE id = $1", [id, THIEF]),
     ).rejects.toThrow(/cannot be changed/);
     expect(await ownerOf(id)).toBe(OWNER);
+  });
+
+  /**
+   * The half migration 016 added, and the reason the trigger names a PAIR.
+   *
+   * The address alone is not the owner any more: the same forty characters can
+   * be a Solana account and, in another alphabet, nothing at all — and the
+   * chain column is what says which. A trigger that watched only
+   * `owner_address` would let an UPDATE move a sale from one chain to the
+   * other while every character of the address stayed put, and the row would
+   * then belong to whoever controls that address on the chain it was moved to.
+   */
+  it("refuses the chain change, which moves the sale without touching the address", async () => {
+    const id = await soldBlock();
+    await expect(
+      execute("UPDATE blocks SET owner_chain = 'robinhood' WHERE id = $1", [id]),
+    ).rejects.toThrow(/cannot be changed/);
+    const rows = await query<{ owner_chain: string; owner_address: string }>(
+      "SELECT owner_chain, owner_address FROM blocks WHERE id = $1",
+      [id],
+    );
+    expect(rows[0]).toEqual({ owner_chain: "solana", owner_address: OWNER });
   });
 
   /**
@@ -82,16 +104,16 @@ describe("a sale cannot change hands", () => {
           "UPDATE blocks SET status = 'reserved', expires_at = now() + interval '1 hour' WHERE id = $1",
           [id],
         );
-        await execute("UPDATE blocks SET buyer_pubkey = $2 WHERE id = $1", [id, THIEF]);
+        await execute("UPDATE blocks SET owner_address = $2 WHERE id = $1", [id, THIEF]);
         await execute("UPDATE blocks SET status = 'paid', expires_at = NULL WHERE id = $1", [id]);
       })(),
     ).rejects.toThrow();
 
-    const rows = await query<{ status: string; buyer_pubkey: string }>(
-      "SELECT status, buyer_pubkey FROM blocks WHERE id = $1",
+    const rows = await query<{ status: string; owner_address: string }>(
+      "SELECT status, owner_address FROM blocks WHERE id = $1",
       [id],
     );
-    expect(rows[0]).toEqual({ status: "paid", buyer_pubkey: OWNER });
+    expect(rows[0]).toEqual({ status: "paid", owner_address: OWNER });
   });
 });
 
@@ -107,7 +129,7 @@ describe("a sale cannot be deleted", () => {
   it("still deletes holds, because the expiry sweep depends on it", async () => {
     const id = randomUUID();
     await execute(
-      `INSERT INTO blocks (id, x, y, w, h, status, price_per_pixel_usdc, total_usdc, buyer_pubkey, expires_at, created_at)
+      `INSERT INTO blocks (id, x, y, w, h, status, price_per_pixel_usdc, total_usdc, owner_address, expires_at, created_at)
        VALUES ($1, 400, 500, 10, 10, 'reserved', 1000000, 100000000, $2, now() + interval '1 hour', now())`,
       [id, OWNER],
     );
@@ -128,16 +150,16 @@ describe("what 011 must NOT have broken", () => {
 
     const rows = await query<{
       status: string;
-      buyer_pubkey: string;
+      owner_address: string;
       purged_at: Date | null;
       caption: string | null;
-    }>("SELECT status, buyer_pubkey, purged_at, caption FROM blocks WHERE id = $1", [id]);
+    }>("SELECT status, owner_address, purged_at, caption FROM blocks WHERE id = $1", [id]);
 
     // Content gone, sale and owner exactly as they were: SECURITY.md's rule
     // that a takedown is about what is displayed and never about who owns it.
     expect(rows[0].caption).toBeNull();
     expect(rows[0].purged_at).not.toBeNull();
     expect(rows[0].status).toBe("paid");
-    expect(rows[0].buyer_pubkey).toBe(OWNER);
+    expect(rows[0].owner_address).toBe(OWNER);
   });
 });

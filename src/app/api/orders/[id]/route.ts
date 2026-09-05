@@ -9,6 +9,7 @@ import {
 import { BUYER_PUBKEY_HEADER } from "../../../../lib/board/purchase-client";
 import { consumeChallenge } from "../../../../lib/board/challenge";
 import { NO_STORE, isUuid, json, problem } from "../../../../lib/http";
+import { sameOwner } from "../../../../lib/board/owner";
 
 /**
  * An order's current state, for polling a hold or a confirmation screen.
@@ -131,10 +132,18 @@ export async function DELETE(
   // caller presented it, so it is used up. Nothing about the order is read
   // out of this — an address comes back, or nothing does.
   const proven = await consumeChallenge(id, "release", body);
-  if (proven === null || proven !== order.buyerPubkey) return problem(403, UNSIGNED);
+  /*
+    BOTH HALVES OF THE OWNER, and `sameOwner` is where that is written once.
+    Comparing addresses alone is the shape this code had before migration 016
+    and is the bug that migration exists to prevent: the same twenty bytes
+    proved on one chain would have satisfied a rectangle owned on the other.
+  */
+  if (proven === null || !sameOwner(proven, { chain: order.ownerChain, address: order.ownerAddress })) {
+    return problem(403, UNSIGNED);
+  }
 
   try {
-    await releaseOwnReservation(id, proven);
+    await releaseOwnReservation(id, proven.address);
     return new Response(null, { status: 204, headers: NO_STORE });
   } catch (error) {
     if (error instanceof OrderNotFound) return problem(404, error.message);

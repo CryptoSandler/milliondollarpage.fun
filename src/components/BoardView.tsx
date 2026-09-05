@@ -26,6 +26,7 @@ import ThemeToggle from "./ThemeToggle";
 import SelectionPanel from "./SelectionPanel";
 import WalletConnect from "./WalletConnect";
 import { useWallet } from "./useWallet";
+import type { ProvenOwner } from "../lib/board/owner";
 
 /**
  * What `/api/board` ships, and what the page is rendered from on the server.
@@ -117,6 +118,14 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
    */
   const wallet = useWallet();
   const buyerPubkey = wallet.connected?.address ?? "";
+  /*
+    Every wallet `useWallet` can list is a Solana Wallet Standard wallet, so
+    the chain here is a fact about the code and not a guess about the
+    connection — the same argument `walletSigner` makes where it stamps
+    `sign.chain = "solana"`. A second chain arrives as a second connector,
+    with its own name for its own chain, not as a default silently reused.
+  */
+  const buyerOwner: ProvenOwner = { chain: "solana", address: buyerPubkey };
 
   /**
    * The one seam every signed step goes through.
@@ -1048,7 +1057,7 @@ export default function BoardView({ initial }: { initial: BoardPayload }) {
       {purchaseSelection && (
         <PurchaseDialog
           selection={purchaseSelection}
-          buyerPubkey={buyerPubkey}
+          owner={buyerOwner}
           sign={sign}
           knownHoldIds={ownHoldIds}
           onHoldStarted={rememberOwnHold}

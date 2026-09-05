@@ -12,10 +12,12 @@ export async function register() {
     assertStubPaymentsNotInProduction,
     assertUntrustedClientIpNotInProduction,
     assertPaymentClusterNotMisconfigured,
+    assertRobinhoodRailConfigured,
     assertSchemaIsCurrent,
   } = await import("./lib/config");
   assertStubPaymentsNotInProduction();
   assertUntrustedClientIpNotInProduction();
   assertPaymentClusterNotMisconfigured();
+  assertRobinhoodRailConfigured();
   await assertSchemaIsCurrent();
 }

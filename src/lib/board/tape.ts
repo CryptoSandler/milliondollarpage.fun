@@ -12,7 +12,7 @@ import { query } from "../db";
  *
  * Size, position, amount, a truncated settlement signature, and when it
  * settled. Every one of those is a fact about a RECTANGLE. Nothing here
- * identifies a person: `buyer_pubkey` and `owner_wallet` are not selected, and
+ * identifies a person: `owner_address` and `owner_wallet` are not selected, and
  * adding either to this query is the one change to this file that would need
  * an argument rather than a review.
  *

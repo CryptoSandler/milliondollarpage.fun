@@ -27,7 +27,7 @@ async function sell(
 ): Promise<void> {
   await execute(
     `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc,
-                         paid_at, payment_signature, buyer_pubkey)
+                         paid_at, payment_signature, owner_address)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
     [
       x,
@@ -147,8 +147,12 @@ describe("recentPurchases", () => {
 
       const rows = await recentPurchases();
       expect(JSON.stringify(rows)).not.toContain("BUYERWALLETADDRESSTHATMUSTNEVERAPPEAR");
-      expect(Object.keys(rows[0])).not.toContain("buyerPubkey");
-      expect(Object.keys(rows[0])).not.toContain("ownerWallet");
+      // Both spellings the column has had, and both halves of the pair: the
+      // guard has to name what the code calls the field TODAY, or it passes by
+      // asserting the absence of a name nothing uses any more.
+      for (const forbidden of ["buyerPubkey", "ownerAddress", "ownerChain", "ownerWallet"]) {
+        expect(Object.keys(rows[0]), forbidden).not.toContain(forbidden);
+      }
     });
 
     it("says a sale is unsigned rather than inventing a proof for it", async () => {

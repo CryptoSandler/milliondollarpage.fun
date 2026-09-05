@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { execute, queryOne } from "../db";
 import { challengeMessage, verifySignature, type ChallengeAction } from "../wallet/signature";
+import { verifyEvmSignature } from "../wallet/evm";
+import { isOwnerChain, type OwnerChain, type ProvenOwner } from "./owner";
 
 /**
  * The single-use half of proving an order is yours.
@@ -54,9 +56,21 @@ export type IssuedChallenge = {
 
 export type OwnershipProof = {
   nonce: string;
+  /**
+   * WHICH CHAIN THE ADDRESS AND THE SIGNATURE BELONG TO, named and never
+   * inferred.
+   *
+   * CLAUDE.md's money rules say the chain is named rather than read off
+   * whatever mode a wallet happens to be in, and the same reasoning reaches one
+   * step earlier than a transaction: a verifier that guessed from the SHAPE of
+   * an address would be guessing, and the two alphabets are close enough that a
+   * guess is a decision nobody wrote down. There is no default. A proof that
+   * does not say which chain it is from is not a proof this accepts.
+   */
+  chain: OwnerChain;
   /** The address claiming to have signed. Proved, never trusted. */
   publicKey: string;
-  /** base58, 64 bytes, as every Solana wallet returns it. */
+  /** base58 for Solana, `0x` and 130 hex for an EVM `personal_sign`. */
   signature: string;
 };
 
@@ -133,7 +147,7 @@ export async function consumeChallenge(
   orderId: string,
   action: ChallengeAction,
   proof: unknown,
-): Promise<string | null> {
+): Promise<ProvenOwner | null> {
   const parsed = readProof(proof);
   if (!parsed) return null;
 
@@ -158,19 +172,36 @@ export async function consumeChallenge(
     nonce: parsed.nonce,
     issuedAt: spent.issued_at.toISOString(),
   });
-  return verifySignature(message, parsed.signature, parsed.publicKey) ? parsed.publicKey : null;
+  /*
+    ONE VERIFIER PER CHAIN, PICKED BY WHAT THE PROOF SAYS IT IS.
+
+    They cannot be tried in turn: ed25519 and secp256k1 refuse each other's
+    signatures outright, so falling through from one to the other would not be
+    "being lenient", it would be letting the CLAIM decide which cryptography
+    applies. The proof names its chain and is judged by that one.
+  */
+  const ok =
+    parsed.chain === "robinhood"
+      ? verifyEvmSignature(message, parsed.signature, parsed.publicKey)
+      : verifySignature(message, parsed.signature, parsed.publicKey);
+
+  return ok ? { chain: parsed.chain, address: parsed.publicKey } : null;
 }
 
-/** The three strings, or null if what arrived is not that shape. */
+/** The four fields, or null if what arrived is not that shape. */
 function readProof(proof: unknown): OwnershipProof | null {
   if (typeof proof !== "object" || proof === null) return null;
   const record = proof as Record<string, unknown>;
   const nonce = record.nonce;
   const publicKey = record.publicKey;
   const signature = record.signature;
+  const chain = record.chain;
   if (typeof nonce !== "string" || typeof publicKey !== "string" || typeof signature !== "string") {
     return null;
   }
   if (nonce === "" || publicKey === "" || signature === "") return null;
-  return { nonce, publicKey, signature };
+  // No default. A proof that does not name its chain is refused rather than
+  // assumed to be the older one — see `OwnershipProof.chain`.
+  if (!isOwnerChain(chain)) return null;
+  return { nonce, chain, publicKey, signature };
 }

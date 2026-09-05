@@ -39,7 +39,7 @@ function content(overrides: Partial<ValidatedContent> = {}): ValidatedContent {
 }
 
 async function hold(x = 0, y = 0, w = 10, h = 10) {
-  return reserveRect({ x, y, w, h }, BUYER, CALLER);
+  return reserveRect({ x, y, w, h }, { chain: "solana", address: BUYER }, CALLER);
 }
 
 /** Pushes a live hold's expiry into the past without touching anything else. */
@@ -59,7 +59,7 @@ async function expire(id: string): Promise<void> {
  */
 describe("a single pixel, bought end to end", () => {
   it("is held, filled in, paid for, and shows on the board as one pixel for one dollar", async () => {
-    const held = await reserveRect({ x: 137, y: 41, w: 1, h: 1 }, BUYER, CALLER);
+    const held = await reserveRect({ x: 137, y: 41, w: 1, h: 1 }, { chain: "solana", address: BUYER }, CALLER);
     expect(held.pixels).toBe(1);
     expect(formatUsdc(held.totalBaseUnits)).toBe("$1");
 
@@ -105,7 +105,7 @@ describe("getOrder", () => {
     expect(order).not.toBeNull();
     expect(order!.status).toBe("reserved");
     expect(order!.rect).toEqual({ x: 0, y: 0, w: 10, h: 10 });
-    expect(order!.buyerPubkey).toBe(BUYER);
+    expect(order!.ownerAddress).toBe(BUYER);
     expect(order!.totalBaseUnits).toBe(100_000_000);
     expect(order!.paymentBaseUnits).toBeGreaterThan(order!.totalBaseUnits);
     expect(order!.expiresAt).not.toBeNull();
@@ -324,7 +324,7 @@ describe("releaseOwnReservation", () => {
 
     // The point of the whole feature: those pixels are buyable again at once,
     // not when the sweep would have got to them.
-    const again = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, BUYER, CALLER);
+    const again = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, { chain: "solana", address: BUYER }, CALLER);
     expect(again.rect).toEqual({ x: 0, y: 0, w: 20, h: 20 });
     expect(again.id).not.toBe(held.id);
   });
@@ -355,7 +355,7 @@ describe("releaseOwnReservation", () => {
     const survivor = await getOrder(held.id);
     expect(survivor, "a stranger's refusal must not cost the owner their hold").not.toBeNull();
     expect(survivor!.status).toBe("reserved");
-    expect(survivor!.buyerPubkey).toBe(BUYER);
+    expect(survivor!.ownerAddress).toBe(BUYER);
   });
 
   it("refuses a PAID order to its own buyer, and the sale survives", async () => {

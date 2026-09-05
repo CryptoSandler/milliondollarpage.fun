@@ -55,11 +55,21 @@ const challenge = () =>
     expiresAt: "2026-08-25T12:02:00.000Z",
   });
 
-/** A wallet that signs whatever it is shown, so the text can be asserted on. */
-const signer = vi.fn(async (message: string) => ({
-  publicKey: "OwnerAddress",
-  signature: `signed:${message}`,
-}));
+/**
+ * A wallet that signs whatever it is shown, so the text can be asserted on.
+ *
+ * It carries its own `chain` because a `WalletSigner` does: the chain travels
+ * with the wallet rather than being chosen at each of the three signed steps,
+ * which is CLAUDE.md's rule that the chain is named and never inferred, applied
+ * one level earlier than a transaction.
+ */
+const signer = Object.assign(
+  vi.fn(async (message: string) => ({
+    publicKey: "OwnerAddress",
+    signature: `signed:${message}`,
+  })),
+  { chain: "solana" as const },
+);
 
 /** What the challenge request asked to be signed. */
 function actionAsked(stub: ReturnType<typeof vi.fn>): unknown {
@@ -81,7 +91,10 @@ describe("createHold", () => {
       }),
     );
 
-    const result = await createHold({ x: 0, y: 0, w: 10, h: 10 }, "buyer-pubkey-1");
+    const result = await createHold(
+      { x: 0, y: 0, w: 10, h: 10 },
+      { chain: "solana", address: "buyer-pubkey-1" },
+    );
 
     expect(result).toEqual({
       ok: true,
@@ -93,6 +106,9 @@ describe("createHold", () => {
         totalBaseUnits: 100_000_000,
         paymentBaseUnits: 100_000_042,
         expiresAt: "2026-08-25T12:30:00.000Z",
+        // Stamped from the chain this call sent, not defaulted: a Robinhood
+        // hold labelled "solana" would be a receipt naming the wrong rail.
+        ownerChain: "solana",
         hasContent: false,
         caption: null,
         link: null,
@@ -104,7 +120,7 @@ describe("createHold", () => {
 
   it("posts the rectangle and buyer pubkey as JSON", async () => {
     const stub = stubFetchOnce(jsonResponse(400, { message: "That is not a rectangle this board can sell." }));
-    await createHold({ x: 1, y: 2, w: 10, h: 10 }, "buyer-pubkey-1");
+    await createHold({ x: 1, y: 2, w: 10, h: 10 }, { chain: "solana", address: "buyer-pubkey-1" });
 
     expect(stub).toHaveBeenCalledTimes(1);
     const [url, init] = stub.mock.calls[0] as [string, RequestInit];
@@ -113,13 +129,19 @@ describe("createHold", () => {
     expect(JSON.parse(init.body as string)).toEqual({
       rect: { x: 1, y: 2, w: 10, h: 10 },
       buyerPubkey: "buyer-pubkey-1",
+      // The wire keeps the old field name for the address and gains `chain`
+      // beside it, which is what the reserve route now requires.
+      chain: "solana",
     });
   });
 
   it("turns a 409 into ok:false, keeping the server's message and status", async () => {
     stubFetchOnce(jsonResponse(409, { message: "Those pixels were just taken." }));
 
-    const result = await createHold({ x: 0, y: 0, w: 10, h: 10 }, "buyer-pubkey-1");
+    const result = await createHold(
+      { x: 0, y: 0, w: 10, h: 10 },
+      { chain: "solana", address: "buyer-pubkey-1" },
+    );
 
     expect(result).toEqual({ ok: false, status: 409, message: "Those pixels were just taken." });
   });
@@ -132,7 +154,10 @@ describe("createHold", () => {
       }),
     );
 
-    const result = await createHold({ x: 0, y: 0, w: 10, h: 10 }, "buyer-pubkey-1");
+    const result = await createHold(
+      { x: 0, y: 0, w: 10, h: 10 },
+      { chain: "solana", address: "buyer-pubkey-1" },
+    );
 
     expect(result).toEqual({
       ok: false,
@@ -145,7 +170,10 @@ describe("createHold", () => {
   it("becomes ok:false, not a rejected promise, when the network throws", async () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new TypeError("network down")) as unknown as typeof fetch;
 
-    const result = await createHold({ x: 0, y: 0, w: 10, h: 10 }, "buyer-pubkey-1");
+    const result = await createHold(
+      { x: 0, y: 0, w: 10, h: 10 },
+      { chain: "solana", address: "buyer-pubkey-1" },
+    );
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -274,9 +302,13 @@ describe("submitContent", () => {
 
   it("sends no content when the person refuses to sign", async () => {
     const stub = stubFetchSequence(challenge());
-    const result = await submitContent("order-1", new FormData(), async () => {
-      throw new Error("User rejected the request.");
-    });
+    const refuses = Object.assign(
+      async () => {
+        throw new Error("User rejected the request.");
+      },
+      { chain: "solana" as const },
+    );
+    const result = await submitContent("order-1", new FormData(), refuses);
     expect(result.ok).toBe(false);
     expect(stub).toHaveBeenCalledTimes(1);
   });
@@ -316,6 +348,9 @@ describe("confirmOrder", () => {
     expect(url).toBe("/api/orders/order-1/confirm");
     expect(JSON.parse(init.body as string)).toEqual({
       nonce: "a".repeat(64),
+      // The chain travels with the address on every signed call: the server
+      // picks its verifier from it and refuses a proof that omits it.
+      chain: "solana",
       publicKey: "OwnerAddress",
       signature: `signed:${SIGNED_TEXT}`,
     });
@@ -358,7 +393,10 @@ describe("createHold, on a 409 carrying your own blocking holds", () => {
       }),
     );
 
-    const result = await createHold({ x: 0, y: 0, w: 10, h: 10 }, "buyer-pubkey-1");
+    const result = await createHold(
+      { x: 0, y: 0, w: 10, h: 10 },
+      { chain: "solana", address: "buyer-pubkey-1" },
+    );
 
     expect(result.ok).toBe(false);
     expect((result as { yourOrderIds?: string[] }).yourOrderIds).toEqual([
@@ -368,7 +406,10 @@ describe("createHold, on a 409 carrying your own blocking holds", () => {
 
   it("leaves yourOrderIds absent when none of the blockers are yours", async () => {
     stubFetchOnce(jsonResponse(409, { message: "Someone is holding it.", availableAt: null, yourOrderIds: [] }));
-    const result = await createHold({ x: 0, y: 0, w: 10, h: 10 }, "buyer-pubkey-1");
+    const result = await createHold(
+      { x: 0, y: 0, w: 10, h: 10 },
+      { chain: "solana", address: "buyer-pubkey-1" },
+    );
     expect((result as { yourOrderIds?: string[] }).yourOrderIds).toEqual([]);
   });
 });
@@ -391,6 +432,9 @@ describe("releaseHold", () => {
     expect(deleteInit.method).toBe("DELETE");
     expect(JSON.parse(deleteInit.body as string)).toEqual({
       nonce: "a".repeat(64),
+      // The chain travels with the address on every signed call: the server
+      // picks its verifier from it and refuses a proof that omits it.
+      chain: "solana",
       publicKey: "OwnerAddress",
       signature: `signed:${SIGNED_TEXT}`,
     });
@@ -421,7 +465,7 @@ describe("releaseHold", () => {
 
   it("passes a refused challenge straight back, without asking for a signature", async () => {
     stubFetchSequence(jsonResponse(404, { message: "That order does not exist." }));
-    const refusing = vi.fn();
+    const refusing = Object.assign(vi.fn(), { chain: "solana" as const });
     const result = await releaseHold(ORDER, refusing);
     expect(result).toEqual({ ok: false, status: 404, message: "That order does not exist." });
     expect(refusing).not.toHaveBeenCalled();
@@ -429,9 +473,15 @@ describe("releaseHold", () => {
 
   it("sends no DELETE when the person refuses to sign", async () => {
     const stub = stubFetchSequence(challenge());
-    const result = await releaseHold(ORDER, async () => {
-      throw new Error("User rejected the request.");
-    });
+    const result = await releaseHold(
+      ORDER,
+      Object.assign(
+        async () => {
+          throw new Error("User rejected the request.");
+        },
+        { chain: "solana" as const },
+      ),
+    );
     expect(result.ok).toBe(false);
     expect((result as { status: number }).status).toBe(0);
     expect(stub).toHaveBeenCalledTimes(1);

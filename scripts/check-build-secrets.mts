@@ -94,6 +94,10 @@ const SECRET_NAMES = [
   "DATABASE_URL",
   "TEST_DATABASE_URL",
   "COLLECTION_AUTHORITY_SECRET",
+  // The Robinhood node's URL carries a provider key in its path. It is read
+  // only by `robinhood-rpc.ts`, which no client component imports — and this is
+  // what proves that rather than asserting it.
+  "ROBINHOOD_RPC_URL",
 ];
 
 /** Files containing `value`, or []. Binary-safe: -r without -I, -F for literals. */

@@ -23,7 +23,7 @@ import { IMAGE_BEARING_STATUSES } from "./block-image";
  * hide something this section does not describe would be a route contradicting
  * its own specification", so there is deliberately no fourth function here.
  *
- * WHAT NONE OF THEM TOUCH: `status`, `buyer_pubkey`, `x`, `y`, `w`, `h`. "In
+ * WHAT NONE OF THEM TOUCH: `status`, `owner_address`, `x`, `y`, `w`, `h`. "In
  * neither case does ownership of the rectangle transfer or lapse", and
  * `blocks_owner_is_final` (migration 006) refuses the write even if this file
  * were edited to try. The statements below simply never mention those columns.
@@ -40,7 +40,7 @@ import { IMAGE_BEARING_STATUSES } from "./block-image";
  * A block's moderation state, and only that.
  *
  * The rectangle is here because an operator deciding about a takedown needs to
- * know which pixels they are looking at. `status` and `buyer_pubkey` are NOT,
+ * know which pixels they are looking at. `status` and `owner_address` are NOT,
  * because no function in this file can change either, so publishing them would
  * invite a caller to render a fact this module has no part in.
  *

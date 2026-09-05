@@ -175,7 +175,7 @@ async function wallPixel(x: number, y: number): Promise<{ r: number; g: number; 
 describe("a purchase of one pixel, for one dollar", () => {
   it("goes through from hold to payment, and stores a 4 by 4 picture on the way", async () => {
     const orange = { r: 236, g: 118, b: 20 };
-    const held = await reserveRect({ x: 640, y: 410, w: 1, h: 1 }, BUYER, CALLER);
+    const held = await reserveRect({ x: 640, y: 410, w: 1, h: 1 }, { chain: "solana", address: BUYER }, CALLER);
 
     // A six-megapixel photograph on a one-pixel rectangle. The buyer does
     // nothing about the difference; the page does.
@@ -239,7 +239,7 @@ describe("a genuinely large photograph", () => {
   });
 
   it("reaches the board on a rectangle, rather than a weight error", async () => {
-    const held = await reserveRect({ x: 100, y: 100, w: 60, h: 40 }, BUYER, CALLER);
+    const held = await reserveRect({ x: 100, y: 100, w: 60, h: 40 }, { chain: "solana", address: BUYER }, CALLER);
     const prepared = await shrink(await photograph(), { width: 60, height: 40 }, "cover");
 
     const response = await submitContent(held.id, prepared.bytes);
@@ -259,7 +259,7 @@ describe("the caps the purchase path is allowed to enforce", () => {
     // signing key unfundable (SECURITY.md). "Never rejected for being too
     // large" is a promise about what a BUYER meets, not a promise that the
     // server stopped checking.
-    const held = await reserveRect({ x: 300, y: 300, w: 200, h: 200 }, BUYER, CALLER);
+    const held = await reserveRect({ x: 300, y: 300, w: 200, h: 200 }, { chain: "solana", address: BUYER }, CALLER);
     const oversized = await sharp(await photograph(1200, 1200))
       .webp({ quality: 100 })
       .toBuffer();
@@ -285,7 +285,7 @@ describe("the caps the purchase path is allowed to enforce", () => {
  */
 describe("a contain the rectangle cannot letterbox", () => {
   it("is refused on a 1x1, however it is submitted, and the same bytes go on as a fill", async () => {
-    const held = await reserveRect({ x: 700, y: 500, w: 1, h: 1 }, BUYER, CALLER);
+    const held = await reserveRect({ x: 700, y: 500, w: 1, h: 1 }, { chain: "solana", address: BUYER }, CALLER);
     // 4:3, so the picture and the pixel are not the same shape. What it
     // stores is 4x3 — and one pixel has nowhere to put the bars.
     const prepared = await shrink(await solid(400, 300, { r: 20, g: 80, b: 200 }), { width: 1, height: 1 }, "contain");
@@ -302,7 +302,7 @@ describe("a contain the rectangle cannot letterbox", () => {
   });
 
   it("leaves contain on a large rectangle, and the wall draws the bars", async () => {
-    const held = await reserveRect({ x: 400, y: 600, w: 100, h: 100 }, BUYER, CALLER);
+    const held = await reserveRect({ x: 400, y: 600, w: 100, h: 100 }, { chain: "solana", address: BUYER }, CALLER);
     const blue = { r: 20, g: 80, b: 200 };
     const prepared = await shrink(await solid(1200, 300, blue), { width: 100, height: 100 }, "contain");
 

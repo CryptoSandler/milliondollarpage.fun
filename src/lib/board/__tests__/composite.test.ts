@@ -55,7 +55,7 @@ async function buy(
   fit: "contain" | "cover" = "cover",
 ): Promise<string> {
   const rows = await query<{ id: string }>(
-    `INSERT INTO blocks (x, y, w, h, status, buyer_pubkey, image_fit,
+    `INSERT INTO blocks (x, y, w, h, status, owner_address, image_fit,
                          price_per_pixel_usdc, total_usdc,
                          pending_image, pending_image_mime, image_sha256)
      VALUES ($1, $2, $3, $4, 'paid', 'BuyerWallet1111111111', $5, 1000000, $6, $7, $8, $9)

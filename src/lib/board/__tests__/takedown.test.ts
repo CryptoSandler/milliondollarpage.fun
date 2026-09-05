@@ -33,7 +33,7 @@ async function magenta(): Promise<Buffer> {
 
 async function sold(x = 0): Promise<string> {
   const row = await queryOne<{ id: string }>(
-    `INSERT INTO blocks (x, y, w, h, status, buyer_pubkey, caption, link,
+    `INSERT INTO blocks (x, y, w, h, status, owner_address, caption, link,
                          price_per_pixel_usdc, total_usdc,
                          pending_image, pending_image_mime, image_sha256)
      VALUES ($1, 0, 20, 20, 'paid', $2, 'My shop', 'https://example.com/shop',
@@ -147,14 +147,14 @@ describe("a normal takedown", () => {
     const id = await sold();
     await hideWithSql(id);
     await expect(
-      reserveRect({ x: 0, y: 0, w: 20, h: 20 }, "SomebodyElse2222222222", "d".repeat(64)),
+      reserveRect({ x: 0, y: 0, w: 20, h: 20 }, { chain: "solana", address: "SomebodyElse2222222222" }, "d".repeat(64)),
     ).rejects.toThrow();
 
-    const rows = await query<{ status: string; buyer_pubkey: string }>(
-      "SELECT status, buyer_pubkey FROM blocks WHERE id = $1",
+    const rows = await query<{ status: string; owner_address: string }>(
+      "SELECT status, owner_address FROM blocks WHERE id = $1",
       [id],
     );
-    expect(rows[0]).toEqual({ status: "paid", buyer_pubkey: OWNER });
+    expect(rows[0]).toEqual({ status: "paid", owner_address: OWNER });
   });
 });
 
@@ -188,19 +188,19 @@ describe("a legal purge", () => {
     const id = await sold();
     await execute("SELECT block_purge_content($1, $2)", [id, "a court order"]);
 
-    const rows = await query<{ status: string; buyer_pubkey: string; x: number; w: number }>(
-      "SELECT status, buyer_pubkey, x, w FROM blocks WHERE id = $1",
+    const rows = await query<{ status: string; owner_address: string; x: number; w: number }>(
+      "SELECT status, owner_address, x, w FROM blocks WHERE id = $1",
       [id],
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toEqual({ status: "paid", buyer_pubkey: OWNER, x: 0, w: 20 });
+    expect(rows[0]).toEqual({ status: "paid", owner_address: OWNER, x: 0, w: 20 });
   });
 
   it("does not put the pixels back on sale either", async () => {
     const id = await sold();
     await execute("SELECT block_purge_content($1, $2)", [id, "a court order"]);
     await expect(
-      reserveRect({ x: 10, y: 0, w: 5, h: 5 }, "SomebodyElse2222222222", "d".repeat(64)),
+      reserveRect({ x: 10, y: 0, w: 5, h: 5 }, { chain: "solana", address: "SomebodyElse2222222222" }, "d".repeat(64)),
     ).rejects.toThrow();
     expect(await query("SELECT id FROM blocks WHERE id = $1", [id])).toHaveLength(1);
   });
@@ -227,7 +227,7 @@ describe("a legal purge", () => {
   });
 
   it("refuses to touch a hold, which has nothing anybody bought", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER, "e".repeat(64));
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER }, "e".repeat(64));
     await execute("SELECT block_purge_content($1, $2)", [held.id, "a court order"]);
     const rows = await query<{ status: string; purged_at: Date | null }>(
       "SELECT status, purged_at FROM blocks WHERE id = $1",
@@ -266,7 +266,7 @@ describe("what the takedown module reports back", () => {
     // A hold has nothing anybody bought — `blocks_takedown_only_when_sold`
     // refuses the flag, so this must be a null rather than a constraint
     // violation surfacing as a 500.
-    const held = await reserveRect({ x: 100, y: 100, w: 10, h: 10 }, OWNER, "e".repeat(64));
+    const held = await reserveRect({ x: 100, y: 100, w: 10, h: 10 }, { chain: "solana", address: OWNER }, "e".repeat(64));
     expect(await hide(held.id, "why")).toBeNull();
     expect(await purge(held.id, "a court order")).toBeNull();
     const rows = await query<{ status: string; hidden_at: Date | null }>(

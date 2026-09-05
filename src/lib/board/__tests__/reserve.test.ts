@@ -17,7 +17,7 @@ async function seedBlock(x: number, y: number, status: string, minutesLeft: numb
 
 describe("reserveRect", () => {
   it("holds a free rectangle and prices it from settings", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, BUYER, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, { chain: "solana", address: BUYER }, CALLER);
     expect(held.rect).toEqual({ x: 0, y: 0, w: 20, h: 20 });
     expect(held.pixels).toBe(400);
     expect(held.pricePerPixelBaseUnits).toBe(1_000_000);
@@ -28,7 +28,7 @@ describe("reserveRect", () => {
   it("gives the hold a payment amount that is not round", async () => {
     // The fraction is how an incoming transfer is attributed to an order, so a
     // round amount is exactly the one that cannot be attributed.
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: BUYER }, CALLER);
     // A FRESH hold carries it: this caller created the row in this request.
     expect(held.paymentBaseUnits).toBeDefined();
     const payment = held.paymentBaseUnits!;
@@ -38,7 +38,7 @@ describe("reserveRect", () => {
   });
 
   it("snapshots the price so a settings change cannot move a live hold", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: BUYER }, CALLER);
     await execute("UPDATE settings SET value = '5000000' WHERE key = 'price_per_pixel_usdc'");
     try {
       const rows = await query<{ price_per_pixel_usdc: string }>(
@@ -52,32 +52,32 @@ describe("reserveRect", () => {
   });
 
   it("binds the hold to the buyer's pubkey and the caller's hash", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
-    const rows = await query<{ buyer_pubkey: string; ip_hash: string }>(
-      "SELECT buyer_pubkey, ip_hash FROM blocks WHERE id = $1",
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: BUYER }, CALLER);
+    const rows = await query<{ owner_address: string; ip_hash: string }>(
+      "SELECT owner_address, ip_hash FROM blocks WHERE id = $1",
       [held.id],
     );
-    expect(rows[0].buyer_pubkey).toBe(BUYER);
+    expect(rows[0].owner_address).toBe(BUYER);
     expect(rows[0].ip_hash).toBe(CALLER);
   });
 
   it("refuses a rectangle overlapping a minted block", async () => {
     await seedBlock(0, 0, "minted", null);
-    await expect(reserveRect({ x: 10, y: 10, w: 20, h: 20 }, BUYER, CALLER)).rejects.toBeInstanceOf(
+    await expect(reserveRect({ x: 10, y: 10, w: 20, h: 20 }, { chain: "solana", address: BUYER }, CALLER)).rejects.toBeInstanceOf(
       RectangleTaken,
     );
   });
 
   it("refuses a rectangle overlapping a live hold", async () => {
     await seedBlock(0, 0, "reserved", 30);
-    await expect(reserveRect({ x: 10, y: 10, w: 20, h: 20 }, BUYER, CALLER)).rejects.toBeInstanceOf(
+    await expect(reserveRect({ x: 10, y: 10, w: 20, h: 20 }, { chain: "solana", address: BUYER }, CALLER)).rejects.toBeInstanceOf(
       RectangleTaken,
     );
   });
 
   it("refuses a rectangle overlapping a paid order, which never expires", async () => {
     await seedBlock(0, 0, "paid", null);
-    await expect(reserveRect({ x: 10, y: 10, w: 20, h: 20 }, BUYER, CALLER)).rejects.toBeInstanceOf(
+    await expect(reserveRect({ x: 10, y: 10, w: 20, h: 20 }, { chain: "solana", address: BUYER }, CALLER)).rejects.toBeInstanceOf(
       RectangleTaken,
     );
   });
@@ -85,7 +85,7 @@ describe("reserveRect", () => {
   it("ALLOWS a rectangle over an EXPIRED hold, sweeping it in the same transaction", async () => {
     // The whole reason the sweep lives inside the insert's transaction.
     await seedBlock(0, 0, "reserved", -1);
-    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, BUYER, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, { chain: "solana", address: BUYER }, CALLER);
     expect(held.rect).toEqual({ x: 0, y: 0, w: 20, h: 20 });
     const rows = await query("SELECT id FROM blocks WHERE status = 'reserved'");
     expect(rows, "the expired hold should be gone, and only the new one left").toHaveLength(1);
@@ -93,39 +93,39 @@ describe("reserveRect", () => {
 
   it("allows a rectangle flush against a sold block, because edges do not overlap", async () => {
     await seedBlock(0, 0, "minted", null);
-    const held = await reserveRect({ x: 20, y: 0, w: 20, h: 20 }, BUYER, CALLER);
+    const held = await reserveRect({ x: 20, y: 0, w: 20, h: 20 }, { chain: "solana", address: BUYER }, CALLER);
     expect(held.rect.x).toBe(20);
   });
 
   it("refuses a rectangle over a taken-down block, because a takedown is not a resale", async () => {
     await seedBlock(0, 0, "paid", null);
     await execute("UPDATE blocks SET hidden_at = now(), takedown_reason = 'a report'");
-    await expect(reserveRect({ x: 0, y: 0, w: 20, h: 20 }, BUYER, CALLER)).rejects.toBeInstanceOf(
+    await expect(reserveRect({ x: 0, y: 0, w: 20, h: 20 }, { chain: "solana", address: BUYER }, CALLER)).rejects.toBeInstanceOf(
       RectangleTaken,
     );
   });
 
   it("refuses a malformed rectangle before touching the database", async () => {
     // No area.
-    await expect(reserveRect({ x: 0, y: 0, w: 0, h: 10 }, BUYER, CALLER)).rejects.toBeInstanceOf(
+    await expect(reserveRect({ x: 0, y: 0, w: 0, h: 10 }, { chain: "solana", address: BUYER }, CALLER)).rejects.toBeInstanceOf(
       RectangleInvalid,
     );
     // Off the right edge, and off the bottom one.
     await expect(
-      reserveRect({ x: 1240, y: 0, w: 20, h: 10 }, BUYER, CALLER),
+      reserveRect({ x: 1240, y: 0, w: 20, h: 10 }, { chain: "solana", address: BUYER }, CALLER),
     ).rejects.toBeInstanceOf(RectangleInvalid);
     await expect(
-      reserveRect({ x: 0, y: 790, w: 10, h: 20 }, BUYER, CALLER),
+      reserveRect({ x: 0, y: 790, w: 10, h: 20 }, { chain: "solana", address: BUYER }, CALLER),
     ).rejects.toBeInstanceOf(RectangleInvalid);
     // Not made of whole pixels. Postgres would have ROUNDED this into its
     // integer columns and sold a rectangle nobody asked for.
     await expect(
-      reserveRect({ x: 137.5, y: 0, w: 10, h: 10 }, BUYER, CALLER),
+      reserveRect({ x: 137.5, y: 0, w: 10, h: 10 }, { chain: "solana", address: BUYER }, CALLER),
     ).rejects.toBeInstanceOf(RectangleInvalid);
   });
 
   it("holds a rectangle that lines up with nothing, because that is the model now", async () => {
-    const held = await reserveRect({ x: 137, y: 41, w: 23, h: 7 }, BUYER, CALLER);
+    const held = await reserveRect({ x: 137, y: 41, w: 23, h: 7 }, { chain: "solana", address: BUYER }, CALLER);
     expect(held.rect).toEqual({ x: 137, y: 41, w: 23, h: 7 });
     expect(held.pixels).toBe(161);
   });
@@ -133,8 +133,8 @@ describe("reserveRect", () => {
   it("lets exactly one of two concurrent overlapping reservations win", async () => {
     // The constraint, not the application, is what makes this true.
     const results = await Promise.allSettled([
-      reserveRect({ x: 100, y: 100, w: 50, h: 50 }, BUYER, CALLER),
-      reserveRect({ x: 120, y: 120, w: 50, h: 50 }, BUYER, CALLER),
+      reserveRect({ x: 100, y: 100, w: 50, h: 50 }, { chain: "solana", address: BUYER }, CALLER),
+      reserveRect({ x: 120, y: 120, w: 50, h: 50 }, { chain: "solana", address: BUYER }, CALLER),
     ]);
     const won = results.filter((r) => r.status === "fulfilled");
     const lost = results.filter((r) => r.status === "rejected");
@@ -145,15 +145,15 @@ describe("reserveRect", () => {
 
   it("lets both of two concurrent NON-overlapping reservations win", async () => {
     const results = await Promise.allSettled([
-      reserveRect({ x: 100, y: 100, w: 50, h: 50 }, BUYER, CALLER),
-      reserveRect({ x: 200, y: 200, w: 50, h: 50 }, BUYER, CALLER),
+      reserveRect({ x: 100, y: 100, w: 50, h: 50 }, { chain: "solana", address: BUYER }, CALLER),
+      reserveRect({ x: 200, y: 200, w: 50, h: 50 }, { chain: "solana", address: BUYER }, CALLER),
     ]);
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(2);
   });
 
   it("tells the caller exactly when a blocking live hold frees up", async () => {
     await seedBlock(0, 0, "reserved", 30);
-    const error = await reserveRect({ x: 10, y: 10, w: 20, h: 20 }, BUYER, CALLER).catch((e) => e);
+    const error = await reserveRect({ x: 10, y: 10, w: 20, h: 20 }, { chain: "solana", address: BUYER }, CALLER).catch((e) => e);
     expect(error).toBeInstanceOf(RectangleTaken);
     const [row] = await query<{ expires_at: Date }>(
       "SELECT expires_at FROM blocks WHERE status = 'reserved'",
@@ -163,14 +163,14 @@ describe("reserveRect", () => {
 
   it("says a minted block never frees up", async () => {
     await seedBlock(0, 0, "minted", null);
-    const error = await reserveRect({ x: 10, y: 10, w: 20, h: 20 }, BUYER, CALLER).catch((e) => e);
+    const error = await reserveRect({ x: 10, y: 10, w: 20, h: 20 }, { chain: "solana", address: BUYER }, CALLER).catch((e) => e);
     expect(error).toBeInstanceOf(RectangleTaken);
     expect((error as RectangleTaken).availableAt).toBeNull();
   });
 
   it("says a paid order never frees up", async () => {
     await seedBlock(0, 0, "paid", null);
-    const error = await reserveRect({ x: 10, y: 10, w: 20, h: 20 }, BUYER, CALLER).catch((e) => e);
+    const error = await reserveRect({ x: 10, y: 10, w: 20, h: 20 }, { chain: "solana", address: BUYER }, CALLER).catch((e) => e);
     expect(error).toBeInstanceOf(RectangleTaken);
     expect((error as RectangleTaken).availableAt).toBeNull();
   });
@@ -182,7 +182,7 @@ describe("reserveRect", () => {
     // the caller learns — the first moment anything could change.
     await seedBlock(0, 0, "reserved", 30);
     await seedBlock(30, 30, "reserved", 10);
-    const error = await reserveRect({ x: 0, y: 0, w: 50, h: 50 }, BUYER, CALLER).catch((e) => e);
+    const error = await reserveRect({ x: 0, y: 0, w: 50, h: 50 }, { chain: "solana", address: BUYER }, CALLER).catch((e) => e);
     expect(error).toBeInstanceOf(RectangleTaken);
     const rows = await query<{ x: number; expires_at: Date }>(
       "SELECT x, expires_at FROM blocks WHERE status = 'reserved' ORDER BY x",
@@ -192,7 +192,7 @@ describe("reserveRect", () => {
   });
 
   it("REGRESSION: a 10x10 at (990,620) with nothing there succeeds — this was not an edge bug", async () => {
-    const held = await reserveRect({ x: 990, y: 620, w: 10, h: 10 }, BUYER, CALLER);
+    const held = await reserveRect({ x: 990, y: 620, w: 10, h: 10 }, { chain: "solana", address: BUYER }, CALLER);
     expect(held.rect).toEqual({ x: 990, y: 620, w: 10, h: 10 });
   });
 
@@ -201,7 +201,7 @@ describe("reserveRect", () => {
     [0, 790],
     [1240, 0],
   ])("REGRESSION: the board's other corners also succeed: (%i, %i)", async (x, y) => {
-    const held = await reserveRect({ x, y, w: 10, h: 10 }, BUYER, CALLER);
+    const held = await reserveRect({ x, y, w: 10, h: 10 }, { chain: "solana", address: BUYER }, CALLER);
     expect(held.rect).toEqual({ x, y, w: 10, h: 10 });
   });
 
@@ -212,7 +212,7 @@ describe("reserveRect", () => {
     await seedBlock(500, 500, "minted", null);  // blocks the request below
 
     await expect(
-      reserveRect({ x: 500, y: 500, w: 20, h: 20 }, BUYER, CALLER),
+      reserveRect({ x: 500, y: 500, w: 20, h: 20 }, { chain: "solana", address: BUYER }, CALLER),
     ).rejects.toBeInstanceOf(RectangleTaken);
 
     // The sweep ran inside the failed transaction, so it was rolled back with it
@@ -242,7 +242,7 @@ describe("the price is the area", () => {
   type Charged = { pixels: string; total_usdc: string };
 
   async function chargedFor(rect: { x: number; y: number; w: number; h: number }): Promise<Charged> {
-    const held = await reserveRect(rect, BUYER, CALLER);
+    const held = await reserveRect(rect, { chain: "solana", address: BUYER }, CALLER);
     const rows = await query<Charged>(
       "SELECT (w * h)::text AS pixels, total_usdc::text FROM blocks WHERE id = $1",
       [held.id],
@@ -282,7 +282,7 @@ describe("the price is the area", () => {
     ];
     // Together rather than in turn: six round trips to a hosted Postgres is
     // slower than this file's budget, and nothing here needs them ordered.
-    await Promise.all(strips.map((strip) => reserveRect(strip, BUYER, CALLER)));
+    await Promise.all(strips.map((strip) => reserveRect(strip, { chain: "solana", address: BUYER }, CALLER)));
 
     const [total] = await query<{ blocks: string; pixels: string; usdc: string }>(
       "SELECT COUNT(*)::text AS blocks, SUM(w * h)::text AS pixels, SUM(total_usdc)::text AS usdc FROM blocks",
@@ -312,7 +312,7 @@ describe("disjoint rectangles never collide", () => {
       [OTHER_HOLD.x, OTHER_HOLD.y, OTHER_HOLD.w, OTHER_HOLD.h, OTHER_HOLD.w * OTHER_HOLD.h * 1000000],
     );
 
-    const held = await reserveRect(REPORTED, BUYER, CALLER);
+    const held = await reserveRect(REPORTED, { chain: "solana", address: BUYER }, CALLER);
     expect(held.rect).toEqual(REPORTED);
   });
 
@@ -322,25 +322,25 @@ describe("disjoint rectangles never collide", () => {
     // the same buyer asking twice now resumes their own hold instead of being
     // refused, which is its own test in "resuming your own hold" below.
     const other = "OtherBuyerPubkey111111111111111111111111111";
-    await reserveRect(REPORTED, BUYER, CALLER);
-    await expect(reserveRect(REPORTED, other, CALLER)).rejects.toBeInstanceOf(RectangleTaken);
+    await reserveRect(REPORTED, { chain: "solana", address: BUYER }, CALLER);
+    await expect(reserveRect(REPORTED, { chain: "solana", address: other }, CALLER)).rejects.toBeInstanceOf(RectangleTaken);
   });
 
   it("keeps the axes straight: swapping x for y is not a collision", async () => {
-    await reserveRect({ x: 630, y: 160, w: 10, h: 20 }, BUYER, CALLER);
-    const mirrored = await reserveRect({ x: 160, y: 630, w: 20, h: 10 }, BUYER, CALLER);
+    await reserveRect({ x: 630, y: 160, w: 10, h: 20 }, { chain: "solana", address: BUYER }, CALLER);
+    const mirrored = await reserveRect({ x: 160, y: 630, w: 20, h: 10 }, { chain: "solana", address: BUYER }, CALLER);
     expect(mirrored.rect).toEqual({ x: 160, y: 630, w: 20, h: 10 });
   });
 
   it("keeps width and height straight: a tall rect does not block a wide one beside it", async () => {
-    await reserveRect({ x: 100, y: 200, w: 10, h: 80 }, BUYER, CALLER);
-    const wide = await reserveRect({ x: 110, y: 200, w: 80, h: 10 }, BUYER, CALLER);
+    await reserveRect({ x: 100, y: 200, w: 10, h: 80 }, { chain: "solana", address: BUYER }, CALLER);
+    const wide = await reserveRect({ x: 110, y: 200, w: 80, h: 10 }, { chain: "solana", address: BUYER }, CALLER);
     expect(wide.rect.x).toBe(110);
   });
 
   it("treats a shared edge as disjoint, not as an overlap", async () => {
-    await reserveRect({ x: 630, y: 160, w: 10, h: 10 }, BUYER, CALLER);
-    const flush = await reserveRect({ x: 640, y: 160, w: 10, h: 10 }, BUYER, CALLER);
+    await reserveRect({ x: 630, y: 160, w: 10, h: 10 }, { chain: "solana", address: BUYER }, CALLER);
+    const flush = await reserveRect({ x: 640, y: 160, w: 10, h: 10 }, { chain: "solana", address: BUYER }, CALLER);
     expect(flush.rect.x).toBe(640);
   });
 });
@@ -353,8 +353,8 @@ describe("resuming your own hold", () => {
   const RECT = { x: 300, y: 300, w: 20, h: 20 };
 
   it("returns the SAME order rather than refusing, when the only blocker is your own exact hold", async () => {
-    const first = await reserveRect(RECT, BUYER, CALLER);
-    const again = await reserveRect(RECT, BUYER, CALLER);
+    const first = await reserveRect(RECT, { chain: "solana", address: BUYER }, CALLER);
+    const again = await reserveRect(RECT, { chain: "solana", address: BUYER }, CALLER);
     expect(again.id).toBe(first.id);
     expect(again.rect).toEqual(RECT);
   });
@@ -369,10 +369,10 @@ describe("resuming your own hold", () => {
    * carries it, because that caller made the row in the same request.
    */
   it("does not hand the payment fraction back on a resume", async () => {
-    const fresh = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    const fresh = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: BUYER }, CALLER);
     expect(fresh.paymentBaseUnits, "a fresh hold still carries it").toBeDefined();
 
-    const resumed = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, BUYER, CALLER);
+    const resumed = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: BUYER }, CALLER);
     expect(resumed.id, "same hold, not a second one").toBe(fresh.id);
     expect(resumed.paymentBaseUnits).toBeUndefined();
     // And the rest of the hold still comes back, so this withheld one field
@@ -382,15 +382,15 @@ describe("resuming your own hold", () => {
   });
 
   it("resumes the hold that exists rather than creating a second row", async () => {
-    await reserveRect(RECT, BUYER, CALLER);
-    await reserveRect(RECT, BUYER, CALLER);
+    await reserveRect(RECT, { chain: "solana", address: BUYER }, CALLER);
+    await reserveRect(RECT, { chain: "solana", address: BUYER }, CALLER);
     const rows = await query("SELECT id FROM blocks WHERE status = 'reserved'");
     expect(rows, "a resume must not open a second hold on the same pixels").toHaveLength(1);
   });
 
   it("keeps the original expiry and payment fraction, so the clock is not restarted", async () => {
-    const first = await reserveRect(RECT, BUYER, CALLER);
-    const again = await reserveRect(RECT, BUYER, CALLER);
+    const first = await reserveRect(RECT, { chain: "solana", address: BUYER }, CALLER);
+    const again = await reserveRect(RECT, { chain: "solana", address: BUYER }, CALLER);
     expect(again.expiresAt).toBe(first.expiresAt);
     expect(again.totalBaseUnits).toBe(first.totalBaseUnits);
     expect(again.pricePerPixelBaseUnits).toBe(first.pricePerPixelBaseUnits);
@@ -409,8 +409,8 @@ describe("resuming your own hold", () => {
 
   it("does NOT resume a different buyer's hold on the same rectangle", async () => {
     const other = "OtherBuyerPubkey111111111111111111111111111";
-    await reserveRect(RECT, other, CALLER);
-    const error = await reserveRect(RECT, BUYER, CALLER).catch((e) => e);
+    await reserveRect(RECT, { chain: "solana", address: other }, CALLER);
+    const error = await reserveRect(RECT, { chain: "solana", address: BUYER }, CALLER).catch((e) => e);
     expect(error).toBeInstanceOf(RectangleTaken);
     expect(
       (error as RectangleTaken).yourOrderIds,
@@ -419,37 +419,37 @@ describe("resuming your own hold", () => {
   });
 
   it("does NOT resume on partial overlap, and hands back your own blocking id instead", async () => {
-    const held = await reserveRect({ x: 100, y: 100, w: 20, h: 20 }, BUYER, CALLER);
-    const error = await reserveRect({ x: 110, y: 110, w: 20, h: 20 }, BUYER, CALLER).catch((e) => e);
+    const held = await reserveRect({ x: 100, y: 100, w: 20, h: 20 }, { chain: "solana", address: BUYER }, CALLER);
+    const error = await reserveRect({ x: 110, y: 110, w: 20, h: 20 }, { chain: "solana", address: BUYER }, CALLER).catch((e) => e);
     expect(error).toBeInstanceOf(RectangleTaken);
     expect((error as RectangleTaken).yourOrderIds).toEqual([held.id]);
   });
 
   it("does NOT resume when anything else is in the way as well", async () => {
     // Your own exact hold, plus a stranger's block inside the same request.
-    await reserveRect({ x: 300, y: 300, w: 20, h: 20 }, BUYER, CALLER);
+    await reserveRect({ x: 300, y: 300, w: 20, h: 20 }, { chain: "solana", address: BUYER }, CALLER);
     await seedBlock(320, 320, "minted", null);
-    const error = await reserveRect({ x: 300, y: 300, w: 50, h: 50 }, BUYER, CALLER).catch((e) => e);
+    const error = await reserveRect({ x: 300, y: 300, w: 50, h: 50 }, { chain: "solana", address: BUYER }, CALLER).catch((e) => e);
     expect(error).toBeInstanceOf(RectangleTaken);
     expect((error as RectangleTaken).availableAt, "a sold block never frees up").toBeNull();
   });
 
   it("does NOT resume a PAID rectangle of your own — a sale is not a hold", async () => {
-    const held = await reserveRect(RECT, BUYER, CALLER);
+    const held = await reserveRect(RECT, { chain: "solana", address: BUYER }, CALLER);
     await execute("UPDATE blocks SET status = 'paid', expires_at = NULL WHERE id = $1", [held.id]);
-    const error = await reserveRect(RECT, BUYER, CALLER).catch((e) => e);
+    const error = await reserveRect(RECT, { chain: "solana", address: BUYER }, CALLER).catch((e) => e);
     expect(error).toBeInstanceOf(RectangleTaken);
     expect((error as RectangleTaken).availableAt).toBeNull();
   });
 
   it("lists only YOUR blocking ids when yours and a stranger's are both in the way", async () => {
-    const mine = await reserveRect({ x: 400, y: 400, w: 20, h: 20 }, BUYER, CALLER);
+    const mine = await reserveRect({ x: 400, y: 400, w: 20, h: 20 }, { chain: "solana", address: BUYER }, CALLER);
     const theirs = await reserveRect(
       { x: 440, y: 400, w: 20, h: 20 },
-      "OtherBuyerPubkey111111111111111111111111111",
+      { chain: "solana", address: "OtherBuyerPubkey111111111111111111111111111" },
       CALLER,
     );
-    const error = await reserveRect({ x: 400, y: 400, w: 100, h: 20 }, BUYER, CALLER).catch((e) => e);
+    const error = await reserveRect({ x: 400, y: 400, w: 100, h: 20 }, { chain: "solana", address: BUYER }, CALLER).catch((e) => e);
     expect(error).toBeInstanceOf(RectangleTaken);
     expect((error as RectangleTaken).yourOrderIds).toEqual([mine.id]);
     expect((error as RectangleTaken).yourOrderIds).not.toContain(theirs.id);
@@ -476,8 +476,8 @@ describe("a big hold expires sooner than a small one", () => {
   }
 
   it("gives one pixel the full half hour and the largest holdable rectangle ten minutes", async () => {
-    const small = await reserveRect({ x: 1200, y: 700, w: 1, h: 1 }, BUYER, CALLER);
-    const large = await reserveRect({ x: 0, y: 0, w: 100, h: 100 }, BUYER, CALLER);
+    const small = await reserveRect({ x: 1200, y: 700, w: 1, h: 1 }, { chain: "solana", address: BUYER }, CALLER);
+    const large = await reserveRect({ x: 0, y: 0, w: 100, h: 100 }, { chain: "solana", address: BUYER }, CALLER);
 
     expect(await grantedMinutes(small.id)).toBe(30);
     expect(await grantedMinutes(large.id)).toBe(10);
@@ -488,7 +488,7 @@ describe("a big hold expires sooner than a small one", () => {
     const sizes = [1, 50, 70, 100];
     const granted: number[] = [];
     for (const [index, side] of sizes.entries()) {
-      const held = await reserveRect({ x: index * 110, y: 0, w: side, h: side }, BUYER, CALLER);
+      const held = await reserveRect({ x: index * 110, y: 0, w: side, h: side }, { chain: "solana", address: BUYER }, CALLER);
       granted.push(await grantedMinutes(held.id));
     }
 
@@ -504,7 +504,7 @@ describe("a big hold expires sooner than a small one", () => {
   it("charges the hold against its caller for exactly the clock the row was given", async () => {
     // The ledger and the block must agree, or the budget is pricing a hold
     // that is not the one standing.
-    const held = await reserveRect({ x: 0, y: 0, w: 100, h: 100 }, BUYER, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 100, h: 100 }, { chain: "solana", address: BUYER }, CALLER);
     const rows = await query<{ agrees: boolean; pixels: number }>(
       `SELECT m.charged_until = b.expires_at AS agrees, m.pixels
          FROM hold_meter m JOIN blocks b ON b.id = m.block_id
@@ -518,7 +518,7 @@ describe("a big hold expires sooner than a small one", () => {
 
   it("charges nothing to the caller who loses a race for the same pixels", async () => {
     await seedBlock(0, 0, "minted", null);
-    await expect(reserveRect({ x: 0, y: 0, w: 20, h: 20 }, BUYER, CALLER)).rejects.toBeInstanceOf(
+    await expect(reserveRect({ x: 0, y: 0, w: 20, h: 20 }, { chain: "solana", address: BUYER }, CALLER)).rejects.toBeInstanceOf(
       RectangleTaken,
     );
     const charges = await query("SELECT block_id FROM hold_meter WHERE ip_hash = $1", [CALLER]);

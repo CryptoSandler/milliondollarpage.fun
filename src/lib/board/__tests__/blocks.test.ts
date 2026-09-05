@@ -70,10 +70,10 @@ describe("listBoardRects", () => {
    */
   it("carries no content at all, and never the buyer's wallet", async () => {
     // The wallet goes in with the row rather than being UPDATEd on after: a
-    // paid row's buyer_pubkey is frozen by the ownership trigger (migration
+    // paid row's owner_address is frozen by the ownership trigger (migration
     // 005), which is the point of that trigger and would refuse this fixture.
     await execute(
-      `INSERT INTO blocks (x, y, w, h, status, buyer_pubkey, caption, link, image_fit,
+      `INSERT INTO blocks (x, y, w, h, status, owner_address, caption, link, image_fit,
                            price_per_pixel_usdc, total_usdc, pending_image, pending_image_mime)
        VALUES (0, 0, 10, 10, 'paid', 'AWalletNobodyMayLearn', 'My shop',
                'https://example.com/shop', 'cover', 1000000, 100000000, $1, 'image/webp')`,
@@ -211,7 +211,7 @@ describe("sweepExpiredReservations", () => {
    * abandoned upload survives the hold it was attached to.
    */
   it("takes the image, the link and the caption with it, because it deletes the whole row", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, "BuyerPubkey1111", "f".repeat(64));
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: "BuyerPubkey1111" }, "f".repeat(64));
     const image = await sharp({
       create: { width: 40, height: 40, channels: 3, background: { r: 9, g: 9, b: 9 } },
     })

@@ -126,7 +126,7 @@ async function heldWithContent(
   rect = { x: 0, y: 0, w: 10, h: 10 },
   overrides: Record<string, string> = {},
 ): Promise<string> {
-  const held = await reserveRect(rect, OWNER.address, CALLER);
+  const held = await reserveRect(rect, { chain: "solana", address: OWNER.address }, CALLER);
   const attached = await POST_CONTENT(await contentRequest(held.id, OWNER, overrides), ctx(held.id));
   expect(attached.status, "the owner's own attach should have worked").toBe(200);
   return held.id;
@@ -139,7 +139,7 @@ describe("GET /api/orders/:id", () => {
   });
 
   it("returns the order's state and never caches it", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
     const response = await GET(new Request("http://localhost/"), ctx(held.id));
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
@@ -154,7 +154,7 @@ describe("GET /api/orders/:id", () => {
   });
 
   it("never publishes the buyer's pubkey", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
     const body = await (await GET(new Request("http://localhost/"), ctx(held.id))).json();
     expect(body).not.toHaveProperty("buyerPubkey");
     expect(JSON.stringify(body)).not.toContain(OWNER.address);
@@ -169,7 +169,7 @@ describe("GET /api/orders/:id", () => {
    */
   describe("the payable amount", () => {
     it("is absent for a caller who proves nothing, whatever the total is", async () => {
-      const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+      const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
       const raw = await (await GET(new Request("http://localhost/"), ctx(held.id))).text();
       const body = JSON.parse(raw);
 
@@ -189,7 +189,7 @@ describe("GET /api/orders/:id", () => {
     });
 
     it("is absent even for a caller who offers the buyer's own address", async () => {
-      const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+      const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
       const request = new Request("http://localhost/", {
         headers: { [BUYER_PUBKEY_HEADER]: OWNER.address },
       });
@@ -200,7 +200,7 @@ describe("GET /api/orders/:id", () => {
     });
 
     it("comes back to a wallet that signed for it", async () => {
-      const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+      const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
       const response = await POST_CONTENT(await contentRequest(held.id, OWNER), ctx(held.id));
       const body = await response.json();
 
@@ -277,7 +277,7 @@ describe("POST /api/orders/:id/content", () => {
   }
 
   it("accepts a valid image, link and caption from the wallet that signed for it", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
     const response = await POST_CONTENT(await contentRequest(held.id, OWNER), ctx(held.id));
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -312,7 +312,7 @@ describe("POST /api/orders/:id/content", () => {
       source: "admin",
     });
 
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
     const response = await POST_CONTENT(
       await contentRequest(held.id, OWNER, {}, bytes),
       ctx(held.id),
@@ -336,7 +336,7 @@ describe("POST /api/orders/:id/content", () => {
       source: "admin",
     });
 
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
     await POST_CONTENT(await contentRequest(held.id, OWNER, {}, blocked), ctx(held.id));
 
     // The list refuses a FILE, not a buyer and not a rectangle.
@@ -351,7 +351,7 @@ describe("POST /api/orders/:id/content", () => {
   });
 
   it("accepts a blank caption and stores it as null", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
     const response = await POST_CONTENT(
       await contentRequest(held.id, OWNER, { caption: "   " }),
       ctx(held.id),
@@ -363,7 +363,7 @@ describe("POST /api/orders/:id/content", () => {
   });
 
   it("reports EVERY rejected field at once, not just the first", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
     const bad = await contentRequest(
       held.id,
       OWNER,
@@ -387,7 +387,7 @@ describe("POST /api/orders/:id/content", () => {
    * beside the order anyway. What they do not have is the key.
    */
   it("refuses a stranger who knows the order id AND the buyer's address", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
 
     // Their own challenge for this very order, signed with their own key,
     // presenting the owner's address as the claimant.
@@ -405,7 +405,7 @@ describe("POST /api/orders/:id/content", () => {
   });
 
   it("refuses a stranger signing for themselves, however valid their signature", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
     const response = await POST_CONTENT(
       await contentRequest(held.id, STRANGER_WALLET),
       ctx(held.id),
@@ -415,7 +415,7 @@ describe("POST /api/orders/:id/content", () => {
   });
 
   it("refuses a form carrying no proof at all, and one carrying half of it", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
     const challenge = await challengeFor(held.id, "attach");
     const proofs: Record<string, unknown>[] = [
       {},
@@ -438,7 +438,7 @@ describe("POST /api/orders/:id/content", () => {
    * go must not thereby have agreed to what goes in the block.
    */
   it("refuses a challenge the owner signed for a release", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
     const misdirected = await proofFor(held.id, "release", OWNER);
 
     const response = await POST_CONTENT(await contentRequestWith(misdirected), ctx(held.id));
@@ -459,8 +459,8 @@ describe("POST /api/orders/:id/content", () => {
   });
 
   it("refuses a challenge issued for another order", async () => {
-    const mine = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
-    const other = await reserveRect({ x: 40, y: 40, w: 10, h: 10 }, OWNER.address, CALLER);
+    const mine = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
+    const other = await reserveRect({ x: 40, y: 40, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
 
     const response = await POST_CONTENT(
       await contentRequestWith(await proofFor(mine.id, "attach", OWNER)),
@@ -471,7 +471,7 @@ describe("POST /api/orders/:id/content", () => {
   });
 
   it("refuses a replayed nonce, and the second attempt changes nothing", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
     const proof = await proofFor(held.id, "attach", OWNER);
 
     const first = await POST_CONTENT(
@@ -492,7 +492,7 @@ describe("POST /api/orders/:id/content", () => {
   });
 
   it("refuses an expired challenge", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
     const proof = await proofFor(held.id, "attach", OWNER);
 
     // Age the row rather than wait two minutes for it. issued_at moves with
@@ -512,7 +512,7 @@ describe("POST /api/orders/:id/content", () => {
   });
 
   it("answers 410 for an expired hold, to the wallet that can prove it holds it", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
     const request = await contentRequest(held.id, OWNER);
     await execute("UPDATE blocks SET expires_at = now() - interval '1 minute' WHERE id = $1", [held.id]);
     const response = await POST_CONTENT(request, ctx(held.id));
@@ -520,7 +520,7 @@ describe("POST /api/orders/:id/content", () => {
   });
 
   it("answers 404 for an unknown order", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
     const response = await POST_CONTENT(
       await contentRequest(held.id, OWNER),
       ctx("00000000-0000-0000-0000-000000000000"),
@@ -534,7 +534,7 @@ describe("POST /api/orders/:id/content", () => {
   });
 
   it("answers 413 for a declared content-length over the cap, before the body is ever read", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
     const oversized = new Request("http://localhost/api/orders/x/content", {
       method: "POST",
       headers: {
@@ -551,7 +551,7 @@ describe("POST /api/orders/:id/content", () => {
   });
 
   it("answers 413 when content-length is absent entirely", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
     const noLength = new Request("http://localhost/api/orders/x/content", {
       method: "POST",
       headers: { "x-forwarded-for": "203.0.113.9" },
@@ -582,7 +582,7 @@ describe("POST /api/orders/:id/confirm", () => {
   });
 
   it("refuses an order with no content", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
     const response = await POST_CONFIRM(await confirmRequest(held.id, OWNER), ctx(held.id));
     expect(response.status).toBe(409);
     expect(await statusOf(held.id)).toBe("reserved");
@@ -614,7 +614,7 @@ describe("POST /api/orders/:id/confirm", () => {
   it("answers 403 to a stranger even when the order has no content", async () => {
     // Without an ownership check this returns 409 and tells the stranger what
     // state somebody else's order is in.
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
     const response = await POST_CONFIRM(await confirmRequest(held.id, STRANGER_WALLET), ctx(held.id));
     expect(response.status).toBe(403);
   });
@@ -683,7 +683,7 @@ describe("POST /api/orders/:id/confirm", () => {
     const previous = process.env.ALLOW_STUB_PAYMENTS;
     delete process.env.ALLOW_STUB_PAYMENTS;
     try {
-      const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+      const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
       const response = await POST_CONFIRM(confirmRequestWith({}), ctx(held.id));
       expect(response.status).toBe(404);
     } finally {
@@ -694,7 +694,7 @@ describe("POST /api/orders/:id/confirm", () => {
 
 describe("the whole signed purchase, end to end", () => {
   it("holds, attaches and pays with three signatures and nothing else", async () => {
-    const held = await reserveRect({ x: 200, y: 200, w: 20, h: 20 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 200, y: 200, w: 20, h: 20 }, { chain: "solana", address: OWNER.address }, CALLER);
 
     const attached = await POST_CONTENT(await contentRequest(held.id, OWNER), ctx(held.id));
     expect(attached.status).toBe(200);
@@ -708,19 +708,19 @@ describe("the whole signed purchase, end to end", () => {
     expect(receipt.caption).toBe("A caption");
 
     // The row, not the response: a purchase is what the database now holds.
-    const row = await queryOne<{ status: string; buyer_pubkey: string; payment_signature: string }>(
-      "SELECT status, buyer_pubkey, payment_signature FROM blocks WHERE id = $1",
+    const row = await queryOne<{ status: string; owner_address: string; payment_signature: string }>(
+      "SELECT status, owner_address, payment_signature FROM blocks WHERE id = $1",
       [held.id],
     );
     expect(row!.status).toBe("paid");
-    expect(row!.buyer_pubkey).toBe(OWNER.address);
+    expect(row!.owner_address).toBe(OWNER.address);
     expect(row!.payment_signature).toBe(`stub-${held.id}`);
   });
 });
 
 describe("POST /api/orders/:id/challenge", () => {
   it("issues a fresh single-use challenge naming the order and the act", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
 
     for (const action of ["release", "attach", "pay"] as const) {
       const response = await POST_CHALLENGE(
@@ -744,7 +744,7 @@ describe("POST /api/orders/:id/challenge", () => {
   });
 
   it("stores the act on the row, so the message cannot be rebuilt as another one", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
     const challenge = await challengeFor(held.id, "attach");
     const row = await queryOne<{ action: string }>(
       "SELECT action FROM release_challenges WHERE nonce = $1",
@@ -754,7 +754,7 @@ describe("POST /api/orders/:id/challenge", () => {
   });
 
   it("refuses an act it does not issue, rather than defaulting to one", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
     for (const action of ["mint", "", null, undefined, 7]) {
       const response = await POST_CHALLENGE(
         new Request("http://localhost/", {
@@ -771,7 +771,7 @@ describe("POST /api/orders/:id/challenge", () => {
   });
 
   it("never issues the same nonce twice", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 10, h: 10 }, { chain: "solana", address: OWNER.address }, CALLER);
     const first = await challengeFor(held.id, "release");
     const second = await challengeFor(held.id, "release");
     expect(first.nonce).not.toBe(second.nonce);
@@ -811,7 +811,7 @@ describe("DELETE /api/orders/:id", () => {
   }
 
   it("answers 204 to a fresh signature from the owner, and the rectangle is reservable again", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, { chain: "solana", address: OWNER.address }, CALLER);
 
     const response = await DELETE(releaseRequest(await proofFor(held.id, "release", OWNER)), ctx(held.id));
     expect(response.status).toBe(204);
@@ -820,7 +820,7 @@ describe("DELETE /api/orders/:id", () => {
     const gone = await GET(new Request("http://localhost/"), ctx(held.id));
     expect(gone.status).toBe(404);
 
-    const again = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
+    const again = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, { chain: "solana", address: OWNER.address }, CALLER);
     expect(again.rect).toEqual({ x: 0, y: 0, w: 20, h: 20 });
   });
 
@@ -829,7 +829,7 @@ describe("DELETE /api/orders/:id", () => {
     // before signatures a stranger who could read the board could release
     // anyone's rectangle. Here the stranger signs a perfectly valid challenge
     // for this very order — with their own key.
-    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, { chain: "solana", address: OWNER.address }, CALLER);
 
     const response = await DELETE(
       releaseRequest(await proofFor(held.id, "release", STRANGER_WALLET)),
@@ -843,7 +843,7 @@ describe("DELETE /api/orders/:id", () => {
   });
 
   it("answers 403 when the stranger sends the owner's address without the owner's key", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, { chain: "solana", address: OWNER.address }, CALLER);
     const challenge = await challengeFor(held.id, "release");
 
     const response = await DELETE(
@@ -859,14 +859,14 @@ describe("DELETE /api/orders/:id", () => {
   });
 
   it("refuses a challenge the owner signed for attaching content", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, { chain: "solana", address: OWNER.address }, CALLER);
     const response = await DELETE(releaseRequest(await proofFor(held.id, "attach", OWNER)), ctx(held.id));
     expect(response.status).toBe(403);
     await stillReserved(held.id);
   });
 
   it("refuses a replayed challenge, even the owner's own", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, { chain: "solana", address: OWNER.address }, CALLER);
     const proof = await proofFor(held.id, "release", OWNER);
 
     // Same proof, twice. The first release succeeds, so the second is aimed at
@@ -874,14 +874,14 @@ describe("DELETE /api/orders/:id", () => {
     // nothing the moment its nonce has been spent.
     expect((await DELETE(releaseRequest(proof), ctx(held.id))).status).toBe(204);
 
-    const again = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
+    const again = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, { chain: "solana", address: OWNER.address }, CALLER);
     const replay = await DELETE(releaseRequest(proof), ctx(again.id));
     expect(replay.status).toBe(403);
     await stillReserved(again.id);
   });
 
   it("refuses a replayed challenge on the same order when the first attempt failed", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, { chain: "solana", address: OWNER.address }, CALLER);
     const challenge = await challengeFor(held.id, "release");
 
     // A fumbled first attempt spends the nonce too, so the owner's own second
@@ -905,7 +905,7 @@ describe("DELETE /api/orders/:id", () => {
   });
 
   it("refuses an expired challenge", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, { chain: "solana", address: OWNER.address }, CALLER);
     const proof = await proofFor(held.id, "release", OWNER);
 
     // Age the row rather than wait two minutes for it. issued_at moves with
@@ -925,8 +925,8 @@ describe("DELETE /api/orders/:id", () => {
   });
 
   it("refuses a challenge issued for another order", async () => {
-    const mine = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
-    const other = await reserveRect({ x: 40, y: 40, w: 20, h: 20 }, OWNER.address, CALLER);
+    const mine = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, { chain: "solana", address: OWNER.address }, CALLER);
+    const other = await reserveRect({ x: 40, y: 40, w: 20, h: 20 }, { chain: "solana", address: OWNER.address }, CALLER);
 
     // Signed correctly, by the owner of both — but the nonce names `mine`, so
     // it cannot spend `other`. This is what binds a proof to one rectangle.
@@ -939,7 +939,7 @@ describe("DELETE /api/orders/:id", () => {
   });
 
   it("answers 403 to a body carrying no proof at all", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, { chain: "solana", address: OWNER.address }, CALLER);
     const bodies: unknown[] = [
       {},
       null,
@@ -987,7 +987,7 @@ describe("DELETE /api/orders/:id", () => {
   });
 
   it("answers 400 for a body that is not JSON", async () => {
-    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, OWNER.address, CALLER);
+    const held = await reserveRect({ x: 0, y: 0, w: 20, h: 20 }, { chain: "solana", address: OWNER.address }, CALLER);
     const response = await DELETE(
       new Request("http://localhost/api/orders/x", { method: "DELETE", body: "not json" }),
       ctx(held.id),

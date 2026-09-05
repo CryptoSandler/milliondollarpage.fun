@@ -3,6 +3,7 @@ import { execute, query, queryOne } from "../db";
 import { IMAGE_BEARING_STATUSES, hasPublicImageSql, publishesTextSql } from "./block-image";
 import { TOTAL_PIXELS } from "./geometry";
 import { SIGNATURE_KEPT } from "./tape";
+import type { OwnerChain } from "./owner";
 
 /**
  * Reading the board.
@@ -121,7 +122,7 @@ export const LIVE = `status IN ('reserved', 'paid', 'minted')
  * Every rectangle the board must hit-test, and nothing else.
  *
  * The column list is a whitelist and stays one, and it is now short enough
- * that the rule is easy to keep: `buyer_pubkey` must never join it (this
+ * that the rule is easy to keep: `owner_address` must never join it (this
  * payload is public and unauthenticated, and that column is the single
  * credential `/content`, `/confirm` and the release endpoint trust);
  * `pending_image` must never join it either.
@@ -218,6 +219,17 @@ export type BlockPage = {
   signature: string | null;
   /** ISO 8601. */
   paidAt: string;
+  /**
+   * Which chain this rectangle was bought on.
+   *
+   * THE CHAIN, NEVER THE ADDRESS. `owner_address` is still refused everywhere —
+   * see the rule this file carries above the board query — and this is not a
+   * step towards it: "Solana" or "Robinhood Chain" names a rail, not a person,
+   * and it is already visible to anybody who reads the settling transaction.
+   * It is here because the page prints what was PAID, and after the second rail
+   * "USDC, on Solana" became a sentence that is wrong for half the wall.
+   */
+  ownerChain: OwnerChain;
 };
 
 /**
@@ -249,11 +261,12 @@ export async function getBlockPage(id: string): Promise<BlockPage | null> {
     link: string | null;
     signature: string | null;
     paid_at: Date;
+    owner_chain: string;
   }>(
     // No alias on `blocks`, for the reason `getBlockDetails` gives above:
     // `publishesTextSql` is written against bare column names and is shared
     // with four other queries. `block_clicks` names none of them.
-    `SELECT id, x, y, w, h, total_usdc, caption, link, paid_at,
+    `SELECT id, x, y, w, h, total_usdc, caption, link, paid_at, owner_chain,
             coalesce(block_clicks.clicks, 0)::int AS clicks,
             CASE
               WHEN payment_signature IS NULL THEN NULL
@@ -287,6 +300,7 @@ export async function getBlockPage(id: string): Promise<BlockPage | null> {
     link: row.link,
     signature: row.signature,
     paidAt: row.paid_at.toISOString(),
+    ownerChain: row.owner_chain as OwnerChain,
   };
 }
 
@@ -376,7 +390,7 @@ export type Standing = {
  *   from them, because nothing about a sold rectangle can be changed by anyone
  *   — four database triggers say so.
  * - **No holder is named.** DESIGN.md: "Never say who holds a rectangle. When,
- *   yes. Who, never." `buyer_pubkey` and `owner_wallet` are not selected here,
+ *   yes. Who, never." `owner_address` and `owner_wallet` are not selected here,
  *   and a ranking is the surface most likely to be asked for a name.
  * - **Nothing is ranked by activity.** A block cannot become more or less
  *   valuable through anything that happens after it is bought, because nothing

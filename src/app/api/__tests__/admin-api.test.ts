@@ -57,7 +57,7 @@ async function magenta(): Promise<Buffer> {
 /** A sold rectangle with an image, a caption and a link, at the top-left. */
 async function sold(): Promise<string> {
   const row = await queryOne<{ id: string }>(
-    `INSERT INTO blocks (x, y, w, h, status, buyer_pubkey, caption, link,
+    `INSERT INTO blocks (x, y, w, h, status, owner_address, caption, link,
                          price_per_pixel_usdc, total_usdc,
                          pending_image, pending_image_mime, image_fit, image_sha256)
      VALUES (0, 0, 20, 20, 'paid', $1, 'My shop', 'https://example.com/shop',
@@ -236,7 +236,7 @@ describe("hiding, through the route", () => {
 
   it("refuses to flag a hold, which has nothing anybody bought", async () => {
     const cookie = await signedIn();
-    const held = await reserveRect({ x: 100, y: 100, w: 10, h: 10 }, OWNER, "e".repeat(64));
+    const held = await reserveRect({ x: 100, y: 100, w: 10, h: 10 }, { chain: "solana", address: OWNER }, "e".repeat(64));
     expect((await act(held.id, { action: "hide", reason: REASON }, { cookie })).status).toBe(404);
     const rows = await query<{ hidden_at: Date | null }>("SELECT hidden_at FROM blocks WHERE id = $1", [
       held.id,
@@ -294,14 +294,14 @@ describe("a legal purge, through the route", () => {
       caption: string | null;
       link: string | null;
       status: string;
-      buyer_pubkey: string;
+      owner_address: string;
       x: number;
       y: number;
       w: number;
       h: number;
     }>(
       `SELECT pending_image, pending_image_mime, image_sha256, caption, link,
-              status, buyer_pubkey, x, y, w, h
+              status, owner_address, x, y, w, h
          FROM blocks WHERE id = $1`,
       [id],
     );
@@ -313,7 +313,7 @@ describe("a legal purge, through the route", () => {
       link: null,
       // Ownership never lapses: same owner, same sold status, same rectangle.
       status: "paid",
-      buyer_pubkey: OWNER,
+      owner_address: OWNER,
       x: 0,
       y: 0,
       w: 20,
@@ -326,7 +326,7 @@ describe("a legal purge, through the route", () => {
     // And nobody else can buy those pixels, which is the half of the promise a
     // status change would have broken.
     await expect(
-      reserveRect({ x: 5, y: 5, w: 5, h: 5 }, "SomebodyElse2222222222", "d".repeat(64)),
+      reserveRect({ x: 5, y: 5, w: 5, h: 5 }, { chain: "solana", address: "SomebodyElse2222222222" }, "d".repeat(64)),
     ).rejects.toThrow();
   });
 

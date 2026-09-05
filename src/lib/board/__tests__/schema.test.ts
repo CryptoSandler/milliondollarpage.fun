@@ -166,7 +166,7 @@ describe("the ownership trigger", () => {
 
   async function soldTo(status: string, buyer = OWNER, x = 0): Promise<string> {
     const rows = await query<{ id: string }>(
-      `INSERT INTO blocks (x, y, w, h, status, buyer_pubkey, price_per_pixel_usdc, total_usdc)
+      `INSERT INTO blocks (x, y, w, h, status, owner_address, price_per_pixel_usdc, total_usdc)
        VALUES ($1, 0, 10, 10, $2, $3, 1000000, 100000000)
        RETURNING id`,
       [x, status, buyer],
@@ -175,11 +175,11 @@ describe("the ownership trigger", () => {
   }
 
   async function ownerOf(id: string): Promise<string | null> {
-    const rows = await query<{ buyer_pubkey: string | null }>(
-      "SELECT buyer_pubkey FROM blocks WHERE id = $1",
+    const rows = await query<{ owner_address: string | null }>(
+      "SELECT owner_address FROM blocks WHERE id = $1",
       [id],
     );
-    return rows[0].buyer_pubkey;
+    return rows[0].owner_address;
   }
 
   it("refuses an UPDATE that hands a paid block to somebody else", async () => {
@@ -187,7 +187,7 @@ describe("the ownership trigger", () => {
     // 23001, restrict_violation: an integrity rule said no.
     expect(
       await errorCodeOf(() =>
-        execute("UPDATE blocks SET buyer_pubkey = $2 WHERE id = $1", [id, THIEF]),
+        execute("UPDATE blocks SET owner_address = $2 WHERE id = $1", [id, THIEF]),
       ),
     ).toBe("23001");
     expect(await ownerOf(id)).toBe(OWNER);
@@ -197,7 +197,7 @@ describe("the ownership trigger", () => {
     const id = await soldTo("minted");
     expect(
       await errorCodeOf(() =>
-        execute("UPDATE blocks SET buyer_pubkey = $2 WHERE id = $1", [id, THIEF]),
+        execute("UPDATE blocks SET owner_address = $2 WHERE id = $1", [id, THIEF]),
       ),
     ).toBe("23001");
     expect(await ownerOf(id)).toBe(OWNER);
@@ -208,7 +208,7 @@ describe("the ownership trigger", () => {
     await execute("UPDATE blocks SET hidden_at = now() WHERE id = $1", [id]);
     expect(
       await errorCodeOf(() =>
-        execute("UPDATE blocks SET buyer_pubkey = $2 WHERE id = $1", [id, THIEF]),
+        execute("UPDATE blocks SET owner_address = $2 WHERE id = $1", [id, THIEF]),
       ),
     ).toBe("23001");
     expect(await ownerOf(id)).toBe(OWNER);
@@ -217,7 +217,7 @@ describe("the ownership trigger", () => {
   it("refuses to blank the owner, which is the same theft written differently", async () => {
     const id = await soldTo("paid");
     expect(
-      await errorCodeOf(() => execute("UPDATE blocks SET buyer_pubkey = NULL WHERE id = $1", [id])),
+      await errorCodeOf(() => execute("UPDATE blocks SET owner_address = NULL WHERE id = $1", [id])),
     ).toBe("23001");
     expect(await ownerOf(id)).toBe(OWNER);
   });
@@ -226,7 +226,7 @@ describe("the ownership trigger", () => {
     // The shape of the accident this exists for: one statement, no WHERE.
     const first = await soldTo("paid", OWNER, 0);
     const second = await soldTo("minted", "SecondOwner333333333333333", 100);
-    expect(await errorCodeOf(() => execute("UPDATE blocks SET buyer_pubkey = $1", [THIEF]))).toBe(
+    expect(await errorCodeOf(() => execute("UPDATE blocks SET owner_address = $1", [THIEF]))).toBe(
       "23001",
     );
     expect(await ownerOf(first)).toBe(OWNER);
@@ -245,12 +245,12 @@ describe("the ownership trigger", () => {
 
   it("leaves a reservation's buyer alone, because a hold is not a sale", async () => {
     const rows = await query<{ id: string }>(
-      `INSERT INTO blocks (x, y, w, h, status, buyer_pubkey, expires_at, price_per_pixel_usdc, total_usdc)
+      `INSERT INTO blocks (x, y, w, h, status, owner_address, expires_at, price_per_pixel_usdc, total_usdc)
        VALUES (0, 0, 10, 10, 'reserved', 'HolderWallet4444444444444444', now() + interval '30 minutes',
                1000000, 100000000)
        RETURNING id`,
     );
-    await execute("UPDATE blocks SET buyer_pubkey = $2 WHERE id = $1", [rows[0].id, THIEF]);
+    await execute("UPDATE blocks SET owner_address = $2 WHERE id = $1", [rows[0].id, THIEF]);
     expect(await ownerOf(rows[0].id)).toBe(THIEF);
   });
 });

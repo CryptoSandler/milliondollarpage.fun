@@ -4,6 +4,7 @@ import type { ProvenOrder, PublicOrder } from "./orders";
 import { base58Encode } from "../wallet/base58";
 import type { ChallengeAction } from "../wallet/signature";
 import { shortAddress } from "../wallet/standard";
+import type { OwnerChain, ProvenOwner } from "./owner";
 
 /**
  * The browser side of the four order endpoints.
@@ -38,7 +39,8 @@ import { shortAddress } from "../wallet/standard";
  * Anything that comes to need it has to handle its absence, which is exactly
  * the situation a stranger's view puts it in.
  */
-export type ClientOrder = PublicOrder & Partial<Pick<ProvenOrder, "paymentBaseUnits">>;
+export type ClientOrder = PublicOrder &
+  Partial<Pick<ProvenOrder, "paymentBaseUnits" | "payTo" | "payToken" | "payChainId">>;
 
 /**
  * The header a buyer proves a hold is theirs with, on a GET.
@@ -97,7 +99,14 @@ type Reservation = {
   expiresAt: string;
 };
 
-function reservationToOrder(reservation: Reservation): ClientOrder {
+/**
+ * `chain` is passed in rather than read out of the reservation, because the
+ * reserve response does not carry one — and a hardcoded "solana" here would
+ * label every Robinhood hold with the wrong rail the moment one existed. It is
+ * the chain this browser just SENT, which is the chain the row was written
+ * with: the server refuses a body that names none, so the two cannot disagree.
+ */
+function reservationToOrder(reservation: Reservation, chain: OwnerChain): ClientOrder {
   return {
     id: reservation.id,
     rect: reservation.rect,
@@ -106,6 +115,7 @@ function reservationToOrder(reservation: Reservation): ClientOrder {
     totalBaseUnits: reservation.totalBaseUnits,
     paymentBaseUnits: reservation.paymentBaseUnits,
     expiresAt: reservation.expiresAt,
+    ownerChain: chain,
     hasContent: false,
     caption: null,
     link: null,
@@ -161,15 +171,18 @@ async function send(
  * needs to — the only party who can tell is the one who already knows the id,
  * which is exactly the property that keeps this out of a stranger's reach.
  */
-export function createHold(rect: Rect, buyerPubkey: string): Promise<ClientResult> {
+export function createHold(rect: Rect, owner: ProvenOwner): Promise<ClientResult> {
   return send(
     () =>
       fetch("/api/reserve", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ rect, buyerPubkey }),
+        // `buyerPubkey` keeps its wire name — it is what every existing caller
+        // and test sends — and `chain` joins it. The pair is what the server
+        // stores; the field names are the only thing that stayed still.
+        body: JSON.stringify({ rect, buyerPubkey: owner.address, chain: owner.chain }),
       }),
-    (body) => reservationToOrder(body as Reservation),
+    (body) => reservationToOrder(body as Reservation, owner.chain),
   );
 }
 
@@ -217,6 +230,7 @@ export async function submitContent(
   form.set("nonce", proven.proof.nonce);
   form.set("publicKey", proven.proof.publicKey);
   form.set("signature", proven.proof.signature);
+  form.set("chain", proven.proof.chain);
 
   return send(() => fetch(`/api/orders/${orderId}/content`, { method: "POST", body: form }));
 }
@@ -261,6 +275,13 @@ export type WalletSigner = ((message: string) => Promise<{ publicKey: string; si
    * this rectangle actually belongs to.
    */
   address?: string;
+  /**
+   * WHICH CHAIN THIS SIGNER SIGNS FOR, carried by the signer rather than picked
+   * at the call site. A wallet knows what it is; three routes guessing would be
+   * three places to get it wrong, and CLAUDE.md's rule is that the chain is
+   * named and never inferred.
+   */
+  chain: OwnerChain;
 };
 
 /**
@@ -303,11 +324,20 @@ export type MessageSigner = {
  */
 export function walletSigner(signer: MessageSigner | null): WalletSigner | null {
   if (!signer) return null;
+  /*
+    THIS IS THE SOLANA SIGNER, and it says so rather than reading a chain off
+    something that does not have one. `MessageSigner` is a Wallet Standard
+    account — base58, ed25519, Solana by construction — so the chain here is a
+    fact about which function you are calling, not a value to be passed in. The
+    EVM side gets its own constructor beside this one, and the two never share
+    a code path that has to decide which is which.
+  */
   const sign: WalletSigner = async (message: string) => ({
     publicKey: signer.address,
     signature: base58Encode(await signer.signMessage(new TextEncoder().encode(message))),
   });
   sign.address = signer.address;
+  sign.chain = "solana";
   return sign;
 }
 
@@ -389,7 +419,7 @@ const RELEASE_FALLBACK = "That hold could not be let go.";
 type IssuedChallenge = { nonce: string; message: string };
 
 /** The three strings the server checks. Assembled here and never anywhere else. */
-type OwnershipProof = { nonce: string; publicKey: string; signature: string };
+type OwnershipProof = { nonce: string; chain: OwnerChain; publicKey: string; signature: string };
 
 /**
  * Ask for a single-use sentence, have the wallet sign it, and hand back what
@@ -430,7 +460,13 @@ async function prove(
 
   try {
     const signed = await sign(challenge.message);
-    return { ok: true, proof: { nonce: challenge.nonce, ...signed } };
+    /*
+      THE CHAIN COMES OFF THE SIGNER, not off the response it returned. A wallet
+      reporting its own chain in the payload would be the claim naming the
+      cryptography that judges it; the signer IS the chain, and this is the one
+      place the two are joined.
+    */
+    return { ok: true, proof: { nonce: challenge.nonce, chain: sign.chain, ...signed } };
   } catch {
     // A wallet throws when the person says no. That is an answer, not a fault.
     return { ok: false, status: 0, message: refusedMessage(action, sign.address) };

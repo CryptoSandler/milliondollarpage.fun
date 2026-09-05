@@ -16,6 +16,8 @@
     "check:secrets": "tsx scripts/check-build-secrets.mts"
   },
   "dependencies": {
+    "@noble/curves": "^1.9.7",
+    "@noble/hashes": "^1.8.0",
     "next": "16.3.2",
     "pg": "^8.23.0",
     "react": "19.2.8",

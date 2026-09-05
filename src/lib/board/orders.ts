@@ -3,6 +3,8 @@ import { cancelHoldCharge, endHoldCharge } from "../callers/hold-meter";
 import { publishesText } from "./block-image";
 import type { ValidatedContent } from "./content";
 import type { Rect } from "./geometry";
+import type { OwnerChain } from "./owner";
+import { USDG, robinhoodRailEnabled, treasuryAddress } from "../payments/usdg";
 
 /**
  * The order's state machine: reserved -> paid.
@@ -33,7 +35,8 @@ export type Order = {
   id: string;
   rect: Rect;
   status: OrderStatus;
-  buyerPubkey: string;
+  ownerAddress: string;
+  ownerChain: OwnerChain;
   pricePerPixelBaseUnits: number;
   totalBaseUnits: number;
   paymentBaseUnits: number;
@@ -87,7 +90,8 @@ type OrderRow = {
   w: number;
   h: number;
   status: string;
-  buyer_pubkey: string;
+  owner_address: string;
+  owner_chain: string;
   price_per_pixel_usdc: string;
   total_usdc: string;
   payment_fraction: number | null;
@@ -104,7 +108,7 @@ type OrderRow = {
 // bytes that no reader of an `Order` ever needs, only whether it is set. The
 // boolean is computed in SQL instead of dragging the bytes out of Neon on
 // every order read just to throw them away in `toOrder`.
-const ORDER_COLUMNS = `id, x, y, w, h, status, buyer_pubkey, price_per_pixel_usdc, total_usdc,
+const ORDER_COLUMNS = `id, x, y, w, h, status, owner_address, owner_chain, price_per_pixel_usdc, total_usdc,
        payment_fraction, payment_signature, expires_at,
        pending_image IS NOT NULL AS has_content, caption, link,
        image_fit, is_animated`;
@@ -119,7 +123,8 @@ function toOrder(row: OrderRow): Order {
     // returned as-is rather than invented into one of the two statuses this
     // module knows about.
     status: row.status as OrderStatus,
-    buyerPubkey: row.buyer_pubkey,
+    ownerAddress: row.owner_address,
+    ownerChain: row.owner_chain as OwnerChain,
     pricePerPixelBaseUnits: Number(row.price_per_pixel_usdc),
     totalBaseUnits: total,
     paymentBaseUnits: total + fraction,
@@ -142,10 +147,10 @@ async function loadRow(id: string): Promise<OrderRow | null> {
  * caller apply its own remaining precondition against fields this shared
  * check does not know about (e.g. whether content is attached).
  */
-async function loadOwnedLiveRow(id: string, buyerPubkey: string): Promise<OrderRow> {
+async function loadOwnedLiveRow(id: string, ownerAddress: string): Promise<OrderRow> {
   const row = await loadRow(id);
   if (!row) throw new OrderNotFound();
-  if (row.buyer_pubkey !== buyerPubkey) throw new OrderNotYours();
+  if (row.owner_address !== ownerAddress) throw new OrderNotYours();
   if (row.status === "reserved" && row.expires_at !== null && row.expires_at <= new Date()) {
     throw new OrderExpired();
   }
@@ -158,7 +163,7 @@ export async function getOrder(id: string): Promise<Order | null> {
 }
 
 /** An `Order` with everything a route may safely hand back to any caller. */
-export type PublicOrder = Omit<Order, "buyerPubkey" | "paymentBaseUnits">;
+export type PublicOrder = Omit<Order, "ownerAddress" | "paymentBaseUnits">;
 
 /**
  * A `PublicOrder` plus the one number only its buyer may have.
@@ -167,7 +172,31 @@ export type PublicOrder = Omit<Order, "buyerPubkey" | "paymentBaseUnits">;
  * single-use challenge before they wrote anything — `/content` and `/confirm`
  * — so the amount reaches the wallet that proved the key and nothing else.
  */
-export type ProvenOrder = PublicOrder & { paymentBaseUnits: number };
+export type ProvenOrder = PublicOrder & {
+  paymentBaseUnits: number;
+  /**
+   * Where to send it, and in what — present only for a Robinhood order while
+   * the rail is on, and null otherwise.
+   *
+   * IT TRAVELS THE SAME ROAD AS THE FRACTION, and for the same reason turned
+   * around. `paymentBaseUnits` is withheld from the public order because it
+   * would let a stranger watch the treasury and learn who bought what; the
+   * treasury address is withheld from `/api/status` because a status page that
+   * publishes an operator's configuration is a habit worth not having. Neither
+   * is a secret — both are on a public chain the moment anybody pays — so both
+   * are handed to the ONE caller who has proved they own this order and needs
+   * them to finish paying.
+   *
+   * A browser that built the transfer from its own copy of the address would be
+   * a second place the treasury is written down, and the failure mode of two
+   * copies disagreeing is buyers paying a wallet nobody holds.
+   */
+  payTo: string | null;
+  /** The token contract to call `transfer` on. Null with `payTo`. */
+  payToken: string | null;
+  /** The chain the wallet must be on before it signs. Null with `payTo`. */
+  payChainId: number | null;
+};
 
 /**
  * Strips `buyerPubkey`, the payable amount, and anyone else's unpaid words
@@ -203,12 +232,17 @@ export type ProvenOrder = PublicOrder & { paymentBaseUnits: number };
  * `/board` publishes anyway.
  */
 export function toPublicOrder(order: Order, viewer: string | null): PublicOrder {
-  const yours = viewer !== null && viewer === order.buyerPubkey;
+  const yours = viewer !== null && viewer === order.ownerAddress;
   const showText = yours || publishesText(order.status);
   return {
     id: order.id,
     rect: order.rect,
     status: order.status,
+    // The CHAIN is public and the address is not: a reader of `/b/<id>` is told
+    // which chain a rectangle was bought on — see `DECISIONS.md` on why that is
+    // not a step towards naming anybody — while the address stays behind the
+    // same door it always has.
+    ownerChain: order.ownerChain,
     pricePerPixelBaseUnits: order.pricePerPixelBaseUnits,
     totalBaseUnits: order.totalBaseUnits,
     expiresAt: order.expiresAt,
@@ -236,9 +270,20 @@ export function toPublicOrder(order: Order, viewer: string | null): PublicOrder 
  * leaving a second route free to hand a stranger the amount by passing null.
  */
 export function toProvenOrder(order: Order): ProvenOrder {
+  /*
+    THE RAIL DECIDES, AND IT DECIDES OFF THE ORDER'S OWN CHAIN. A Solana order
+    gets nulls because there is no Solana rail to point it at; a Robinhood order
+    gets nulls too while the flag is off, which is what makes "the rail is
+    switched off" a fact the interface can see rather than a request that fails
+    at the end.
+  */
+  const onRail = order.ownerChain === "robinhood" && robinhoodRailEnabled();
   return {
-    ...toPublicOrder(order, order.buyerPubkey),
+    ...toPublicOrder(order, order.ownerAddress),
     paymentBaseUnits: order.paymentBaseUnits,
+    payTo: onRail ? treasuryAddress() : null,
+    payToken: onRail ? USDG.address : null,
+    payChainId: onRail ? USDG.chainId : null,
   };
 }
 
@@ -355,11 +400,11 @@ const RELEASE_REFUSED =
 export async function releaseOwnReservation(id: string, buyerPubkey: string): Promise<void> {
   const row = await loadRow(id);
   if (!row) throw new OrderNotFound();
-  if (row.buyer_pubkey !== buyerPubkey) throw new OrderNotYours();
+  if (row.owner_address !== buyerPubkey) throw new OrderNotYours();
   if (row.status !== "reserved") throw new OrderNotReady(RELEASE_REFUSED);
 
   const deleted = await execute(
-    "DELETE FROM blocks WHERE id = $1 AND buyer_pubkey = $2 AND status = 'reserved'",
+    "DELETE FROM blocks WHERE id = $1 AND owner_address = $2 AND status = 'reserved'",
     [id, buyerPubkey],
   );
   if (deleted === 1) {

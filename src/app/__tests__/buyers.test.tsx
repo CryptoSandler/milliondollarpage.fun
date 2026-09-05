@@ -30,7 +30,7 @@ async function sell(
 ): Promise<void> {
   await execute(
     `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
-                         buyer_pubkey, payment_signature, caption, link, hidden_at)
+                         owner_address, payment_signature, caption, link, hidden_at)
      VALUES ($1, 0, 10, 10, 'paid', $2, $3, $4, $5, $6, $7, $8, $9)`,
     [
       x,

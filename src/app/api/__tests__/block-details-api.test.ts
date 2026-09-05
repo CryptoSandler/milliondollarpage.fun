@@ -101,7 +101,7 @@ describe("GET /api/blocks/{id}", () => {
 
   it("never carries the one credential the site has", async () => {
     const rows = await query<{ id: string }>(
-      `INSERT INTO blocks (x, y, w, h, status, buyer_pubkey, caption, price_per_pixel_usdc, total_usdc)
+      `INSERT INTO blocks (x, y, w, h, status, owner_address, caption, price_per_pixel_usdc, total_usdc)
        VALUES (0, 0, 10, 10, 'paid', 'AWalletNobodyMayLearn', 'Mine', 1000000, 100000000)
        RETURNING id`,
     );

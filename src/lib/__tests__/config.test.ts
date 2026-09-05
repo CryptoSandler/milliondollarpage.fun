@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { assertStubPaymentsNotInProduction, assertUntrustedClientIpNotInProduction } from "../config";
+import {
+  assertRobinhoodRailConfigured,
+  assertStubPaymentsNotInProduction,
+  assertUntrustedClientIpNotInProduction,
+} from "../config";
 
 /**
  * The two flags that must never survive a trip to production, and the two
@@ -23,6 +27,9 @@ import { assertStubPaymentsNotInProduction, assertUntrustedClientIpNotInProducti
 const NODE_ENV = process.env.NODE_ENV;
 const STUB = process.env.ALLOW_STUB_PAYMENTS;
 const UNTRUSTED = process.env.ALLOW_UNTRUSTED_CLIENT_IP;
+const TREASURY = process.env.ROBINHOOD_TREASURY_ADDRESS;
+const RAIL = process.env.ROBINHOOD_PAYMENTS;
+const RPC = process.env.ROBINHOOD_RPC_URL;
 
 function set(name: string, value: string | undefined) {
   if (value === undefined) delete process.env[name];
@@ -33,6 +40,9 @@ afterEach(() => {
   set("NODE_ENV", NODE_ENV);
   set("ALLOW_STUB_PAYMENTS", STUB);
   set("ALLOW_UNTRUSTED_CLIENT_IP", UNTRUSTED);
+  set("ROBINHOOD_TREASURY_ADDRESS", TREASURY);
+  set("ROBINHOOD_PAYMENTS", RAIL);
+  set("ROBINHOOD_RPC_URL", RPC);
 });
 
 describe("assertStubPaymentsNotInProduction", () => {
@@ -108,5 +118,66 @@ describe("assertUntrustedClientIpNotInProduction", () => {
     set("NODE_ENV", "development");
     set("ALLOW_UNTRUSTED_CLIENT_IP", "true");
     expect(() => assertUntrustedClientIpNotInProduction()).not.toThrow();
+  });
+});
+
+/**
+ * The treasury, which is the one value that cannot have a default.
+ *
+ * WHAT THIS GUARDS. A rail switched on with nowhere to send the money takes
+ * USDG from buyers and credits rectangles against a transfer to nobody. The
+ * owner asked for the treasury to be an empty variable "with a test that
+ * refuses to start without it"; this is that test, and the scoping — tied to
+ * the rail being switched on rather than firing on every deploy — is recorded
+ * in `DECISIONS.md` and argued in the function's own comment, because this site
+ * has no payment rail at all today and an unconditional guard would take it
+ * down at the next deploy.
+ */
+describe("assertRobinhoodRailConfigured", () => {
+  it("refuses to start with the rail on and no treasury", () => {
+    set("ROBINHOOD_PAYMENTS", "true");
+    set("ROBINHOOD_TREASURY_ADDRESS", "");
+    set("ROBINHOOD_RPC_URL", "https://node.example");
+    expect(() => assertRobinhoodRailConfigured()).toThrow(/ROBINHOOD_TREASURY_ADDRESS/);
+  });
+
+  it("refuses to start with the rail on and no node to read payments from", () => {
+    set("ROBINHOOD_PAYMENTS", "true");
+    set("ROBINHOOD_TREASURY_ADDRESS", "0x1111111111111111111111111111111111111111");
+    set("ROBINHOOD_RPC_URL", "");
+    expect(() => assertRobinhoodRailConfigured()).toThrow(/ROBINHOOD_RPC_URL/);
+  });
+
+  /**
+   * A typo in an address is worse than an empty one: it boots, it takes money,
+   * and the money lands where nobody holds a key. So the shape is checked
+   * whenever a value is present — rail on or off, deployed or not.
+   */
+  it("refuses a malformed treasury even with the rail switched off", () => {
+    set("ROBINHOOD_PAYMENTS", undefined);
+    set("ROBINHOOD_RPC_URL", "");
+    for (const bad of [
+      "0x111",
+      "1111111111111111111111111111111111111111",
+      "0x111111111111111111111111111111111111111g",
+      "0x11111111111111111111111111111111111111112",
+    ]) {
+      set("ROBINHOOD_TREASURY_ADDRESS", bad);
+      expect(() => assertRobinhoodRailConfigured(), bad).toThrow(/EVM address/);
+    }
+  });
+
+  it("starts with the rail off and the treasury empty, which is today", () => {
+    set("ROBINHOOD_PAYMENTS", undefined);
+    set("ROBINHOOD_TREASURY_ADDRESS", "");
+    set("ROBINHOOD_RPC_URL", "");
+    expect(() => assertRobinhoodRailConfigured()).not.toThrow();
+  });
+
+  it("starts with the rail on and both values present", () => {
+    set("ROBINHOOD_PAYMENTS", "true");
+    set("ROBINHOOD_TREASURY_ADDRESS", "0x1111111111111111111111111111111111111111");
+    set("ROBINHOOD_RPC_URL", "https://node.example");
+    expect(() => assertRobinhoodRailConfigured()).not.toThrow();
   });
 });

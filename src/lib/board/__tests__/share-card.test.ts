@@ -59,7 +59,7 @@ async function sell(
   const image = options.image === undefined ? await pixelArt() : options.image;
   const [row] = await query<{ id: string }>(
     `INSERT INTO blocks (x, y, w, h, status, price_per_pixel_usdc, total_usdc, paid_at,
-                         payment_signature, buyer_pubkey, caption, link,
+                         payment_signature, owner_address, caption, link,
                          pending_image, pending_image_mime)
      VALUES (0, 0, $1, $2, $3, $4, $5, now(), $6, $7,
              'A CAPTION NOBODY MAY SEE', 'https://a-link-nobody-may-see.example', $8, 'image/png')

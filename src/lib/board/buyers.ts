@@ -12,7 +12,7 @@ import { IMAGE_BEARING_STATUSES, hasPublicImageSql, publishesTextSql } from "./b
  * ## What it selects, and the one column it must never grow
  *
  * Position, size, caption, link, the settlement instant, and whether there is a
- * bitmap. `buyer_pubkey`, `owner_wallet` and `payment_signature` are not
+ * bitmap. `owner_address`, `owner_wallet` and `payment_signature` are not
  * selected and adding any of them here is the change to this file that needs an
  * argument rather than a review — the same rule `tape.ts` states for the
  * register, and for the same reason. A page called "who has bought" is exactly
