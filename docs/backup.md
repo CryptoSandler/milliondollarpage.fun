@@ -66,4 +66,11 @@ it in the present tense.
 
 | Date | Restored from | What was found |
 |---|---|---|
-| — | — | **Never run.** The first daily copy has not been taken: the workflow's first scheduled run is the night after it merges. |
+| — | — | **Never run.** A copy now exists — the workflow was run by hand on 2026-09-05 rather than left to find out at 04:12, and it succeeded: clone, dump, commit, retention, push. Nothing has been RESTORED from it, which is the line this table is for. |
+
+**What the first copy contained**, recorded because it is the shape a restore
+will have to put back: two rows, both with `imageSha256: null` — production has
+two blocks and neither carries a picture. So `images/` does not exist in the
+backup yet, and the first rehearsal will not exercise the image path. That is
+worth knowing before somebody reads a green rehearsal as covering more than it
+did.
